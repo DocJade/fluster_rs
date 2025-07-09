@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "fluster"
+name = "fluster_fs"
 version = "0.1.0"
