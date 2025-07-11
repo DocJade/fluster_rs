@@ -1,10 +1,10 @@
 // Writing!
 
-use std::os::windows::fs::FileExt;
+use std::{io::Write, os::windows::fs::FileExt};
 
 use crate::disk::disk_structs::Disk;
 
-pub fn write_raw_block(disk: &Disk, block_index: u16, data: &[u8; 512]) {
+pub fn write_raw_block(disk: &mut Disk, block_index: u16, data: &[u8; 512]) {
     // Bounds checking
     if block_index >= 2880 {
         // This block is impossible to access.
@@ -17,4 +17,5 @@ pub fn write_raw_block(disk: &Disk, block_index: u16, data: &[u8; 512]) {
 
     // Write the data.
     disk.file.seek_write(data, write_offset).unwrap();
+    disk.file.flush().unwrap();
 }

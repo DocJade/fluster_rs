@@ -1,6 +1,7 @@
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek};
 use std::path::Path;
+use rand::prelude::*;
 
 use crate::disk::disk_structs::Disk;
 use crate::helpers::hex_view::hex_view;
@@ -23,37 +24,58 @@ fn main() {
         .open(Path::new(r"\\.\A:"))
         .unwrap();
 
-    let disk_0 = Disk {
+    let mut disk_0 = Disk {
         number: 0,
         file: disk_file,
     };
 
-    // Read the first block on the disk
-    let block_zero = read_block(&disk_0, 0);
-    
-    // convert to hex, print it out.
-    println!("{}", hex_view(block_zero.data.to_vec()));
+    // burn in test
+    let mut rando = rand::rng();
+    let mut loops: u128 = 0;
+    let mut bytes_written: u128 = 0;
+    let mut bytes_incorrect: u128 = 0;
+    loop {
+        // pick a random block
+        let block_index: u16 = rando.random_range(0..2880);
 
-    // Now we are going to tag this disk
-    let mut block_to_write = [0u8; 512];
-    let fluster_tag : [u8; 8] = "Fluster!".as_bytes().try_into().unwrap();
+        // now fill it with random data
+        let mut data: [u8; 512] = [0u8; 512];
+        rando.fill_bytes(&mut data);
 
-    block_to_write[..8].copy_from_slice(&fluster_tag);
+        // write that to the disk
+        write_raw_block(&mut disk_0, block_index, &data);
 
-    // write the block
-    write_raw_block(&disk_0, 0, &block_to_write);
+        // move to a random position on the disk
+        disk_0.file.seek(std::io::SeekFrom::Start(rando.random_range(0..2880*512))).unwrap();
 
-    // read the block again and print it
-    let block_zero = read_block(&disk_0, 0);
-    println!("{}", hex_view(block_zero.data.to_vec()));
+        // now read it back off
+        let read_data = read_block(&disk_0, block_index).data;
 
-   //  Running `target\debug\fluster_fs.exe`
-   //  Offset(h)  00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
-   // 0000000000  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
-   // 0000000010  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
-   // -- snip --
-   // 
-   //  Offset(h)  00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
-   // 0000000000  46 6C 75 73 74 65 72 21 00 00 00 00 00 00 00 00  Fluster!........
-   // 0000000010  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+        // compare the two and count how many bytes were incorrect
+        for i in 0..512 {
+            bytes_written += 1;
+            if data[i] != read_data[i] {
+                bytes_incorrect += 1;
+            }
+        }
+
+        // zero out the block because we are nice.
+        write_raw_block(&mut disk_0, block_index, &[0u8; 512]);
+
+        // update loop counter
+        loops += 1;
+
+        // print statistics if loops % 10
+        if loops % 100 == 0 {
+            println!(
+                "Loops: {}, Written: {:.6}MB, Incorrect: {}B, Failure Rate: {:.6}%",
+                loops,
+                bytes_written as f64 / 1024.0 / 1024.0,
+                bytes_incorrect,
+                (bytes_incorrect as f64 / bytes_written as f64) * 100.0
+            );
+        }
+    }
+
+    // Loops: 41600, Written: 20.312500MB, Incorrect: 1B, Failure Rate: 0.000005%
 }
