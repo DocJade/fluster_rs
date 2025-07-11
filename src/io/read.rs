@@ -1,16 +1,17 @@
 // Reading!
 
 use std::{fs::File, os::windows::fs::FileExt, path::Path};
+use crate::block::block_structs::{Block, BlockType};
 
 // TODO: Disallow unwrap / ensure safety.
 
 // Read a block on the currently inserted disk
-pub fn read_block(block: u16) -> [u8; 512] {
+pub fn read_block(block_index: u16) -> Block {
     // allocate space for the block
     let mut input_buffer: [u8; 512] = [0u8; 512];
 
     // Calculate the offset into the disk
-    let read_offset: u64 = block as u64 * 512;
+    let read_offset: u64 = block_index as u64 * 512;
 
     // Open the disk
     let disk = File::open(Path::new(r"\\.\A:")).unwrap();
@@ -19,5 +20,9 @@ pub fn read_block(block: u16) -> [u8; 512] {
     disk.seek_read(&mut input_buffer, read_offset).unwrap();
 
     // send it.
-    input_buffer
+    return Block {
+        r#type: BlockType::Unknown,
+        number: block_index,
+        data: input_buffer,
+    }
 }

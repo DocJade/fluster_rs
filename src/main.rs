@@ -8,14 +8,15 @@ use crate::io::read::read_block;
 mod helpers;
 mod io;
 mod disk;
+mod block;
 
 
 
 
 fn main() {
     // Read the first block on the disk
-    let block_zero = read_block(0);
+    let block_zero = read_block(2880);
     
     // convert to hex, print it out.
-    println!("{}", hex_view(block_zero.to_vec()));
+    println!("{}", hex_view(block_zero.data.to_vec()));
 }
