@@ -2,6 +2,12 @@ use std::fs::File;
 use std::io::{Read, Seek};
 use std::path::Path;
 
+use crate::helpers::hex_view::hex_view;
+
+mod helpers;
+
+
+
 
 fn main() {
     // Test reading a block on a disk
@@ -21,41 +27,6 @@ fn main() {
     raw_disk.read_exact(&mut read_buffer).unwrap();
 
     // convert to hex, print it out.
-    println!(" Offset(h)  00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F");
+    println!("{}", hex_view(read_buffer.to_vec()));
 
-
-    let mut offset = 0;
-    while offset != 512 {
-        // make the line
-        let mut string = String::new();
-        // first goes the offset, padded so its 10 characters long
-        string.push_str(&format!("{:0>10X}  ", offset));
-        // now for all the numbers
-        for i in 0..16 {
-            let byte = read_buffer[offset + i];
-            let byte_component = format!("{:02X} ", byte);
-            string.push_str(&byte_component);
-        }
-
-        // now for the text version
-        string.push(' ');
-        for i in 0..16 {
-            let byte = read_buffer[offset + i];
-
-            // convert
-            let mut character = char::from_u32(byte as u32).unwrap_or('?');
-            // unless:
-            if byte == 0 {
-                character = '.';
-            }
-
-            string.push(character);
-        }
-
-        // line is done. print it
-        println!("{}", string);
-
-        // Now increment the offset
-        offset += 16;
-    }
 }
