@@ -8,8 +8,8 @@ use crate::{block::block_structs::RawBlock, disk::disk_struct::Disk};
 // Add onto the disk type.
 
 impl Disk {
-    pub fn read_raw_block(&self, block_index: u16) -> RawBlock {
-        read_raw_block(self, block_index)
+    pub fn read_block(&self, block_index: u16) -> RawBlock {
+        read_block(self, block_index)
     }
 }
 
@@ -18,7 +18,8 @@ impl Disk {
 
 
 // Read a block on the currently inserted disk
-fn read_raw_block(disk: &Disk, block_index: u16) -> RawBlock {
+// TODO: Check CRC
+fn read_block(disk: &Disk, block_index: u16) -> RawBlock {
 
     // Bounds checking
     if block_index >= 2880 {

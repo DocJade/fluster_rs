@@ -1,5 +1,7 @@
 // Structs that can be deduced from a block
 
+use thiserror::Error;
+
 pub struct StructuredBlock {
     // What kind of block is this?
     pub r#type: BlockType,
@@ -16,4 +18,11 @@ pub enum BlockType {
 // A raw data block
 pub struct RawBlock {
     pub data: [u8; 512]
+}
+
+// Errors related to blocks
+#[derive(Debug, Error)]
+pub enum BlockError {
+    #[error("Invalid CRC checksum")]
+    InvalidCRC,
 }

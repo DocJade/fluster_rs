@@ -10,3 +10,8 @@ Stack exchange said it was cool.
 
 # What order are the bitflags in the documentation?
 flag 0 is the least significant bit
+
+# Why are some reads bigger than they need to be?
+I was having an issue reading just 8 bytes into a buffer.
+Turns out Windows wont let you read directly from a floppy disk into a buffer smaller than 512 bytes.
+This took an annoyingly long time to figure out.

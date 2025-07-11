@@ -14,8 +14,8 @@ Header format:
 | 0      | 8      | Magic number for identifying a fluster drive.Fluster! |
 | 8      | 1      | Bitflags                                              |
 | 9      | 2      | Disk number (u16)                                     |
-| 11     | 138    | Reserved                                              |
-| 149    | 360    | Block usage bitplane                                  |
+| 11     | 137    | Reserved                                              |
+| 148    | 360    | Block usage bitplane                                  |
 | 509    | 4      | CRC                                                   |
 
 Bitflags:

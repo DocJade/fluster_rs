@@ -7,14 +7,14 @@ use crate::disk::disk_struct::Disk;
 // Add onto the disk type.
 
 impl Disk {
-    pub fn write_raw_block(self, block_index: u16, data: &[u8; 512]) {
-        write_raw_block(self.disk_file, block_index, data)
+    pub fn write_block(self, block_index: u16, data: &[u8; 512]) {
+        write_block(self.disk_file, block_index, data)
     }
 }
 
 // Functions
 
-fn write_raw_block(mut disk_file: File, block_index: u16, data: &[u8; 512]) {
+fn write_block(mut disk_file: File, block_index: u16, data: &[u8; 512]) {
     // Bounds checking
     if block_index >= 2880 {
         // This block is impossible to access.

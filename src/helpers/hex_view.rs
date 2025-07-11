@@ -29,12 +29,12 @@ pub fn hex_view(bytes: Vec<u8>) -> String {
         // now for the text version
         line.push(' ');
         for i in 0..16 {
-            let byte = bytes[offset + i];
             let mut character: char;
             if offset + i >= bytes_length {
                 character = ' ';
             } else {
                 // convert
+                let byte = bytes[offset + i];
                 character = char::from_u32(byte as u32).unwrap_or('?');
                 // unless:
                 if !character.is_ascii() || character.is_ascii_control() {
