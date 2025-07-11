@@ -1,12 +1,12 @@
 // Reading!
 
 use std::{fs::File, os::windows::fs::FileExt, path::Path};
-use crate::{block::block_structs::{Block, BlockType}, disk::disk_structs::Disk};
+use crate::{block::block_structs::{StructuredBlock, RawBlock, BlockType}, disk::disk_structs::Disk};
 
 // TODO: Disallow unwrap / ensure safety.
 
 // Read a block on the currently inserted disk
-pub fn read_block(disk: &Disk, block_index: u16) -> Block {
+pub fn read_raw_block(disk: &Disk, block_index: u16) -> RawBlock {
 
     // Bounds checking
     if block_index >= 2880 {
@@ -25,9 +25,7 @@ pub fn read_block(disk: &Disk, block_index: u16) -> Block {
     disk.file.seek_read(&mut input_buffer, read_offset).unwrap();
 
     // send it.
-    Block {
-        r#type: BlockType::Unknown,
-        number: block_index,
+    RawBlock {
         data: input_buffer,
     }
 }

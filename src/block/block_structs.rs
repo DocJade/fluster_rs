@@ -1,6 +1,6 @@
 // Structs that can be deduced from a block
 
-pub struct Block {
+pub struct StructuredBlock {
     // What kind of block is this?
     pub r#type: BlockType,
     // Which block is this on the disk? (0-2879 inclusive)
@@ -11,4 +11,9 @@ pub struct Block {
 
 pub enum BlockType {
     Unknown
+}
+
+// A raw data block
+pub struct RawBlock {
+    pub data: [u8; 512]
 }
