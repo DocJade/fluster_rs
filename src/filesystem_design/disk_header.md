@@ -1,23 +1,48 @@
 # Block layout
+
 512 bytes in size
 A floppy disk can hold 2880 blocks of this size.
 
-
 # Disk header format
+
 The disk header lives on block 0 of every disk.
 
-The following is in order.
-8 bytes: Magic number for identifying a fluster drive. `Fluster!`
+Header format:
+
+| offset | length | Field                                                 |
+| ------ | ------ | ----------------------------------------------------- |
+| 0      | 8      | Magic number for identifying a fluster drive.Fluster! |
+| 8      | 1      | Bitflags                                              |
+| 9      | 2      | Disk number (u16)                                     |
+| 11     | 138    | Reserved                                              |
+| 149    | 360    | Block usage bitplane                                  |
+| 509    | 4      | CRC                                                   |
+
+Bitflags:
+
+| bit | flag       |
+| --- | ---------- |
+| 0   | Dense Disk |
+| 1   | Reserved   |
+| 2   | Reserved   |
+| 3   | Reserved   |
+| 4   | Reserved   |
+| 5   | Reserved   |
+| 6   | Reserved   |
+| 7   | Reserved   |
+| 8   | Reserved   |
+
+8 bytes:
 1 byte: bitflags
-    0: This is a dense disk
-    1: Reserved for future use
-    2: Reserved for future use
-    3: Reserved for future use
-    4: Reserved for future use
-    5: Reserved for future use
-    6: Reserved for future use
-    7: Reserved for future use
-2 bytes: Disk number 
+0: This is a dense disk
+1: Reserved for future use
+2: Reserved for future use
+3: Reserved for future use
+4: Reserved for future use
+5: Reserved for future use
+6: Reserved for future use
+7: Reserved for future use
+2 bytes: Disk number
 138 bytes: Reserved
 360 bytes: Block usage bitplane
 

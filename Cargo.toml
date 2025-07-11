@@ -4,5 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bitflags = "2.9.1"
 crc32c = "0.6.8"
 rand = "0.9.1"

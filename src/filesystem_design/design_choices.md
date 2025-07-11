@@ -7,3 +7,6 @@ the floppy drive is actively being shaken by a pit bull who mistook it for a tod
 
 # Why little endian?
 Stack exchange said it was cool.
+
+# What order are the bitflags in the documentation?
+flag 0 is the least significant bit
