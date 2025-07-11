@@ -37,7 +37,7 @@ pub fn hex_view(bytes: Vec<u8>) -> String {
                 // convert
                 character = char::from_u32(byte as u32).unwrap_or('?');
                 // unless:
-                if byte == 0 {
+                if !character.is_ascii() || character.is_ascii_control() {
                     character = '.';
                 }
             }

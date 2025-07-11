@@ -1,1 +1,1 @@
-pub mod disk_structs;
+pub mod disk_struct;

@@ -1,9 +1,10 @@
 // Reading!
 
 use std::{fs::File, os::windows::fs::FileExt, path::Path};
-use crate::{block::block_structs::{StructuredBlock, RawBlock, BlockType}, disk::disk_structs::Disk};
+use crate::{block::block_structs::{StructuredBlock, RawBlock, BlockType}, disk::disk_struct::Disk};
 
 // TODO: Disallow unwrap / ensure safety.
+// TODO: Make these methods on the disk type (ie disk.read_raw_block())
 
 // Read a block on the currently inserted disk
 pub fn read_raw_block(disk: &Disk, block_index: u16) -> RawBlock {
