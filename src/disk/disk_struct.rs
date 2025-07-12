@@ -13,12 +13,16 @@ pub struct Disk {
     // The file that refers to this disk
     pub(super) disk_file: std::fs::File,
 }
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum DiskError {
     #[error("Disk is uninitialized")]
     Uninitialized,
     #[error("Disk is not blank")]
     NotBlank,
+    #[error("There isn't a disk inserted")]
+    NoDiskInserted,
+    #[error("This is not the disk we want")]
+    WrongDisk,
     #[error(transparent)]
     BlockError(#[from] BlockError)
 }
