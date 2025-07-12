@@ -19,8 +19,9 @@ pub enum DiskError {
     Uninitialized,
     #[error("Disk is not blank")]
     NotBlank,
-    #[error("There isn't a disk inserted")]
-    NoDiskInserted,
+    // we'll put this back in later if we need it.
+    // #[error("There isn't a disk inserted")]
+    // NoDiskInserted,
     #[error("This is not the disk we want")]
     WrongDisk,
     #[error(transparent)]

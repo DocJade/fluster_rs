@@ -5,16 +5,18 @@ use std::{fs::File, io::Write, os::windows::fs::FileExt};
 use crate::disk::{block::block_structs::RawBlock, disk_struct::Disk};
 
 // Add onto the disk type.
+// TODO: Only allow writing to allocated blocks.
 
 impl Disk {
-    pub fn write_block(self, block: RawBlock) {
-        write_block(self.disk_file, block)
+    pub fn write_block(&self, block: RawBlock) {
+        write_block_direct(&self.disk_file, &block)
     }
 }
 
 // Functions
-
-fn write_block(mut disk_file: File, block: RawBlock) {
+/// DO NOT USE THIS FUNCTION OUTSIDE OF DISK INITIALIZATION
+/// USE THE READ METHOD ON YOUR DISKS DIRECTLY.
+pub(crate) fn write_block_direct(mut disk_file: &File, block: &RawBlock) {
     // Bounds checking
     if block.block_index >= 2880 {
         // This block is impossible to access.

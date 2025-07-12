@@ -5,11 +5,12 @@ use std::{fs::File, os::windows::fs::FileExt};
 use crate::disk::{block::block_structs::RawBlock, disk_struct::Disk};
 
 // TODO: Disallow unwrap / ensure safety.
+// TODO: Only allow reading allocated blocks.
 
 // Add onto the disk type.
 
 impl Disk {
-    pub fn read_block(&self, block_index: u16) -> RawBlock {
+    pub fn read_block(self, block_index: u16) -> RawBlock {
         read_block_direct(&self.disk_file, block_index)
     }
 }

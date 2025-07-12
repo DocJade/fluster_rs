@@ -28,28 +28,36 @@ impl Disk {
         initialize_numbered(disk_file, disk_number)
     }
 
-    // Wipes the disk
-    fn wipe_numbered(disk_file: &File, disk_number: u16) -> Result<(), DiskError> {
-        wipe_numbered(disk_file, disk_number)
-    }
-
     //
     //  Public functions
     //
 
     /// Opens the specified disk.
+    /// Does not check if correct disk is in the drive.
     pub fn open(disk_number: u16) -> Result<Disk, DiskError> {
         open_numbered(disk_number)
     }
 
-    /// Writes the header for a disk. Does NOT destroy data.
-    pub fn initialize(disk_number: u16) -> Result<(), DiskError> {
-        initialize(disk_number)
+    /// Waits for user to insert the specified
+    /// Will not return until specified disk is inserted, or if there are errors with the inserted disk.
+    pub fn prompt_for_disk(disk_number: u16) -> Result<Disk, DiskError> {
+        prompt_for_disk(disk_number)
+    }
+
+    /// Create a new disk. Destroys all data.
+    /// Will not wipe disks that contain the magic.
+    pub fn create(disk_number: u16) -> Result<(), DiskError> {
+        create(disk_number)
     }
 
     /// Destroys ALL data on a disk.
-    pub fn wipe(disk_number: u16) -> Result<(), DiskError> {
-        wipe(disk_number)
+    pub fn full_wipe(self) {
+        full_wipe(self)
+    }
+
+    /// Destroys the header.
+    pub fn wipe(self) {
+        wipe(self)
     }
 }
 
@@ -57,31 +65,78 @@ impl Disk {
 // Public functions
 //
 
-/// Opens a numbered disk
-///
-/// If the disk is not inserted, the user will be prompted to insert the disk.
-fn open(disk_number: u16) -> Result<Disk, DiskError> {
-    // Get the current disk
 
-    todo!();
+
+/// Prompt user to insert the disk we want.
+/// If the disk is already in the drive, no prompt will happen.
+/// Will error out for non-wrong disk related issues.
+fn prompt_for_disk(disk_number: u16) -> Result<Disk, DiskError> {
+    let mut is_user_an_idiot: bool = false; // Did the user put in the wrong disk when asked?
+    let mut disk: Result<Disk, DiskError>;
+    loop {
+        // Try opening the current disk
+        disk = open_numbered(disk_number);
+        // Is this the correct disk?
+        if disk.is_ok() {
+            // yes it is
+            return disk;
+        } else if *disk.as_ref().err().expect("Checked.") != DiskError::WrongDisk { // Did we get an error we can't handle here?
+            // Yep, percolate!
+            return disk;
+        }
+
+        // This is the wrong disk, prompt user to swap disks.
+
+        if is_user_an_idiot {
+            println!("Wrong disk dumbass. Try again.");
+        } else {
+            is_user_an_idiot = true;
+        }
+        let _ = rprompt::prompt_reply(format!("Please insert disk {disk_number}, then press enter."));
+    }
 }
 
 /// Initializes a disk by writing header data.
 ///
 /// This will only work on a disk that is blank / header-less.
-fn initialize(disk_number: u16) -> Result<(), DiskError> {
+/// This will create a disk of any disk number, it is up to the caller to ensure that
+/// duplicate disks are not created, and to track the creation of this new disk.
+fn create(disk_number: u16) -> Result<(), DiskError> {
     // Get the current disk
+    let new_disk = get_disk_file(0).unwrap();
+    
+    // Now give it some head    er
+    initialize_numbered(&new_disk, disk_number)
 
-    todo!();
+    // done
 }
 
 /// Wipes a disk, destroying all data contained on it.
-///
-/// This will only work on a disk that is blank / header-less.
-fn wipe(disk_number: u16) -> Result<(), DiskError> {
-    // Get the current disk
+fn full_wipe(disk: Disk) {
+    // bye bye
+    for i in 0..2880 {
+        disk.write_block(
+            RawBlock {
+                block_index: i,
+                data: [0u8; 512]
+            }
+        );
+    }
+    drop(disk); // gone.
+}
 
-    todo!();
+/// Wipe just the header.
+fn wipe(disk: Disk) {
+    // bye bye
+    for i in 0..2 {
+        disk.write_block(
+            RawBlock {
+                block_index: i,
+                data: [0u8; 512]
+            }
+        );
+    }
+    drop(disk); // gone.
 }
 
 
@@ -101,37 +156,32 @@ fn get_disk_file(disk_number: u16) -> Result<File, DiskError> {
 
     if cfg!(debug_assertions) {
         println!("Debug mode on, opening a virtual disk.");
-        // Get the tempfile, or make it if it does not exist.
+        // Get the tempfile.
         // These files do not delete themselves.
 
-        let temp_disk_file = OpenOptions::new()
+        // if disk 0 is missing, we need to make it.
+        let _ = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .truncate(false)
-            .open(format!("./temp_disks/disk{}.fsr", disk_number))
-            .unwrap();
+            .open("./temp_disks/disk0.fsr").unwrap();
+
+        // If the tempfile does not exist, that means `create` was never called, which is an issue.
+        // This should never be allowed, so an unwrap is okay in this case.
+
+        let temp_disk_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(false)
+            .truncate(false)
+            .open(format!("./temp_disks/disk{}.fsr", disk_number)).unwrap();
 
         // Make sure the file is one floppy big, should have no effect on pre-existing files, since
         // they will already be this size.
         temp_disk_file.set_len(512 * 2880).unwrap(); 
 
-        
-
-        // check if we've already created this disk
-        let check_header = read_header(&temp_disk_file);
-        if check_header.as_ref().is_err_and(|x| *x == DiskError::Uninitialized) {
-            // its a new disk, we must create it.
-            println!("Disk did not exist yet. Initializing it...");
-            initialize_numbered(&temp_disk_file, disk_number)?;
-            return Ok(temp_disk_file);
-        } else if check_header.is_err() {
-            // Well, something went wrong
-            panic!("Failed to get header for temporary disk!")
-        } else {
-            // File was already there, we can return the file as is.
-            return Ok(temp_disk_file);
-        };
+        return Ok(temp_disk_file);
     };
 
     // ==============================
@@ -162,7 +212,7 @@ fn read_header(disk_file: &File) -> Result<DiskHeader, DiskError> {
     // to call this function directly as a workaround.
     let header_block = super::io::read::read_block_direct(disk_file, 0);
 
-    Ok(DiskHeader::extract_header(&header_block)?)
+    DiskHeader::extract_header(&header_block)
 }
 
 /// Abstraction for opening disks to allow easier debugging disks
@@ -223,11 +273,15 @@ fn initialize_numbered(mut disk_file: &File, disk_number: u16) -> Result<(), Dis
     let header = DiskHeader {
         flags,
         disk_number,
+        highest_known_disk: 0, // All disks have 0 in this position, except for the root which we will update.
         block_usage_map,
     };
 
     // Now serialize that, and write it
-    disk_file.seek_write(&header.to_disk_block().unwrap().data, 0).unwrap();
+    let header_block = &header.to_disk_block();
+    
+    // Use the disk interface to write it safely
+    super::io::write::write_block_direct(disk_file, header_block);
 
     // All done!
     Ok(())
