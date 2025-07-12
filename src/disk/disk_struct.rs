@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::block::{block_structs::BlockError, header::header_struct::DiskHeader};
+use crate::disk::block::{block_structs::BlockError, header::{header_methods::HeaderConversionError, header_struct::DiskHeader}};
 
 
 pub struct Disk {
@@ -24,5 +24,5 @@ pub enum DiskError {
     #[error("This is not the disk we want")]
     WrongDisk,
     #[error(transparent)]
-    BlockError(#[from] BlockError)
+    BadHeader(#[from] HeaderConversionError)
 }

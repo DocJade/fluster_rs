@@ -5,13 +5,10 @@ use std::{
     fs::{File, OpenOptions},
     io::{Read, Seek},
     os::windows::fs::{FileExt, OpenOptionsExt},
-    path::Path,
+    path::Path, u16,
 };
 
-use crate::{
-    block::header::header_struct::{DiskHeader, HeaderFlags},
-    disk::disk_struct::{Disk, DiskError},
-};
+use crate::disk::{block::{block_structs::RawBlock, header::header_struct::{DiskHeader, HeaderFlags}}, disk_struct::{Disk, DiskError}};
 
 // !! Only numbered options should be public! !!
 
@@ -157,21 +154,15 @@ fn check_for_magic(block_bytes: &[u8; 512]) -> bool {
     block_bytes[0..8] == *"Fluster!".as_bytes()
 }
 
-/// Returns header information about a the disk
-fn read_header(mut disk_file: &File) -> Result<DiskHeader, DiskError> {
-    // Read in first the block
-    let mut header_block: [u8; 512] = [0u8; 512];
-    disk_file.seek(std::io::SeekFrom::Start(0)).unwrap();
-    disk_file.read_exact(&mut header_block).unwrap();
+/// Returns header information about a the disk directly form the file handle.
+fn read_header(disk_file: &File) -> Result<DiskHeader, DiskError> {
+    // Read in first the block directly
 
-    // Check that the disk has been initialized properly
-    if !check_for_magic(&header_block) {
-        // Missing magic. We cannot open an unformatted disk.
-        return Err(DiskError::Uninitialized);
-    }
+    // We need to read a block before we have an actual disk, so we need
+    // to call this function directly as a workaround.
+    let header_block = super::io::read::read_block_direct(disk_file, 0);
 
-    // Extract the header information
-    Ok(DiskHeader::extract_header(header_block)?)
+    Ok(DiskHeader::extract_header(&header_block)?)
 }
 
 /// Abstraction for opening disks to allow easier debugging disks
@@ -236,7 +227,7 @@ fn initialize_numbered(mut disk_file: &File, disk_number: u16) -> Result<(), Dis
     };
 
     // Now serialize that, and write it
-    disk_file.seek_write(&header.to_disk_block(), 0).unwrap();
+    disk_file.seek_write(&header.to_disk_block().unwrap().data, 0).unwrap();
 
     // All done!
     Ok(())

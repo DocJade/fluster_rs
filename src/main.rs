@@ -4,7 +4,6 @@ use crate::{disk::disk_struct::Disk, helpers::hex_view::hex_view};
 
 mod helpers;
 mod disk;
-mod block;
 
 
 
