@@ -18,14 +18,14 @@ impl Disk {
 /// USE THE READ METHOD ON YOUR DISKS DIRECTLY.
 pub(crate) fn write_block_direct(mut disk_file: &File, block: &RawBlock) {
     // Bounds checking
-    if block.block_index >= 2880 {
+    if block.block_index.unwrap() >= 2880 {
         // This block is impossible to access.
         // TODO: Error handling
         panic!("Can't write a block past the end of a disk!")
     }
 
     // Calculate the offset into the disk
-    let write_offset: u64 = block.block_index as u64 * 512;
+    let write_offset: u64 = block.block_index.unwrap() as u64 * 512;
 
     // Write the data.
     disk_file.seek_write(&block.data, write_offset).unwrap();

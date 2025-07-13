@@ -117,7 +117,7 @@ fn full_wipe(disk: Disk) {
     for i in 0..2880 {
         disk.write_block(
             RawBlock {
-                block_index: i,
+                block_index: Some(i),
                 data: [0u8; 512]
             }
         );
@@ -131,7 +131,7 @@ fn wipe(disk: Disk) {
     for i in 0..2 {
         disk.write_block(
             RawBlock {
-                block_index: i,
+                block_index: Some(i),
                 data: [0u8; 512]
             }
         );

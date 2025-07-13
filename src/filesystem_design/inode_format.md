@@ -101,8 +101,8 @@ see `disk_layout`
     4: Reserved for future use
     5: Reserved for future use
     6: Reserved for future use
-    7: Reserved for future use
-4-6 Bytes: extent information
+    7: Marker bit (Always set)
+2-5 Bytes: extent information
     - 2 Bytes: Disk number (Not included if block is local)
     - 2 Bytes: Start block (Not included if dense)
-    - 2 Bytes: Length (Not included if dense)
+    - 1 Byte: Length (Not included if dense)

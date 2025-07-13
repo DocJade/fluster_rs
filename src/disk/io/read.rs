@@ -2,7 +2,7 @@
 
 use std::{fs::File, os::windows::fs::FileExt};
 
-use crate::disk::{block::block_structs::RawBlock, disk_struct::Disk};
+use crate::disk::{block::{block_structs::RawBlock, crc::check_crc}, disk_struct::Disk};
 
 // TODO: Disallow unwrap / ensure safety.
 // TODO: Only allow reading allocated blocks.
@@ -19,7 +19,7 @@ impl Disk {
 
 
 // Read a block on the currently inserted disk
-// TODO: Check CRC on every read
+// TODO: Error handling
 /// DO NOT USE THIS FUNCTION OUTSIDE OF DISK INITIALIZATION
 /// USE THE READ METHOD ON YOUR DISKS DIRECTLY.
 pub(crate) fn read_block_direct(disk_file: &File, block_index: u16) -> RawBlock {
@@ -27,7 +27,6 @@ pub(crate) fn read_block_direct(disk_file: &File, block_index: u16) -> RawBlock 
     // Bounds checking
     if block_index >= 2880 {
         // This block is impossible to access.
-        // TODO: Error handling
         panic!("Can't read a block past the end of a disk!")
     }
 
@@ -40,9 +39,12 @@ pub(crate) fn read_block_direct(disk_file: &File, block_index: u16) -> RawBlock 
     // Seek to the requested block and read 512 bytes from it
     disk_file.seek_read(&mut input_buffer, read_offset).unwrap();
 
+    // Check the CRC
+    assert!(check_crc(input_buffer));
+
     // send it.
     RawBlock {
-        block_index,
+        block_index: Some(block_index),
         data: input_buffer,
     }
 }

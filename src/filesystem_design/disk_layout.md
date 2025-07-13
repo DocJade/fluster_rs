@@ -68,7 +68,7 @@ final 4 bytes: CRC
 
 # Inode block
 1 byte: bitflags
-    0: This is the last inode on the disk.
+    0: This is the last inode block on the disk.
     1: Reserved for future use
     2: Reserved for future use
     3: Reserved for future use

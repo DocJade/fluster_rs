@@ -7,7 +7,7 @@ use thiserror::Error;
 /// be abstracted away into other types (For example DiskHeader)
 pub struct RawBlock {
     /// Which block on the disk this is
-    pub block_index: u16,
+    pub block_index: Option<u16>,
     /// The block in its entirety.
     pub data: [u8; 512]
 }

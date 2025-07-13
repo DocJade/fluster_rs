@@ -38,7 +38,7 @@ fn extract_header(raw_block: &RawBlock) -> Result<DiskHeader, DiskError> {
 
     // Make sure this is actually a header.
     // Check magic and block number.
-    if raw_block.data[0..8] != *"Fluster!".as_bytes() || raw_block.block_index != 0{
+    if raw_block.data[0..8] != *"Fluster!".as_bytes() || raw_block.block_index != Some(0){
         // Bad input.
 
         // Either the disk has bad data on it, or is probably blank.
@@ -131,7 +131,7 @@ fn to_disk_block(header: &DiskHeader) -> RawBlock {
 
     // Make the RawBlock
     let finished_block: RawBlock = RawBlock {
-        block_index: 0,
+        block_index: Some(0),
         data: buffer
     };
 
