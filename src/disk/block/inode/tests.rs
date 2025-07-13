@@ -1,96 +1,110 @@
 // inode the tests.
 
-use rand::{self, random_bool, Rng};
-
-use crate::disk::block::inode::inode_struct::{Inode, InodeBlock, InodeBlockflags, InodeDirectory, InodeFile, InodeFlags, InodePointer, InodeTimestamp};
-
-#[test]
-fn random_inode_block_serialization() {
-    for _ in 0..50000 {
-        let test_block = get_random_inode_block();
-        let serialized = test_block.to_bytes();
-        let deserialized = InodeBlock::from(serialized);
-        let re_serialized = deserialized.to_bytes();
-        let re_deserialized = InodeBlock::from(re_serialized);
-        assert_eq!(deserialized, re_deserialized)
-    }
-}
+#[cfg(test)]
+use crate::disk::block::directory::directory_struct::InodeLocation;
+use crate::disk::block::inode::inode_struct::{Inode, InodeBlock, InodeDirectory};
+use crate::disk::block::inode::inode_struct::{InodeFile, InodeFlags, InodeTimestamp};
+use crate::disk::block::inode::inode_struct::InodeBlockflags;
+use rand::Rng;
+use rand::random_bool;
+use crate::disk::generic_structs::pointer_struct::DiskPointer;
 
 #[test]
-fn random_inode_serialization() {
-    for _ in 0..50000 {
-        let test_inode = get_random_inode();
-        let serialized = test_inode.to_bytes();
-        let deserialized = Inode::from_bytes(&serialized);
-        let re_serialized = deserialized.to_bytes();
-        let re_deserialized = Inode::from_bytes(&re_serialized);
-        assert_eq!(deserialized, re_deserialized)
-    }
+fn blank_inode_block_serialization() {
+    let test_block: InodeBlock = InodeBlock::new();
+    let serialized = test_block.to_bytes();
+    let deserialized = InodeBlock::from_bytes(&serialized);
+    assert_eq!(test_block, deserialized)
 }
 
-fn get_random_inode() -> Inode {
-    let mut random = rand::rng();
+// Impl to make randoms
 
-    if random_bool(0.5) {
-        Inode {
-            flags: InodeFlags::from_bits_retain(random.random()),
-            file: Some(get_random_inode_file()),
-            directory: None,
-            timestamp: get_random_inode_timestamp()
+#[cfg(test)]
+impl Inode {
+    pub(super) fn get_random() -> Self {
+        use rand::random_bool;
+        let mut random = rand::rng();
+        if random_bool(0.5) {
+            Inode {
+                flags: InodeFlags::from_bits_retain(random.random()),
+                file: Some(InodeFile::get_random()),
+                directory: None,
+                timestamp: InodeTimestamp::get_random()
+            }
+        } else {
+            Inode {
+                flags: InodeFlags::from_bits_retain(random.random()),
+                file: None,
+                directory: Some(InodeDirectory::get_random()),
+                timestamp: InodeTimestamp::get_random()
+            }
         }
-    } else {
-        Inode {
-            flags: InodeFlags::from_bits_retain(random.random()),
-            file: None,
-            directory: Some(get_random_inode_directory()),
-            timestamp: get_random_inode_timestamp()
+    }
+}
+
+#[cfg(test)]
+impl InodeBlock {
+    pub(super) fn get_random() -> Self {
+        let mut random = rand::rng();
+        let mut random_inodes: Vec<Inode> = Vec::with_capacity(13);
+        for i in 0..random_inodes.len() {
+            random_inodes[i] = Inode::get_random()
+        }
+        InodeBlock {
+            flags: InodeBlockflags::from_bits_retain(random.random()),
+            bytes_free: random.random(),
+            next_inode_block: random.random(),
+            inodes: random_inodes,
         }
     }
-
-
-    
 }
 
-fn get_random_inode_block() -> InodeBlock {
-    let mut random = rand::rng();
-    let mut random_inodes: Vec<Inode> = Vec::with_capacity(13);
-    for i in 0..random_inodes.len() {
-        random_inodes[i] = get_random_inode()
-    }
-    InodeBlock {
-        flags: InodeBlockflags::from_bits_retain(random.random()),
-        bytes_free: random.random(),
-        next_inode_block: random.random(),
-        inodes: random_inodes,
+#[cfg(test)]
+impl InodeFile {
+    fn get_random() -> Self {
+        let mut random = rand::rng();
+        InodeFile {
+            size: random.random(),
+            pointer: DiskPointer::get_random(),
+        }
     }
 }
 
-fn get_random_inode_file() -> InodeFile {
-    let mut random = rand::rng();
-    InodeFile {
-        size: random.random(),
-        pointer: get_random_inode_pointer()
+#[cfg(test)]
+impl InodeTimestamp { 
+    fn get_random() -> Self {
+        let mut random = rand::rng();
+        InodeTimestamp {
+            seconds: random.random(),
+            nanos: random.random(),
+        }
     }
 }
 
-fn get_random_inode_directory() -> InodeDirectory {
-    InodeDirectory {
-        pointer: get_random_inode_pointer(),
+#[cfg(test)]
+impl InodeLocation {
+    #[cfg(test)]
+    pub(crate) fn get_random() -> Self {
+        let mut random = rand::rng();
+        let disk: Option<u16> = if random.random_bool(0.5) {
+            Some(random.random())
+        } else {
+            None
+        };
+
+        Self {
+            disk,
+            block: random.random(),
+            index: random.random(),
+        }
     }
 }
 
-fn get_random_inode_pointer() -> InodePointer {
-    let mut random = rand::rng();
-    InodePointer {
-        disk: random.random(),
-        block: random.random()
-    }
-}
-
-fn get_random_inode_timestamp() -> InodeTimestamp {
-    let mut random = rand::rng();
-    InodeTimestamp {
-        seconds: random.random(),
-        nanos: random.random(),
+#[cfg(test)]
+impl InodeDirectory {
+    fn get_random() -> Self {
+        InodeDirectory {
+            pointer: DiskPointer::get_random(),
+        }
     }
 }

@@ -14,6 +14,7 @@ pub fn compute_crc(bytes: &[u8]) -> [u8; 4] {
     checksum.to_le_bytes()
 }
 
+/// Every block will always have a CRC in its last 4 bytes, regardless of block type.
 pub fn add_crc_to_block(block: &mut [u8; 512]) {
     let crc = compute_crc(&block[0..508]);
     block[508..].copy_from_slice(&crc);

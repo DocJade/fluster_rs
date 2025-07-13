@@ -1,6 +1,6 @@
 // Inode a block, then he moved away.
 
-use crate::disk::block::{block_structs::RawBlock, crc::add_crc_to_block, inode::inode_struct::{Inode, InodeBlock, InodeBlockflags, InodeDirectory, InodeFile, InodeFlags, InodePointer, InodeTimestamp}};
+use crate::disk::{block::{block_structs::RawBlock, crc::add_crc_to_block, inode::inode_struct::{Inode, InodeBlock, InodeBlockError, InodeBlockflags, InodeDirectory, InodeFile, InodeFlags, InodeTimestamp}}, generic_structs::pointer_struct::DiskPointer};
 
 impl From<RawBlock> for InodeBlock {
     fn from(value: RawBlock) -> Self {
@@ -14,6 +14,18 @@ impl InodeBlock {
     }
     pub(super) fn from_bytes(block: &RawBlock) -> InodeBlock {
         from_raw_block(&block)
+    }
+    /// Try to add an Inode to this block.
+    pub fn try_add_inode(self, inode: Inode) -> Result<InodeBlock, InodeBlockError> {
+        todo!()
+    }
+    /// Create a new inode block
+    /// 
+    /// New Inode blocks are the new final block on the disk.
+    /// New Inode blocks do not point to the next block (as none exists).
+    /// Caller is responsible with updating previous block to point to this new block.
+    pub fn new() -> Self {
+        todo!()
     }
 }
 
@@ -29,7 +41,7 @@ fn from_raw_block(block: &RawBlock) -> InodeBlock {
     let next_inode_block: u16 = u16::from_le_bytes(block.data[3..3 + 2].try_into().expect("2 into 2"));
 
     // Inodes
-    let inodes: Vec<Inode> = InodeBlock::vec_from_bytes(block.data[5..5 + 503].try_into().expect("503 into 503"));
+    let inodes: Vec<Inode> = InodeBlock::inode_vec_from_bytes(block.data[5..5 + 503].try_into().expect("503 into 503"));
     
 
     // All done
@@ -62,7 +74,7 @@ fn to_raw_bytes(block: &InodeBlock) -> RawBlock{
     buffer[3..3 + 2].copy_from_slice(&next_inode_block.to_le_bytes());
 
     // inodes
-    buffer[5..5 + 503].copy_from_slice(&block.bytes_from_vec());
+    buffer[5..5 + 503].copy_from_slice(&block.inode_bytes_from_vec());
 
     // crc
     add_crc_to_block(&mut buffer);
@@ -131,11 +143,10 @@ impl Inode {
             timestamp,
         }
     }
-
 }
 
 impl InodeBlock {
-    pub(super) fn vec_from_bytes(bytes: &[u8]) -> Vec<Inode> {
+    pub(super) fn inode_vec_from_bytes(bytes: &[u8]) -> Vec<Inode> {
         let mut index: usize = 0;
         let mut vec: Vec<Inode> = Vec::with_capacity(37);
 
@@ -169,7 +180,7 @@ impl InodeBlock {
         vec
     }
     
-    pub(super) fn bytes_from_vec(&self) -> [u8; 503] {
+    pub(super) fn inode_bytes_from_vec(&self) -> [u8; 503] {
         let mut index: usize = 0;
         let mut buffer: [u8; 503] = [0u8; 503];
 
@@ -193,7 +204,7 @@ impl InodeFile {
     fn from_bytes(bytes: [u8; 12]) -> Self {
         Self {
             size: u64::from_le_bytes(bytes[..8].try_into().expect("8 = 8")),
-            pointer: InodePointer::from_bytes(bytes[8..].try_into().expect("4 = 4")),
+            pointer: DiskPointer::from_bytes(bytes[8..].try_into().expect("4 = 4")),
         }
     }
 }
@@ -204,7 +215,7 @@ impl InodeDirectory {
     }
     fn from_bytes(bytes: [u8; 4]) -> Self {
         Self {
-            pointer: InodePointer::from_bytes(bytes),
+            pointer: DiskPointer::from_bytes(bytes),
         }
     }
 }
@@ -220,21 +231,6 @@ impl InodeTimestamp {
         Self {
             seconds: u64::from_le_bytes(bytes[..8].try_into().expect("8 = 8")),
             nanos: u32::from_le_bytes(bytes[8..].try_into().expect("4 = 4")),
-        }
-    }
-}
-
-impl InodePointer {
-    fn to_bytes(&self) -> [u8; 4] {
-        let mut buffer: [u8; 4] = [0u8; 4];
-        buffer[..2].copy_from_slice(&self.disk.to_le_bytes());
-        buffer[2..].copy_from_slice(&self.block.to_le_bytes());
-        buffer
-    }
-    fn from_bytes(bytes: [u8; 4]) -> Self {
-        Self {
-            disk: u16::from_le_bytes(bytes[..2].try_into().expect("2 = 2")),
-            block: u16::from_le_bytes(bytes[2..].try_into().expect("2 = 2")),
         }
     }
 }

@@ -33,7 +33,7 @@ fn random_block_serialization() {
 
 // Helper functions
 
-
+#[cfg(test)]
 fn random_extent() -> FileExtent {
     let mut random = rand::rng();
     FileExtent {
@@ -44,6 +44,7 @@ fn random_extent() -> FileExtent {
     }
 }
 
+#[cfg(test)]
 fn random_pointer() -> FileExtentPointer {
     let mut random = rand::rng();
     FileExtentPointer {
@@ -52,6 +53,7 @@ fn random_pointer() -> FileExtentPointer {
     }
 }
 
+#[cfg(test)]
 fn random_file_extent_block() -> FileExtentBlock {
     let mut random = rand::rng();
     let mut random_extents: Vec<FileExtent> = Vec::with_capacity(100);

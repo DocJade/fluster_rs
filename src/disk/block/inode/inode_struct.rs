@@ -1,6 +1,8 @@
 // Inode layout
 use bitflags::bitflags;
 
+use crate::disk::generic_structs::pointer_struct::DiskPointer;
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(super) struct Inode {
     pub(super) flags: InodeFlags,
@@ -12,12 +14,12 @@ pub(super) struct Inode {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(super) struct InodeFile {
     pub(super) size: u64,
-    pub(super) pointer: InodePointer // Points to extents
+    pub(super) pointer: DiskPointer // Points to extents
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(super) struct InodeDirectory {
-    pub(super) pointer: InodePointer // Points to directory
+    pub(super) pointer: DiskPointer // Points to directory
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -26,24 +28,6 @@ pub(super) struct InodeTimestamp {
     pub(super) seconds: u64,
     pub(super) nanos: u32,
 }
-
-
-/// Points to a specific block on a disk
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub(super) struct InodePointer {
-    pub(super) disk: u16,
-    pub(super) block: u16
-}
-
-/// Points to a specific inode globally
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct InodeLocation {
-    pub(super) disk: Option<u16>,
-    pub(super) block: u16,
-    pub(super) index: u8,
-}
-
-
 
 bitflags! {
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -58,6 +42,7 @@ bitflags! {
 #[derive(Debug, PartialEq, Eq)]
 pub(super) struct InodeBlock {
     pub(super) flags: InodeBlockflags,
+    // Manipulating Inodes must be done through methods on the struct
     pub(super) bytes_free: u16,
     pub(super) next_inode_block: u16,
     pub(super) inodes: Vec<Inode>
@@ -68,4 +53,11 @@ bitflags! {
     pub struct InodeBlockflags: u8 {
         const FinalInodeBlockOnThisDisk = 0b00000001;
     }
+}
+
+// Error types
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum InodeBlockError {
+    NotEnoughSpace,
 }
