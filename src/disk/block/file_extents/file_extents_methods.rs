@@ -12,14 +12,17 @@ impl From<RawBlock> for FileExtentBlock {
 
 // impl the extent vec to byte conversion
 impl FileExtentBlock {
-    fn extents_to_bytes(&self) -> [u8; 503] {
+    pub(super) fn extents_to_bytes(&self) -> [u8; 503] {
         extents_to_bytes(&self.extents)
     }
-    fn bytes_to_extents(&mut self, bytes: [u8; 503]) {
+    pub(super) fn bytes_to_extents(&mut self, bytes: [u8; 503]) {
         self.extents = bytes_to_extents(bytes)
     }
-    fn from_bytes(block: &RawBlock) -> Self {
+    pub(super) fn from_bytes(block: &RawBlock) -> Self {
         from_bytes(block)
+    }
+    pub(super) fn to_bytes(&self) -> RawBlock {
+        to_bytes(self)
     }
 }
 
@@ -139,7 +142,7 @@ impl FileExtentPointer {
         // Disk number
         buffer[..2].copy_from_slice(&self.disk_number.to_le_bytes());
         // Block on disk
-        buffer[3..].copy_from_slice(&self.block_index.to_le_bytes());
+        buffer[2..].copy_from_slice(&self.block_index.to_le_bytes());
         buffer
     }
 

@@ -1,45 +1,46 @@
 // Inode layout
 use bitflags::bitflags;
 
-#[derive(Debug)]
-pub struct Inode {
-    flags: InodeFlags,
-    file: Option<InodeFile>,
-    directory: Option<InodeDirectory>
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(super) struct Inode {
+    pub(super) flags: InodeFlags,
+    pub(super) file: Option<InodeFile>,
+    pub(super) directory: Option<InodeDirectory>,
+    pub(super) timestamp: InodeTimestamp
 }
 
-#[derive(Debug)]
-pub struct InodeFile {
-    size: u64,
-    pointer: InodePointer // Points to extents
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(super) struct InodeFile {
+    pub(super) size: u64,
+    pub(super) pointer: InodePointer // Points to extents
 }
 
-#[derive(Debug)]
-pub struct InodeDirectory {
-    pointer: InodePointer // Points to directory
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(super) struct InodeDirectory {
+    pub(super) pointer: InodePointer // Points to directory
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 /// Relative to Unix Epoch
-pub struct InodeTimestamp {
-    seconds: u64,
-    nanos: u32,
+pub(super) struct InodeTimestamp {
+    pub(super) seconds: u64,
+    pub(super) nanos: u32,
 }
 
 
 /// Points to a specific block on a disk
-#[derive(Debug)]
-pub struct InodePointer {
-    disk: u16,
-    block: u16
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(super) struct InodePointer {
+    pub(super) disk: u16,
+    pub(super) block: u16
 }
 
 /// Points to a specific inode globally
-#[derive(Debug)]
-pub struct InodeLocation {
-    disk: Option<u16>,
-    block: u16,
-    index: u8,
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct InodeLocation {
+    pub(super) disk: Option<u16>,
+    pub(super) block: u16,
+    pub(super) index: u8,
 }
 
 
@@ -48,21 +49,23 @@ bitflags! {
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct InodeFlags: u8 {
         const FileType = 0b00000001;
+        const MarkerBit = 0b10000000; // Always set
     }
 }
 
 // The block
 
-struct InodeBlock {
-    flags: InodeBlockBitflags,
-    bytes_free: u16,
-    next_inode_block: u16,
-    inodes: Vec<Inode>
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct InodeBlock {
+    pub(super) flags: InodeBlockflags,
+    pub(super) bytes_free: u16,
+    pub(super) next_inode_block: u16,
+    pub(super) inodes: Vec<Inode>
 }
 
 bitflags! {
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-    pub struct InodeBlockBitflags: u8 {
+    pub struct InodeBlockflags: u8 {
         const FinalInodeBlockOnThisDisk = 0b00000001;
     }
 }

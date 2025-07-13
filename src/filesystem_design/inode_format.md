@@ -43,8 +43,8 @@ Extents in this file are in order.
     - 4: Reserved for future use
     - 5: Reserved for future use
     - 6: Reserved for future use
-    - 7: Reserved for future use
-6-12 bytes: Inode data
+    - 7: Marker bit (Always set)
+4-12 bytes: Inode data
     * File:
         - 8 bytes for size
         - 4 bytes for pointer to the File Extents block
@@ -78,7 +78,7 @@ see `disk_layout`
     4: Reserved for future use
     5: Reserved for future use
     6: Reserved for future use
-    7: Reserved for future use
+    7: Marker bit (Always set)
 1 byte: length of item name
 ? bytes: item name
 3-5 bytes: inode location
