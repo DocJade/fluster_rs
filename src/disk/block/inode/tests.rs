@@ -4,7 +4,7 @@
 use crate::disk::block::directory::directory_struct::InodeLocation;
 use crate::disk::block::inode::inode_struct::{Inode, InodeBlock, InodeDirectory};
 use crate::disk::block::inode::inode_struct::{InodeFile, InodeFlags, InodeTimestamp};
-use crate::disk::block::inode::inode_struct::InodeBlockflags;
+use crate::disk::block::inode::inode_struct::InodeBlockFlags;
 use rand::Rng;
 use rand::random_bool;
 use crate::disk::generic_structs::pointer_struct::DiskPointer;
@@ -15,6 +15,31 @@ fn blank_inode_block_serialization() {
     let serialized = test_block.to_bytes();
     let deserialized = InodeBlock::from_bytes(&serialized);
     assert_eq!(test_block, deserialized)
+}
+
+#[test]
+fn filled_inode_block_serialization() {
+    let mut test_block: InodeBlock = InodeBlock::new();
+    // Fill with random inodes until we run out of room.
+    loop {
+        if test_block.try_add_inode(Inode::get_random()).is_err(){
+            break
+        }
+    }
+
+    // Check serialization
+    let serialized = test_block.to_bytes();
+    let deserialized = InodeBlock::from_bytes(&serialized);
+    assert_eq!(test_block, deserialized)
+}
+
+#[test]
+/// Checks if we can detect a fragmented block.
+fn inode_block_fragmentation() {
+    let mut test_block: InodeBlock = InodeBlock::new();
+    // now we will repeatedly add and remove blocks at random, at some point there should be enough fragmentation for
+    // adding a new block to fail
+    todo!()
 }
 
 // Impl to make randoms
@@ -38,23 +63,6 @@ impl Inode {
                 directory: Some(InodeDirectory::get_random()),
                 timestamp: InodeTimestamp::get_random()
             }
-        }
-    }
-}
-
-#[cfg(test)]
-impl InodeBlock {
-    pub(super) fn get_random() -> Self {
-        let mut random = rand::rng();
-        let mut random_inodes: Vec<Inode> = Vec::with_capacity(13);
-        for i in 0..random_inodes.len() {
-            random_inodes[i] = Inode::get_random()
-        }
-        InodeBlock {
-            flags: InodeBlockflags::from_bits_retain(random.random()),
-            bytes_free: random.random(),
-            next_inode_block: random.random(),
-            inodes: random_inodes,
         }
     }
 }

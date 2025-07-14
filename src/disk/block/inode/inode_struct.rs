@@ -1,5 +1,6 @@
 // Inode layout
 use bitflags::bitflags;
+use thiserror::Error;
 
 use crate::disk::generic_structs::pointer_struct::DiskPointer;
 
@@ -41,23 +42,31 @@ bitflags! {
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) struct InodeBlock {
-    pub(super) flags: InodeBlockflags,
+    pub(super) flags: InodeBlockFlags,
     // Manipulating Inodes must be done through methods on the struct
     pub(super) bytes_free: u16,
     pub(super) next_inode_block: u16,
-    pub(super) inodes: Vec<Inode>
+    pub(super) inodes_data: [u8; 503]
 }
 
 bitflags! {
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-    pub struct InodeBlockflags: u8 {
+    pub struct InodeBlockFlags: u8 {
         const FinalInodeBlockOnThisDisk = 0b00000001;
     }
 }
 
 // Error types
-
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub(crate) enum InodeBlockError {
+    #[error("There aren't enough free bytes in the block.")]
     NotEnoughSpace,
+    #[error("There are enough free bytes, but there isn't enough contiguous free space.")]
+    BlockIsFragmented,
+}
+
+#[derive(Debug, Error, PartialEq, Eq)]
+pub(crate) enum InodeReadError {
+    #[error("Attempted to read past the end of the inode data.")]
+    ImpossibleOffset,
 }
