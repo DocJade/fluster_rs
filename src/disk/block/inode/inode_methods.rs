@@ -26,12 +26,6 @@ impl InodeBlock {
     pub(super) fn from_bytes(block: &RawBlock) -> Self {
         from_raw_block(&block)
     }
-    /// Try to add an Inode to this block.
-    /// 
-    /// Returns the index of the added inode. (the first inode is 0)
-    pub fn try_add_inode(&mut self, inode: Inode) -> Result<u16, InodeBlockError> {
-        inode_block_try_add_inode(self, inode)
-    }
     /// Create a new inode block
     /// 
     /// New Inode blocks are the new final block on the disk.
@@ -40,11 +34,91 @@ impl InodeBlock {
     pub fn new() -> Self {
         new_inode_block()
     }
+    /// Try to add an Inode to this block.
+    /// Updates the byte usage counter.
+    /// 
+    /// Returns the index of the added inode. (the first inode is 0)
+    pub fn try_add_inode(&mut self, inode: Inode) -> Result<u16, InodeBlockError> {
+        inode_block_try_add_inode(self, inode)
+    }
+    /// Removes inodes based off of the offset into the block. (NOT index!)
+    /// Updates the byte usage counter.
+    /// This does not remove the data the inode points to. The caller is responsible for propagation.
+    /// 
+    /// Returns nothing.
+    pub fn try_remove_inode(&mut self, inode_offset: u16) -> Result<(), InodeBlockError> {
+        inode_block_try_remove_inode(self, inode_offset)
+    }
+    /// Try and read an inode from the block.
+    /// 
+    /// Returns Inode.
+    pub fn try_read_inode(&self, inode_offset: u16) -> Result<Inode, InodeReadError> {
+        inode_block_try_read_inode(self, inode_offset)
+    }
 }
 
 //
 // Functions
 //
+
+fn inode_block_try_read_inode(block: &InodeBlock, offset: u16) -> Result<Inode, InodeReadError> {
+    // Attempt to read in the inode at this location
+    // extract function at bottom of file
+
+    // Bounds checking
+    if offset as usize > block.inodes_data.len() {
+        // We cannot read past the end of the end of the data!
+        return Err(InodeReadError::ImpossibleOffset);
+    }
+    // get a slice with that inode and deserialize it
+    return Ok(Inode::from_bytes(&block.inodes_data[offset as usize..]));
+}
+
+fn inode_block_try_remove_inode(block: &mut InodeBlock, inode_offset: u16) -> Result<(), InodeBlockError> {
+    // Attempt to remove an inode from the block
+
+    // Assumption:
+    // Caller gave us a valid offset.
+    // There isn't a great way to check this besides scanning through the entire block to find all of the
+    // inodes, but we can at least check the marker bit.
+    // Additionally, if there are extra unused bits set in the flags, this is almost certainly an invalid offset.
+    let flags = match InodeFlags::from_bits(block.inodes_data[inode_offset as usize])  {
+        Some(ok) => ok,
+        None => {
+            // Unused bits are set. This cannot be the start of an inode.
+            return Err(InodeBlockError::InvalidOffset);
+        },
+    };
+
+    if !flags.contains(InodeFlags::MarkerBit) {
+        // Missing flag.
+        // This cannot be the beginning of an inode.
+        return Err(InodeBlockError::InvalidOffset);
+    };
+
+    // Assumption: There is a valid inode at the provided offset
+    // Yes the cast back and forth is silly, but at least its easy.
+    let inode_to_remove_length: usize = Inode::from_bytes(&block.inodes_data[inode_offset as usize..]).to_bytes().len();
+
+    // Blank out those bytes
+    // This range is inclusive because we are removing the last byte of the item as well, not just up to the last byte.
+    block.inodes_data[inode_offset as usize..inode_offset as usize + inode_to_remove_length].iter_mut().for_each(|byte| *byte = 0);
+
+    // sanity check, bytes are now empty
+    #[cfg(test)]
+    {
+        for i in 0..inode_to_remove_length {
+            assert_eq!(block.inodes_data[inode_offset as usize + i], 0)
+        }
+    }
+    
+
+    // update how many bytes are free
+    block.bytes_free += inode_to_remove_length as u16;
+
+    // Done
+    Ok(())
+}
 
 fn inode_block_try_add_inode(inode_block: &mut InodeBlock, new_inode: Inode) -> Result<u16, InodeBlockError> {
 
@@ -190,64 +264,70 @@ impl Inode {
             vec.extend(self.file.as_ref().unwrap().to_bytes());
         }
 
-        // Timestamp
-        vec.extend(self.timestamp.to_bytes());
+        // Timestamps
+
+        // Created
+        vec.extend(self.created.to_bytes());
+        
+        // Modified
+        vec.extend(self.modified.to_bytes());
 
         // All done.
         vec
     }
 
-    // Will only read the first inode in provided slice.
+    /// Will only read the first inode in provided slice.
+    /// No validation is done to check if this is a valid inode!
+    /// Caller MUST ensure this is a valid slice that contains an inode starting
+    /// at bit zero, otherwise no guarantees can be made about the returned inode.
     pub(super) fn from_bytes(bytes: &[u8]) -> Self {
-        
+        let mut timestamp_offset: usize = 0;
+
         // Flags
-        let flags: InodeFlags = InodeFlags::from_bits_retain(bytes[0]);
+        let flags: InodeFlags = InodeFlags::from_bits(bytes[0]).expect("Flags should only have used bits set.");
+        timestamp_offset += 1;
+
+        // We must have the marker bit.
+        assert!(flags.contains(InodeFlags::MarkerBit));
 
         // File or directory
         let file: Option<InodeFile> = if flags.contains(InodeFlags::FileType) {
+            timestamp_offset += 12;
             Some(InodeFile::from_bytes(bytes[1..1 + 12].try_into().expect("12 = 12")))
         } else {
             None
         };
-
+        
         let directory: Option<InodeDirectory> = if !flags.contains(InodeFlags::FileType) {
+            timestamp_offset += 4;
             Some(InodeDirectory::from_bytes(bytes[1..1 + 4].try_into().expect("4 = 4")))
         } else {
             None
         };
-
-        // Timestamp
-        // Timestamp is offset if depending on inode type
-        let timestamp_offset: usize = if flags.contains(InodeFlags::FileType) {
-            12
-        } else {
-            4
-        };
-
-        let timestamp: InodeTimestamp = InodeTimestamp::from_bytes(
+        
+        // Timestamps
+        
+        // Created
+        let created: InodeTimestamp = InodeTimestamp::from_bytes(
+            bytes[timestamp_offset..timestamp_offset + 12].try_into().expect("12 = 12")
+        );
+        
+        // Created timestamp is 12 bytes.
+        timestamp_offset += 12;
+        
+        // Modified
+        let modified: InodeTimestamp = InodeTimestamp::from_bytes(
             bytes[timestamp_offset..timestamp_offset + 12].try_into().expect("12 = 12")
         );
 
+        // Done.
         Self {
             flags,
             file,
             directory,
-            timestamp,
+            created,
+            modified,
         }
-    }
-}
-
-impl InodeBlock {
-    /// Extract a single inode from the block
-    pub(super) fn extract_inode(&self, offset: u16) -> Result<Inode, InodeReadError> {
-        // Bounds checking
-        if offset as usize > self.inodes_data.len() {
-            // We cannot read past the end of the end of the data!
-            return Err(InodeReadError::ImpossibleOffset);
-        }
-
-        // get a slice with that inode and deserialize it
-        return Ok(Inode::from_bytes(&self.inodes_data[offset as usize..]));
     }
 }
 
@@ -278,16 +358,23 @@ impl InodeDirectory {
 }
 
 impl InodeTimestamp {
-    fn to_bytes(&self) -> [u8; 12] {
+    pub(super) fn to_bytes(self) -> [u8; 12] {
         let mut buffer: [u8; 12] = [0u8; 12];
         buffer[..8].copy_from_slice(&self.seconds.to_le_bytes());
         buffer[8..].copy_from_slice(&self.nanos.to_le_bytes());
         buffer
     }
-    fn from_bytes(bytes: [u8; 12]) -> Self {
+    pub(super) fn from_bytes(bytes: [u8; 12]) -> Self {
         Self {
             seconds: u64::from_le_bytes(bytes[..8].try_into().expect("8 = 8")),
             nanos: u32::from_le_bytes(bytes[8..].try_into().expect("4 = 4")),
         }
+    }
+}
+
+impl InodeFlags {
+    pub fn new() -> Self {
+        // We need the marker bit.
+        InodeFlags::MarkerBit
     }
 }

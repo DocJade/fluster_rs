@@ -9,7 +9,8 @@ pub(super) struct Inode {
     pub(super) flags: InodeFlags,
     pub(super) file: Option<InodeFile>,
     pub(super) directory: Option<InodeDirectory>,
-    pub(super) timestamp: InodeTimestamp
+    pub(super) created: InodeTimestamp,
+    pub(super) modified: InodeTimestamp,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -33,7 +34,7 @@ pub(super) struct InodeTimestamp {
 bitflags! {
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct InodeFlags: u8 {
-        const FileType = 0b00000001;
+        const FileType = 0b00000001; // Set if this is a file
         const MarkerBit = 0b10000000; // Always set
     }
 }
@@ -63,6 +64,8 @@ pub(crate) enum InodeBlockError {
     NotEnoughSpace,
     #[error("There are enough free bytes, but there isn't enough contiguous free space.")]
     BlockIsFragmented,
+    #[error("An inode does not start at this location.")]
+    InvalidOffset,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]

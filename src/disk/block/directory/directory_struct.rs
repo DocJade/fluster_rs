@@ -1,5 +1,6 @@
 // Directory struct!
 use bitflags::bitflags;
+use thiserror::Error;
 
 use crate::disk::generic_structs::pointer_struct::DiskPointer;
 
@@ -15,7 +16,8 @@ pub(super) struct DirectoryItem {
 pub(super) struct DirectoryBlock {
     pub(super) flags: DirectoryBlockFlags,
     pub(super) bytes_free: u16,
-    pub(super) next_block: DiskPointer,
+    // The disk pointer will automatically deduced from the flags
+    pub(super) next_block: u16,
     pub(super) directory_items: Vec<DirectoryItem>
 }
 
@@ -30,6 +32,7 @@ bitflags! {
 bitflags! {
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct DirectoryBlockFlags: u8 {
+        const FinalDirectoryBlockOnThisDisk = 0b00000001;
     }
 }
 
@@ -39,4 +42,13 @@ pub(crate) struct InodeLocation {
     pub(crate) disk: Option<u16>,
     pub(crate) block: u16,
     pub(crate) index: u8,
+}
+
+// Error types
+#[derive(Debug, Error, PartialEq, Eq)]
+pub(crate) enum DirectoryBlockError {
+    #[error("There aren't enough free bytes in the block.")]
+    NotEnoughSpace,
+    #[error("Item requested for removal is not present.")]
+    NoSuchItem,
 }

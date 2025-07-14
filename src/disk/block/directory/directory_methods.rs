@@ -3,6 +3,7 @@
 use crate::disk::block::block_structs::RawBlock;
 use crate::disk::block::crc::add_crc_to_block;
 use crate::disk::block::directory::directory_struct::DirectoryBlock;
+use crate::disk::block::directory::directory_struct::DirectoryBlockError;
 use crate::disk::block::directory::directory_struct::DirectoryBlockFlags;
 use crate::disk::block::directory::directory_struct::DirectoryFlags;
 use crate::disk::block::directory::directory_struct::DirectoryItem;
@@ -28,15 +29,107 @@ impl From<DirectoryBlock> for RawBlock {
 
 
 impl DirectoryBlock {
-    fn to_bytes(&self) -> RawBlock {
+    pub(super) fn to_bytes(&self) -> RawBlock {
         directory_block_to_bytes(self)
     }
-    fn from_bytes(block: &RawBlock) -> Self {
-        directory_block_from_bytes(&block)
+    pub(super) fn from_bytes(block: &RawBlock) -> Self {
+        directory_block_from_bytes(block)
+    }
+    /// Try to add an DirectoryItem to this block.
+    /// 
+    /// Returns nothing.
+    pub(super) fn try_add_item(&mut self, item: DirectoryItem) -> Result<(), DirectoryBlockError> {
+        directory_block_try_add_item(self, item)
+    }
+    /// Try to remove a item from a directory.
+    /// The item on the directory must match the item provided exactly.
+    /// 
+    /// Returns nothing.
+    pub(super) fn try_remove_item(&mut self, item: DirectoryItem) -> Result<(), DirectoryBlockError> {
+        directory_block_try_remove_item(self, item)
+    }
+    /// Create a new inode block
+    /// 
+    /// New directory blocks are the new final block on the disk.
+    /// New directory blocks do not point to the next block (as none exists).
+    /// Caller is responsible with updating previous block to point to this new block.
+    pub(super) fn new() -> Self {
+        new_directory_block()
     }
 }
 
 // funtions for those impls
+
+fn directory_block_try_remove_item(block: &mut DirectoryBlock, incoming_item: DirectoryItem) -> Result<(), DirectoryBlockError> {
+    // Attempt to remove an item
+
+    // attempt the removal
+    if let Some(index) = block.directory_items.iter().position(|item| *item == incoming_item) {
+        // Item exists.
+        // update the free bytes counter
+        block.bytes_free += incoming_item.to_bytes().len() as u16;
+
+        // We can use swap_remove here since the ordering of items does not matter.
+        block.directory_items.swap_remove(index);
+        Ok(())
+    } else {
+        Err(DirectoryBlockError::NoSuchItem)
+    }
+}
+
+fn directory_block_try_add_item(block: &mut DirectoryBlock, item: DirectoryItem) -> Result<(), DirectoryBlockError> {
+    // Attempt to add a new item to the directory
+
+    // check if we have room
+    let new_item_bytes: Vec<u8> = item.to_bytes();
+    let new_item_length: usize = new_item_bytes.len();
+
+    if new_item_length > block.bytes_free.into() {
+        // We don't have room for this inode. The caller will have to use another block.
+        return Err(DirectoryBlockError::NotEnoughSpace)
+    }
+
+    // luckily since directory blocks dont require any ordering, we can just append it to the vec and update
+    // the amount of free space remaining, since writing the actual data will just happen at the deserialization stage.
+
+    block.directory_items.push(item);
+
+    // Update free space
+    // This cast is fine, item lengths could never hit > 2^16
+    block.bytes_free -= new_item_length as u16;
+
+    // Done!
+    Ok(())
+}
+
+fn new_directory_block() -> DirectoryBlock {
+    // New block!
+
+    // Flags
+    // New blocks are assumed to be the last in the chain.
+    let flags: DirectoryBlockFlags = DirectoryBlockFlags::FinalDirectoryBlockOnThisDisk;
+
+    // Bytes free
+    // An empty block has 503 bytes free.
+    let bytes_free: u16 = 503;
+
+    // Next block
+    // New blocks assume we are the final block in the chain.
+    let next_block: u16 = u16::MAX;
+
+    // Items
+    // New blocks have no items. duh.
+    // If this is the root disk, the caller needs to add the root directory.
+    let directory_items: Vec<DirectoryItem> = Vec::new();
+
+    // All done.
+    DirectoryBlock {
+        flags,
+        bytes_free,
+        next_block,
+        directory_items,
+    }
+}
 
 fn directory_block_to_bytes(block: &DirectoryBlock) -> RawBlock {
     // Deconstruct the bock
@@ -57,11 +150,11 @@ fn directory_block_to_bytes(block: &DirectoryBlock) -> RawBlock {
     // free bytes
     buffer[1..1 + 2].copy_from_slice(&bytes_free.to_le_bytes());
 
-    // next block on the disk
-    buffer[3..3 + 4].copy_from_slice(&next_block.to_bytes());
+    // next block
+    buffer[3..3 + 2].copy_from_slice(&next_block.to_le_bytes());
 
     // Directory items
-    buffer[7..7 + 501].copy_from_slice(&block.item_bytes_from_vec());
+    buffer[5..5 + 503].copy_from_slice(&block.item_bytes_from_vec());
 
     // add the CRC
     add_crc_to_block(&mut buffer);
@@ -83,10 +176,10 @@ fn directory_block_from_bytes(block: &RawBlock) -> DirectoryBlock {
     let bytes_free: u16 = u16::from_le_bytes(block.data[1..1 + 2].try_into().expect("2 = 2"));
 
     // Next block
-    let next_block: DiskPointer = DiskPointer::from_bytes(block.data[3..3 + 4].try_into().expect("4 = 4"));
+    let next_block: u16 = u16::from_le_bytes(block.data[3..3 + 2].try_into().expect("2 = 2"));
 
     // The directory items
-    let directory_items: Vec<DirectoryItem> = DirectoryBlock::item_vec_from_bytes(&block.data[7..7 + 501]);
+    let directory_items: Vec<DirectoryItem> = DirectoryBlock::item_vec_from_bytes(&block.data[5..5 + 503]);
 
     // All done
     DirectoryBlock {
@@ -101,9 +194,9 @@ fn directory_block_from_bytes(block: &RawBlock) -> DirectoryBlock {
 
 // Conversions for the Vec of items
 impl DirectoryBlock {
-    fn item_bytes_from_vec(&self) -> [u8; 501] {
+    fn item_bytes_from_vec(&self) -> [u8; 503] {
         let mut index: usize = 0;
-        let mut buffer: [u8; 501] = [0u8; 501];
+        let mut buffer: [u8; 503] = [0u8; 503];
 
         for i in &self.directory_items {
             for byte in i.to_bytes() {
@@ -115,15 +208,16 @@ impl DirectoryBlock {
     }
     fn item_vec_from_bytes(bytes: &[u8]) -> Vec<DirectoryItem> {
         let mut items: Vec<DirectoryItem> = Vec::with_capacity(83); // Theoretical limit
-        let index: usize = 0;
+        let mut index: usize = 0;
         loop {
             // Are we out of bytes?
             if index >= bytes.len() {
                 break
             }
 
+            
             // Get the flags
-            let flags: DirectoryFlags = DirectoryFlags::from_bits_retain(bytes[index]);
+            let flags: DirectoryFlags = DirectoryFlags::from_bits(bytes[index]).expect("Flags should only have used bits set.");
 
             // Check for marker bit
             if !flags.contains(DirectoryFlags::MarkerBit) {
@@ -131,18 +225,11 @@ impl DirectoryBlock {
                 break
             }
 
-            // Figure out how many bytes we need to give to the converter
-            let directory_size: usize = if flags.contains(DirectoryFlags::OnThisDisk) {
-                // No disk number, so 3 bytes
-                3
-            } else {
-                // Disk number is an additional 2 bytes.
-                5
-            };
-
             // Do the conversion
-            let item: DirectoryItem = DirectoryItem::from_bytes(&bytes[index..index + directory_size]);
+            let item: DirectoryItem = DirectoryItem::from_bytes(&bytes[index..]);
 
+            // increment index
+            index += item.to_bytes().len();
             
             // Done with this one
             items.push(item)
@@ -155,7 +242,7 @@ impl DirectoryBlock {
 
 // Conversions for the Vec of items
 impl DirectoryItem {
-    fn to_bytes(&self) -> Vec<u8> {
+    pub(super) fn to_bytes(&self) -> Vec<u8> {
         let mut vec: Vec<u8> = Vec::with_capacity(262); // Theoretical limit
         // Flags
         vec.push(self.flags.bits());
@@ -173,18 +260,30 @@ impl DirectoryItem {
         vec
 
     }
-    fn from_bytes(bytes: &[u8]) -> Self {
-
+    pub(super) fn from_bytes(bytes: &[u8]) -> Self {
+        let mut index: usize = 0;
         // Flags
-        let flags: DirectoryFlags = DirectoryFlags::from_bits_retain(bytes[0]);
-
+        let flags: DirectoryFlags = DirectoryFlags::from_bits(bytes[index]).expect("Flags should only have used bits set.");
+        index += 1;
+        
         // Item name length
-        let name_length: u8 = bytes[1];
-
+        let name_length: u8 = bytes[index];
+        index += 1;
+        
         // Item name
-        let name: String = String::from_utf8(bytes[2..2 + name_length as usize].to_vec()).expect("File names should be valid UTF-8");
+        let name: String = String::from_utf8(bytes[index..index + name_length as usize].to_vec()).expect("File names should be valid UTF-8");
+        index += name_length as usize;
 
-        let location: InodeLocation = InodeLocation::from_bytes(&bytes[2 + name_length as usize..]);
+        // inode location
+        // must be fed either 3 or 5 bytes depending on type
+        let location_length: usize = if flags.contains(DirectoryFlags::OnThisDisk) {
+            // On this disk, so 3
+            3
+        }  else {
+            5
+        };
+
+        let location: InodeLocation = InodeLocation::from_bytes(&bytes[index..index + location_length]);
 
         Self {
             flags,
@@ -212,6 +311,7 @@ impl InodeLocation {
 
         vec
     }
+    /// Do not feed more than 5 bytes.
     fn from_bytes(bytes: &[u8]) -> Self {
         // Disk number
         let mut index: usize = 0;
@@ -222,14 +322,14 @@ impl InodeLocation {
         } else {
             None
         };
-
+        
         // Block on disk
         let block: u16 = u16::from_le_bytes(bytes[index..index + 2].try_into().expect("2 = 2"));
+        index += 2;
 
         // Index into Inode block
-        // this is always the last byte
-        let index: u8 = bytes[bytes.len()];
-        
+        let index: u8 = bytes[index];
+
         Self {
             disk,
             block,

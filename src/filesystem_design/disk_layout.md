@@ -1,6 +1,7 @@
 # Disk Layout
 Block 0: Disk header
 Block 1: Inode block
+Block 2: Directory block
 
 Remaining blocks: any inode, directory, or data.
 
@@ -28,8 +29,13 @@ remaining bytes: raw data
 final 4 bytes: CRC
 
 # Directory block
+
+Items on the directory block don't need to be in any
+specific order, we do not index directly into these
+blocks.
+
 1 byte: bitflags
-    0: Reserved for future use
+    0: This is the last directory block on the disk.
     1: Reserved for future use
     2: Reserved for future use
     3: Reserved for future use
@@ -38,10 +44,8 @@ final 4 bytes: CRC
     6: Reserved for future use
     7: Reserved for future use
 2 bytes: number of free bytes
-4 bytes: next Inode block
-    - 2 Bytes: Disk number
-    - 2 Bytes: Block on disk
-    - if this is u16::MAX then we are at the end of the block chain
+2 bytes: next directory block (Either a disk number, or a block number depending on flags.)
+    - If u16:MAX then this is the end of the directory chain
 
 remaining bytes: directory data
 

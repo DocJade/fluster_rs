@@ -59,14 +59,16 @@ pub fn find_free_space<T: BytePingPong>(data: &[u8], requested_space: usize) -> 
         }
 
         // There was a byte in the way, find which byte caused it
-        let non_zero_byte_offset: usize = data[index..index + requested_space]
+        let non_empty_byte_offset: usize = data[index..index + requested_space]
             .iter()
             .position(|&byte| byte != 0)
             .expect("There has to be a byte in the way.");
 
         // Move that far forward, then try again.
-        // Keep in mind that if it was the first byte, we still have to move over one.
-        index += non_zero_byte_offset + 1;
+        // The index we are already on MUST be either zero, or the start of a <T>
+        // Since we already know we arent at the start of <T>, we will always jump at least
+        // one byte forwards.
+        index += non_empty_byte_offset;
         continue;
     }
 
