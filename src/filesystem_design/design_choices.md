@@ -15,3 +15,9 @@ flag 0 is the least significant bit
 I was having an issue reading just 8 bytes into a buffer.
 Turns out Windows wont let you read directly from a floppy disk into a buffer smaller than 512 bytes.
 This took an annoyingly long time to figure out.
+
+# Why do file extent blocks have a `bytes_free` field even though they arent dynamically allocated?
+Ease of use.
+
+# A lot of stuff seems wasteful cpu wise...
+Think of it this way, 99% of the time we will be waiting for data from disk, so it evens out!

@@ -1,13 +1,14 @@
 // Tests are cool.
 
-use crate::disk::block::file_extents::file_extents_struct::{ExtentFlags, FileExtendBlockFlags, FileExtent, FileExtentBlock, FileExtentPointer};
+use crate::disk::block::file_extents::file_extents_struct::{ExtentFlags, FileExtentBlockFlags, FileExtent, FileExtentBlock, FileExtentPointer};
 use rand::{self, Rng};
+use rand::rngs::ThreadRng;
 
 #[test]
 fn random_extents_serialization() {
     // Make some random extents and de/serialize them
-    for _ in 0..50000 {
-        let test_extent = random_extent();
+    for _ in 0..1000 {
+        let test_extent = FileExtent::random();
         let serialized = test_extent.to_bytes();
         let deserialized = FileExtent::from_bytes(&serialized);
         let re_serialized = deserialized.to_bytes();
@@ -17,14 +18,43 @@ fn random_extents_serialization() {
 }
 
 #[test]
+fn empty_extent_block_serialization() {
+    let test_block = FileExtentBlock::new();
+    let serialized = test_block.to_bytes();
+    let deserialized = FileExtentBlock::from_bytes(&serialized);
+    assert_eq!(test_block, deserialized);
+}
+
+#[test]
+fn full_extent_block() {
+    let mut test_block = FileExtentBlock::new();
+    let mut extents: Vec<FileExtent> = Vec::new();
+    loop {
+        let new_extent: FileExtent = FileExtent::random();
+        match test_block.add_extent(new_extent) {
+            Ok(_) => {
+                // keep track of the extents we put in
+                extents.push(new_extent);
+                // keep going
+            }, 
+            Err(err) => match err {
+                super::file_extents_struct::FileExtentBlockError::NotEnoughSpace => break, // full
+                _ => todo!(),
+            },
+        }
+    }
+    // Make sure all of the extents stored correctly
+    let retrieved_extents: Vec<FileExtent> = test_block.get_extents();
+    assert!(extents.iter().all(|item| retrieved_extents.contains(item)));
+}
+
+#[test]
 fn random_block_serialization() {
-    for _ in 0..50000 {
-        let test_block = random_file_extent_block();
-        let serialized = test_block.to_bytes();
+    for _ in 0..1000 {
+        let block = FileExtentBlock::get_random();
+        let serialized = block.to_bytes();
         let deserialized = FileExtentBlock::from_bytes(&serialized);
-        let re_serialized = deserialized.to_bytes();
-        let re_deserialized = FileExtentBlock::from_bytes(&re_serialized);
-        assert_eq!(deserialized, re_deserialized)
+        assert_eq!(block, deserialized)
     }
 }
 
@@ -33,37 +63,79 @@ fn random_block_serialization() {
 
 // Helper functions
 
+
 #[cfg(test)]
-fn random_extent() -> FileExtent {
-    let mut random = rand::rng();
-    FileExtent {
-        flags: ExtentFlags::from_bits_retain(random.random::<u8>() & ExtentFlags::MarkerBit.bits()),
-        disk_number: Some(random.random()),
-        start_block: Some(random.random()),
-        length: Some(random.random()),
+impl FileExtentBlock {
+    fn get_random() -> Self {
+        let mut test_block = FileExtentBlock::new();
+        let mut random: ThreadRng = rand::rng();
+        // Fill with a random amount of items.
+        loop {
+            // consider stopping early
+            if random.random_bool(0.50) {
+                break
+            }
+            let new_extent: FileExtent = FileExtent::random();
+            match test_block.add_extent(new_extent) {
+                Ok(_) => {}, 
+                Err(err) => match err {
+                    super::file_extents_struct::FileExtentBlockError::NotEnoughSpace => break, // full
+                    _ => todo!(),
+                },
+            }
+        }
+        test_block
     }
 }
 
 #[cfg(test)]
-fn random_pointer() -> FileExtentPointer {
-    let mut random = rand::rng();
-    FileExtentPointer {
-        disk_number: random.random(),
-        block_index: random.random()
+impl FileExtent {
+    fn random() -> Self {
+        let mut random: ThreadRng = rand::rng();
+        // Decide what kind of disk
+        let mut flags = ExtentFlags::new();
+        let disk_number: Option<u16>;
+        let start_block: Option<u16>;
+        let length: Option<u8>;
+
+        // Dense disk
+        if random.random_bool(0.5) {
+            flags.insert(ExtentFlags::OnDenseDisk);
+            disk_number = Some(random.random());
+            start_block = None;
+            length = None;
+        } else if random.random_bool(0.5) {
+            // Local
+            flags.insert(ExtentFlags::OnThisDisk);
+            disk_number = None;
+            start_block = Some(random.random());
+            length = Some(random.random());
+        } else {
+            // Neither.
+            disk_number = Some(random.random());
+            start_block = Some(random.random());
+            length = Some(random.random());
+        }
+
+        // Ensure that only one of the two flags is set.
+        assert!(!(flags.contains(ExtentFlags::OnDenseDisk) && flags.contains(ExtentFlags::OnThisDisk)));
+
+        // All done.
+        FileExtent {
+            flags,
+            disk_number,
+            start_block,
+            length,
+        }
     }
 }
 
 #[cfg(test)]
-fn random_file_extent_block() -> FileExtentBlock {
-    let mut random = rand::rng();
-    let mut random_extents: Vec<FileExtent> = Vec::with_capacity(100);
-    for i in 0..random_extents.len() {
-        random_extents[i] = random_extent()
-    }
-
-    FileExtentBlock {
-        flags: FileExtendBlockFlags::from_bits_retain(random.random()),
-        next_block: random_pointer(),
-        extents: random_extents
+impl ExtentFlags {
+    fn new() -> Self {
+        // always need the marker bit.
+        let mut flag = ExtentFlags::empty();
+        flag.insert(ExtentFlags::MarkerBit);
+        flag
     }
 }

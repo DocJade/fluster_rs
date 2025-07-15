@@ -92,6 +92,8 @@ see `disk_layout`
 see `disk_layout`
 
 # Extent format
+bitflag considerations:
+- You cannot have a local dense-disk.
 
 1 byte: bitflags
     0: This extent is a dense-disk

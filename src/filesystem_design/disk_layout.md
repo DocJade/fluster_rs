@@ -3,6 +3,9 @@ Block 0: Disk header
 Block 1: Inode block
 Block 2: Directory block
 
+Unless its a dense disk,
+dense disks only have the header.
+
 Remaining blocks: any inode, directory, or data.
 
 
@@ -61,6 +64,7 @@ final 4 bytes: CRC
     5: Reserved for future use
     6: Reserved for future use
     7: Reserved for future use
+2 bytes: number of free bytes
 4 bytes: Next block
     - 2 Bytes: Disk number
     - 2 Bytes: Block on disk

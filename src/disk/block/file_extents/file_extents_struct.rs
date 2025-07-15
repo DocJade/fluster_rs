@@ -1,8 +1,9 @@
 // File extents
 
 use bitflags::bitflags;
+use thiserror::Error;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct FileExtent {
     pub(super) flags: ExtentFlags,
     pub(super) disk_number: Option<u16>, // not included on local blocks
@@ -13,6 +14,8 @@ pub struct FileExtent {
 bitflags! {
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct ExtentFlags: u8 {
+        // Assumption:
+        // A dense disk can NEVER be local.
         const OnDenseDisk = 0b00000001;
         const OnThisDisk = 0b00000010;
         const MarkerBit = 0b10000000;
@@ -22,7 +25,8 @@ bitflags! {
 // Extents block
 #[derive(Debug, PartialEq, Eq)]
 pub struct FileExtentBlock {
-    pub(super) flags: FileExtendBlockFlags,
+    pub(super) flags: FileExtentBlockFlags,
+    pub(super) bytes_free: u16,
     pub(super) next_block: FileExtentPointer,
     pub(super) extents: Vec<FileExtent>
     
@@ -36,6 +40,13 @@ pub struct FileExtentPointer {
 
 bitflags! {
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-    pub struct FileExtendBlockFlags: u8 {
+    pub struct FileExtentBlockFlags: u8 {
     }
+}
+
+// Error types
+#[derive(Debug, Error, PartialEq, Eq)]
+pub(crate) enum FileExtentBlockError {
+    #[error("There aren't enough free bytes in the block.")]
+    NotEnoughSpace,
 }

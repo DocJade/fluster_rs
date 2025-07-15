@@ -1,6 +1,6 @@
 // Method acting, for extents.
 
-use crate::disk::block::{block_structs::RawBlock, crc::add_crc_to_block, file_extents::file_extents_struct::{ExtentFlags, FileExtendBlockFlags, FileExtent, FileExtentBlock, FileExtentPointer}};
+use crate::disk::block::{block_structs::RawBlock, crc::add_crc_to_block, file_extents::file_extents_struct::{ExtentFlags, FileExtentBlockFlags, FileExtent, FileExtentBlock, FileExtentBlockError, FileExtentPointer}};
 
 
 // Impl the conversion from RawBlock
@@ -12,10 +12,10 @@ impl From<RawBlock> for FileExtentBlock {
 
 // impl the extent vec to byte conversion
 impl FileExtentBlock {
-    pub(super) fn extents_to_bytes(&self) -> [u8; 503] {
+    pub(super) fn extents_to_bytes(&self) -> Vec<u8> {
         extents_to_bytes(&self.extents)
     }
-    pub(super) fn bytes_to_extents(&mut self, bytes: [u8; 503]) {
+    pub(super) fn bytes_to_extents(&mut self, bytes: &[u8]) {
         self.extents = bytes_to_extents(bytes)
     }
     pub(super) fn from_bytes(block: &RawBlock) -> Self {
@@ -24,24 +24,75 @@ impl FileExtentBlock {
     pub(super) fn to_bytes(&self) -> RawBlock {
         to_bytes(self)
     }
+    /// Attempts to add a file extent to this block
+    /// 
+    /// Returns nothing
+    pub(super) fn add_extent(&mut self, extent: FileExtent) -> Result<(), FileExtentBlockError> {
+        extent_block_add_extent(self, extent)
+    }
+    /// Create a new extent block.
+    /// 
+    /// New Extent blocks are the new final block on the disk.
+    /// New Extent blocks do not point to the next block (as none exists).
+    /// Caller is responsible with updating previous block to point to this new block.
+    pub(super) fn new() -> Self {
+        FileExtentBlock {
+            flags: FileExtentBlockFlags::default(),
+            bytes_free: 501, // new blocks have 501 free bytes
+            next_block: FileExtentPointer::final_block(),
+            extents: Vec::new(),
+        }
+    }
+    /// Reterieves all extents within this block.
+    pub(super) fn get_extents(&self) -> Vec<FileExtent> {
+        // Just a layer of abstraction to prevent direct access.
+        self.extents.clone()
+    }
 }
 
 
 
+//
+// Functions
+//
 
+fn extent_block_add_extent(block: &mut FileExtentBlock, extent: FileExtent) -> Result<(), FileExtentBlockError> {
+    // Try and add an extent to the block
+
+    // figure out how big the extent is
+    let extent_size: u16 = extent.to_bytes().len().try_into().expect("Extents can't be > 2^16");
+
+    // will it fit?
+    if extent_size > block.bytes_free {
+        // Nope!
+        return Err(FileExtentBlockError::NotEnoughSpace);
+    }
+
+    // It'll fit! Add it to the Vec.
+    block.extents.push(extent);
+
+    // we are using that space now.
+    block.bytes_free -= extent_size;
+
+    Ok(())
+}
 
 fn from_bytes(block: &RawBlock) -> FileExtentBlock {
 
     // flags
-    let flags: FileExtendBlockFlags = FileExtendBlockFlags::from_bits_retain(block.data[0]);
+    let flags: FileExtentBlockFlags = FileExtentBlockFlags::from_bits_retain(block.data[0]);
+
+    // bytes free
+    let bytes_free: u16 = u16::from_le_bytes(block.data[1..1 + 2].try_into().expect("2 = 2"));
 
     // Next block
-    let next_block: FileExtentPointer = FileExtentPointer::from_bytes(block.data[1..1 + 4].try_into().expect("4 is 4"));
+    let next_block: FileExtentPointer = FileExtentPointer::from_bytes(block.data[3..3 + 4].try_into().expect("4 is 4"));
 
-    let extents: Vec<FileExtent> = bytes_to_extents(block.data[5..5 + 503].try_into().expect("503 bytes"));
+    let extents: Vec<FileExtent> = bytes_to_extents(block.data[7..7 + 501].try_into().expect("503 bytes"));
 
     FileExtentBlock {
         flags,
+        bytes_free,
         next_block,
         extents
     }
@@ -52,20 +103,28 @@ fn to_bytes(extent_block: &FileExtentBlock) -> RawBlock {
     let FileExtentBlock {
         flags,
         next_block,
+        bytes_free,
         #[allow(unused_variables)] // The extents are extracted in a different way
         extents
     } = extent_block;
 
     let mut buffer: [u8; 512] = [0u8; 512];
+    let mut index: usize = 0;
 
     // bitflags
-    buffer[0] = flags.bits();
-
+    buffer[index] = flags.bits();
+    index += 1;
+    
+    // free bytes
+    buffer[index..index + 2].copy_from_slice(&bytes_free.to_le_bytes());
+    index += 2;
+    
     // Next block
-    buffer[1..1 + 4].copy_from_slice(&next_block.to_bytes());
+    buffer[index..index + 4].copy_from_slice(&next_block.to_bytes());
+    index += 4;
 
     // Extents
-    buffer[5..508].copy_from_slice(&extent_block.extents_to_bytes());
+    buffer[index..index + 501].copy_from_slice(&extent_block.extents_to_bytes());
 
     // add the CRC
     add_crc_to_block(&mut buffer);
@@ -82,10 +141,10 @@ fn to_bytes(extent_block: &FileExtentBlock) -> RawBlock {
 }
 
 // Convert the extents to a properly sized array of bytes
-fn extents_to_bytes(extents: &[FileExtent]) -> [u8; 503] {
+fn extents_to_bytes(extents: &[FileExtent]) -> Vec<u8> {
     // I couldn't think of a nicer way to do this conversion
     let mut index: usize = 0;
-    let mut buffer: [u8; 503] = [0u8; 503];
+    let mut buffer: [u8; 501] = [0u8; 501];
 
     for i in extents {
         for byte in i.to_bytes() {
@@ -93,36 +152,43 @@ fn extents_to_bytes(extents: &[FileExtent]) -> [u8; 503] {
             index += 1;
         }
     }
-    buffer
+    buffer.to_vec()
 }
 
 // Now for the other way
-fn bytes_to_extents(bytes: [u8; 503]) -> Vec<FileExtent> {
+fn bytes_to_extents(bytes: &[u8]) -> Vec<FileExtent> {
     let mut offset: usize = 0;
     let mut extent_vec: Vec<FileExtent> = Vec::new();
-    // to make sure we always have at least 5 bytes to copy from any point, we need the array to be slightly bigger,
-    // which needs a copy, but whatever. Maybe there's a more clever way to do this, but I dont feel bad moving 500 bytes around.
 
-    let mut padded_bytes: [u8; 508] = [0u8; 508];
-    padded_bytes[..503].copy_from_slice(&bytes);
     loop {
-        // To make sure we always get 5 bytes,
-
         // make sure we dont go off the deep end
-        if offset >= 503 {
+        if offset >= bytes.len() {
             // cant be more.
             break
         }
         // check for the marker
-        if !ExtentFlags::from_bits_retain(padded_bytes[offset]).contains(ExtentFlags::MarkerBit) {
+        let flag = ExtentFlags::from_bits_retain(bytes[offset]);
+        if !flag.contains(ExtentFlags::MarkerBit) {
             // no more extents to read.
             break
         }
 
+        // find how many bytes long the extent is
+        // yes this is silly, but idk
+        let length: usize = if flag.contains(ExtentFlags::OnDenseDisk) {
+            3
+        } else if flag.contains(ExtentFlags::OnThisDisk) {
+            4
+        } else {
+            6
+        };
+
+
         // read in an extent
-        extent_vec.push(FileExtent::from_bytes(&bytes[offset..offset+5]));
+        let new_extent = FileExtent::from_bytes(&bytes[offset..offset + length]);
+        extent_vec.push(new_extent);
         // increment offset
-        offset += 5;
+        offset += new_extent.to_bytes().len();
     }
 
     // Done!
@@ -160,7 +226,7 @@ impl FileExtentPointer {
 }
 
 impl FileExtent {
-    pub(super) fn to_bytes(&self) -> Vec<u8> {
+    pub(super) fn to_bytes(self) -> Vec<u8> {
         let mut vec: Vec<u8> = Vec::with_capacity(6);
 
         // flags
@@ -168,12 +234,12 @@ impl FileExtent {
 
         if !self.flags.contains(ExtentFlags::OnThisDisk) {
             // Disk number
-            vec.append(&mut self.disk_number.unwrap().to_le_bytes().to_vec());
+            vec.extend_from_slice(&self.disk_number.unwrap().to_le_bytes());
         }
         
         if !self.flags.contains(ExtentFlags::OnDenseDisk) {
             // Start block
-            vec.append(&mut self.start_block.unwrap().to_le_bytes().to_vec());
+            vec.extend_from_slice(&self.start_block.unwrap().to_le_bytes());
             // Length
             vec.push(self.length.unwrap());
         }
@@ -183,28 +249,31 @@ impl FileExtent {
     }
     /// You can feed feed this too many bytes, but as long as the flag is in the right spot, it will work correctly
     pub(super) fn from_bytes(bytes: &[u8]) -> FileExtent {
-        let flags: ExtentFlags = ExtentFlags::from_bits_retain(bytes[0]);
+        let flags: ExtentFlags = ExtentFlags::from_bits(bytes[0]).expect("Unused bits should not be set.");
+        println!("{}",bytes.len());
+        // 3 distinct disk types as of writing.
+        // cleaner implementation is probably possible, but for just 3 types? this is fine
 
-        // Disk number
-        let disk_number: Option<u16> = if !flags.contains(ExtentFlags::OnThisDisk) {
-            Some(u16::from_le_bytes(bytes[1..1 + 2].try_into().expect("2 bytes is 2 bytes")))
-        } else {
-            None
-        };
+        let disk_number: Option<u16>;
+        let start_block: Option<u16>;
+        let length: Option<u8>;
 
-        // Start block
-        let start_block: Option<u16> = if !flags.contains(ExtentFlags::OnDenseDisk) {
-            Some(u16::from_le_bytes(bytes[3..3 + 2].try_into().expect("2 bytes is 2 bytes")))
+        // Dense disk
+        if flags.contains(ExtentFlags::OnDenseDisk) {
+            disk_number = Some(u16::from_le_bytes(bytes[1..1 + 2].try_into().expect("2 = 2 ")));
+            start_block = None;
+            length = None;
+        } else if flags.contains(ExtentFlags::OnThisDisk) {
+            // Local
+            disk_number = None;
+            start_block = Some(u16::from_le_bytes(bytes[1..1 + 2].try_into().expect("2 = 2 ")));
+            length = Some(bytes[3]);
         } else {
-            None
-        };
-
-        // Length
-        let length: Option<u8> = if !flags.contains(ExtentFlags::OnDenseDisk) {
-            Some(bytes[5])
-        } else {
-            None
-        };
+            // Neither.
+            disk_number = Some(u16::from_le_bytes(bytes[1..1 + 2].try_into().expect("2 = 2 ")));
+            start_block = Some(u16::from_le_bytes(bytes[3..3 + 2].try_into().expect("2 = 2 ")));
+            length = Some(bytes[5]);
+        }
 
         FileExtent {
             flags,
@@ -213,5 +282,24 @@ impl FileExtent {
             length,
         }
 
+    }
+}
+
+
+// Default bitflags
+impl FileExtentBlockFlags {
+    pub fn default() -> Self {
+        // We aren't using any bits right now.
+        FileExtentBlockFlags::empty()
+    }
+}
+
+// Final block
+impl FileExtentPointer {
+    const fn final_block() -> Self {
+        FileExtentPointer {
+            disk_number: u16::MAX,
+            block_index: u16::MAX,
+        }
     }
 }
