@@ -1,6 +1,6 @@
 // Reading!
 
-use std::{fs::File, os::windows::fs::FileExt};
+use std::{fs::File, os::unix::fs::FileExt};
 
 use crate::pool::disk::{block::{block_structs::RawBlock, crc::check_crc}, disk_struct::Disk};
 
@@ -37,7 +37,7 @@ pub(crate) fn read_block_direct(disk_file: &File, block_index: u16) -> RawBlock 
     let read_offset: u64 = block_index as u64 * 512;
 
     // Seek to the requested block and read 512 bytes from it
-    disk_file.seek_read(&mut input_buffer, read_offset).unwrap();
+    disk_file.read_exact_at(&mut input_buffer, read_offset).unwrap();
 
     // Check the CRC
     assert!(check_crc(input_buffer));

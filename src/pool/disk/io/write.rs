@@ -1,6 +1,6 @@
 // Writing!
 
-use std::{fs::File, io::Write, os::windows::fs::FileExt};
+use std::{fs::File, io::Write, os::{unix::fs::FileExt}};
 
 use crate::pool::disk::{block::block_structs::RawBlock, disk_struct::Disk};
 
@@ -28,6 +28,6 @@ pub(crate) fn write_block_direct(mut disk_file: &File, block: &RawBlock) {
     let write_offset: u64 = block.block_index.unwrap() as u64 * 512;
 
     // Write the data.
-    disk_file.seek_write(&block.data, write_offset).unwrap();
+    disk_file.write_all_at(&block.data, write_offset).unwrap();
     disk_file.flush().unwrap();
 }

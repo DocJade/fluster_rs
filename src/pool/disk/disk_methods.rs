@@ -2,10 +2,7 @@
 // TODO: the names of the functions are kinda hard to keep straight, need a better naming scheme.
 
 use std::{
-    fs::{File, OpenOptions},
-    io::{Read, Seek},
-    os::windows::fs::{FileExt, OpenOptionsExt},
-    path::Path, u16,
+    fs::{File, OpenOptions}, io::{Read, Seek}, os::unix::fs::FileExt, path::Path, u16
 };
 
 use crate::pool::disk::{block::{block_structs::RawBlock, header::header_struct::{DiskHeader, HeaderFlags}}, disk_struct::{Disk, DiskError}};
@@ -190,10 +187,11 @@ fn get_disk_file(disk_number: u16) -> Result<File, DiskError> {
     // We will be assuming that there is only one floppy disk, and it is always located in
     // the A: drive.
 
+    todo!(); // Not sure how this is going to work on linux, or if disk swapping will just work.
+
     Ok(OpenOptions::new()
         .read(true)
         .write(true)
-        .share_mode(0) // Only I can have the file open.
         .open(Path::new(r"\\.\A:"))
         .unwrap())
 }
@@ -257,7 +255,7 @@ fn initialize_numbered(mut disk_file: &File, disk_number: u16) -> Result<(), Dis
     // It would suck to start using some reserved space, just to find junk in there and crash.
 
     // Wipe the header and inode blocks
-    disk_file.seek_write(&[0u8; 512 * 2], 0).unwrap();
+    disk_file.write_all_at(&[0u8; 512 * 2], 0).unwrap();
 
     // Time to write in all of the header data.
     // Construct the new header
