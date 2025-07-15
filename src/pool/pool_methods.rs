@@ -1,6 +1,7 @@
 // Interacting with the pool
 
-use crate::disk::{disk_struct::{Disk, DiskError}, pool::pool_struct::PoolInfo};
+use crate::pool::disk::disk_struct::{Disk, DiskError};
+use crate::pool::pool_struct::PoolInfo;
 
 impl PoolInfo {
     /// Sync information about the pool to disk

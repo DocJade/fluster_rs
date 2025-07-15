@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::disk::block::{block_structs::BlockError, header::{header_methods::HeaderConversionError, header_struct::DiskHeader}};
+use crate::pool::disk::block::header::{header_methods::HeaderConversionError, header_struct::DiskHeader};
 
 
 pub struct Disk {

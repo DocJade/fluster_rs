@@ -2,7 +2,7 @@
 use bitflags::bitflags;
 use thiserror::Error;
 
-use crate::disk::generic_structs::pointer_struct::DiskPointer;
+use crate::pool::disk::generic_structs::pointer_struct::DiskPointer;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub(super) struct DirectoryItem {

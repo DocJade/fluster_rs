@@ -4,7 +4,7 @@
 
 use std::cmp::min;
 
-use crate::disk::block::data::data_struct::DataBlock;
+use crate::pool::disk::block::data::data_struct::DataBlock;
 
 impl DataBlock {
     /// Write data to this block from the provided buffer.

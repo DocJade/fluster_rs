@@ -8,7 +8,7 @@ use std::{
     path::Path, u16,
 };
 
-use crate::disk::{block::{block_structs::RawBlock, header::header_struct::{DiskHeader, HeaderFlags}}, disk_struct::{Disk, DiskError}};
+use crate::pool::disk::{block::{block_structs::RawBlock, header::header_struct::{DiskHeader, HeaderFlags}}, disk_struct::{Disk, DiskError}};
 
 // !! Only numbered options should be public! !!
 

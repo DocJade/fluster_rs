@@ -2,7 +2,7 @@
 
 use rand::{random_range, rngs::ThreadRng, Rng, RngCore};
 
-use crate::disk::block::data::data_struct::DataBlock;
+use crate::pool::disk::block::data::data_struct::DataBlock;
 
 #[test]
 fn random_block() {
