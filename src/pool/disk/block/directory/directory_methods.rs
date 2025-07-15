@@ -1,14 +1,14 @@
 // Directory? Is that come kind of surgery?
 
-use crate::disk::block::block_structs::RawBlock;
-use crate::disk::block::crc::add_crc_to_block;
-use crate::disk::block::directory::directory_struct::DirectoryBlock;
-use crate::disk::block::directory::directory_struct::DirectoryBlockError;
-use crate::disk::block::directory::directory_struct::DirectoryBlockFlags;
-use crate::disk::block::directory::directory_struct::DirectoryFlags;
-use crate::disk::block::directory::directory_struct::DirectoryItem;
-use crate::disk::block::directory::directory_struct::InodeLocation;
-use crate::disk::generic_structs::pointer_struct::DiskPointer;
+use crate::pool::disk::block::block_structs::RawBlock;
+use crate::pool::disk::block::crc::add_crc_to_block;
+use crate::pool::disk::block::directory::directory_struct::DirectoryBlock;
+use crate::pool::disk::block::directory::directory_struct::DirectoryBlockError;
+use crate::pool::disk::block::directory::directory_struct::DirectoryBlockFlags;
+use crate::pool::disk::block::directory::directory_struct::DirectoryFlags;
+use crate::pool::disk::block::directory::directory_struct::DirectoryItem;
+use crate::pool::disk::block::directory::directory_struct::InodeLocation;
+use crate::pool::disk::generic_structs::pointer_struct::DiskPointer;
 
 
 // Conversions back and forth for RawBlock

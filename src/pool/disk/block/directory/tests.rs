@@ -3,9 +3,9 @@
 use rand::{self, random_bool, Rng};
 
 #[cfg(test)]
-use crate::disk::block::directory::directory_struct::DirectoryFlags;
-use crate::disk::{block::{block_structs::RawBlock, directory::directory_struct::{DirectoryBlock, DirectoryBlockFlags, DirectoryItem}}, generic_structs::pointer_struct::DiskPointer};
-use crate::disk::block::directory::directory_struct::InodeLocation;
+use crate::pool::disk::block::directory::directory_struct::DirectoryFlags;
+use crate::pool::disk::{block::{block_structs::RawBlock, directory::directory_struct::{DirectoryBlock, DirectoryBlockFlags, DirectoryItem}}, generic_structs::pointer_struct::DiskPointer};
+use crate::pool::disk::block::directory::directory_struct::InodeLocation;
 
 #[test]
 fn blank_directory_block_serialization() {
@@ -36,7 +36,7 @@ fn filled_directory_block_serialization() {
                 Ok(_) => { break },
                 Err(err) => {
                     match err {
-                        crate::disk::block::directory::directory_struct::DirectoryBlockError::NotEnoughSpace => todo!(),
+                        crate::pool::disk::block::directory::directory_struct::DirectoryBlockError::NotEnoughSpace => todo!(),
                         _ => panic!("Got an error while adding item!")
                     }
                 }
