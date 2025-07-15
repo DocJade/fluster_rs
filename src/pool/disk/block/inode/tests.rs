@@ -2,17 +2,16 @@
 
 // Is there a better way to do these imports? lol
 #[cfg(test)]
-use crate::disk::block::directory::directory_struct::InodeLocation;
-use crate::disk::block::inode::inode_struct::InodeBlockError;
+use crate::pool::disk::block::directory::directory_struct::InodeLocation;
+use crate::pool::disk::block::inode::inode_struct::InodeBlockError;
 #[cfg(test)]
-use crate::disk::block::inode::inode_struct::{Inode, InodeBlock, InodeDirectory, InodeFile, InodeFlags, InodeTimestamp};
-use crate::helpers::hex_view::hex_view;
+use crate::pool::disk::block::inode::inode_struct::{Inode, InodeBlock, InodeDirectory, InodeFile, InodeFlags, InodeTimestamp};
 #[cfg(test)]
 use rand::rngs::ThreadRng;
 #[cfg(test)]
 use rand::Rng;
 #[cfg(test)]
-use crate::disk::generic_structs::pointer_struct::DiskPointer;
+use crate::pool::disk::generic_structs::pointer_struct::DiskPointer;
 
 #[test]
 fn blank_inode_block_serialization() {
@@ -79,7 +78,6 @@ fn inode_block_fragmentation() {
     // adding a new block to fail
     loop {
         // add an element
-        println!("{}", hex_view(test_block.inodes_data.to_vec()));
         match test_block.try_add_inode(Inode::get_random()) {
             Ok(ok) => {
                 // Add this offset to our list so we can delete it later to cause fragmentation.
@@ -87,7 +85,7 @@ fn inode_block_fragmentation() {
             },
             Err(err) => {
                 match err {
-                    crate::disk::block::inode::inode_struct::InodeBlockError::NotEnoughSpace => {
+                    crate::pool::disk::block::inode::inode_struct::InodeBlockError::NotEnoughSpace => {
                         // We are out of space, so remove a random inode.
                         // pick one
                         let to_remove: usize = random.random_range(0..inode_offsets.len());
@@ -97,7 +95,7 @@ fn inode_block_fragmentation() {
                         let _ = inode_offsets.swap_remove(to_remove);
                         continue;
                     },
-                    crate::disk::block::inode::inode_struct::InodeBlockError::BlockIsFragmented => {
+                    crate::pool::disk::block::inode::inode_struct::InodeBlockError::BlockIsFragmented => {
                         // this is our desired outcome.
                         return
                     },

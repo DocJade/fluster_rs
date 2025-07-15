@@ -1,3 +1,3 @@
-mod directory_struct;
+pub(super) mod directory_struct;
 mod directory_methods;
 mod tests;

@@ -2,7 +2,7 @@
 
 use std::{fs::File, os::windows::fs::FileExt};
 
-use crate::disk::{block::{block_structs::RawBlock, crc::check_crc}, disk_struct::Disk};
+use crate::pool::disk::{block::{block_structs::RawBlock, crc::check_crc}, disk_struct::Disk};
 
 // TODO: Disallow unwrap / ensure safety.
 // TODO: Only allow reading allocated blocks.

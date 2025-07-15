@@ -273,7 +273,6 @@ fn initialize_numbered(mut disk_file: &File, disk_number: u16) -> Result<(), Dis
     let header = DiskHeader {
         flags,
         disk_number,
-        highest_known_disk: 0, // All disks have 0 in this position, except for the root which we will update.
         block_usage_map,
     };
 

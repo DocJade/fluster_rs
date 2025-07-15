@@ -2,7 +2,7 @@
 
 use std::{fs::File, io::Write, os::windows::fs::FileExt};
 
-use crate::disk::{block::block_structs::RawBlock, disk_struct::Disk};
+use crate::pool::disk::{block::block_structs::RawBlock, disk_struct::Disk};
 
 // Add onto the disk type.
 // TODO: Only allow writing to allocated blocks.

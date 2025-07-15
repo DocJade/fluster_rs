@@ -1,6 +1,6 @@
 // Tests are cool.
 
-use crate::disk::block::file_extents::file_extents_struct::{ExtentFlags, FileExtentBlockFlags, FileExtent, FileExtentBlock, FileExtentPointer};
+use crate::pool::disk::block::file_extents::file_extents_struct::{ExtentFlags, FileExtentBlockFlags, FileExtent, FileExtentBlock, FileExtentPointer};
 use rand::{self, Rng};
 use rand::rngs::ThreadRng;
 

@@ -1,6 +1,6 @@
 // Method acting, for extents.
 
-use crate::disk::block::{block_structs::RawBlock, crc::add_crc_to_block, file_extents::file_extents_struct::{ExtentFlags, FileExtentBlockFlags, FileExtent, FileExtentBlock, FileExtentBlockError, FileExtentPointer}};
+use crate::pool::disk::block::{block_structs::RawBlock, crc::add_crc_to_block, file_extents::file_extents_struct::{ExtentFlags, FileExtentBlockFlags, FileExtent, FileExtentBlock, FileExtentBlockError, FileExtentPointer}};
 
 
 // Impl the conversion from RawBlock

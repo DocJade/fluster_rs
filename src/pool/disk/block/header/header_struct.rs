@@ -6,7 +6,6 @@ use bitflags::bitflags;
 pub struct DiskHeader {
     pub flags: HeaderFlags,
     pub disk_number: u16,
-    pub highest_known_disk: u16,
     pub block_usage_map: [u8; 360], // not to be indexed directly, use a method to check.
 }
 

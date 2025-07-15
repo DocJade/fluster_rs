@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::{disk::{block::{block_structs::RawBlock, crc::{add_crc_to_block, check_crc}, header::header_struct::{DiskHeader, HeaderFlags}}, disk_struct::DiskError}, helpers::hex_view::hex_view};
+use crate::pool::{disk::{block::{block_structs::RawBlock, crc::{add_crc_to_block, check_crc}, header::header_struct::{DiskHeader, HeaderFlags}}, disk_struct::DiskError}};
 
 impl DiskHeader {
     pub fn extract_header(raw_block: &RawBlock) -> Result<DiskHeader, DiskError> {
@@ -68,13 +68,6 @@ fn extract_header(raw_block: &RawBlock) -> Result<DiskHeader, DiskError> {
             .try_into()
             .expect("Impossible")
     );
-    
-    // The highest disk we've seen
-    let highest_known_disk: u16 = u16::from_le_bytes(
-        raw_block.data[11..11 + 2]
-        .try_into()
-        .expect("Impossible")
-    );
 
     // block usage bitplane
     let block_usage_map: [u8; 360] = raw_block.data[148..148 + 360]
@@ -85,7 +78,6 @@ fn extract_header(raw_block: &RawBlock) -> Result<DiskHeader, DiskError> {
         DiskHeader {
             flags,
             disk_number,
-            highest_known_disk,
             block_usage_map,
         }
     )
@@ -102,7 +94,6 @@ fn to_disk_block(header: &DiskHeader) -> RawBlock {
     let DiskHeader {
         flags,
         disk_number,
-        highest_known_disk,
         block_usage_map,
     } = header;
 
@@ -117,9 +108,6 @@ fn to_disk_block(header: &DiskHeader) -> RawBlock {
 
     // The disk number
     buffer[9..9 + 2].copy_from_slice(&disk_number.to_le_bytes());
-
-    // The highest known disk
-    buffer[11..11 + 2].copy_from_slice(&highest_known_disk.to_le_bytes());
 
     // The block map
     buffer[148..148 + 360].copy_from_slice(block_usage_map);

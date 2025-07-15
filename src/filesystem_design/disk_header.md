@@ -15,15 +15,14 @@ The disk header lives on block 0 of every disk.
 
 Header format:
 
-| offset | length | Field                                                                                 |
-| ------ | ------ | ------------------------------------------------------------------------------------- |
-| 0      | 8      | Magic number for identifying a fluster drive.Fluster!                                 |
-| 8      | 1      | Bitflags                                                                              |
-| 9      | 2      | Disk number (u16)                                                                     |
-| 11     | 2      | Highest known disk (u16) (only disk 0 is authoritative)<br />Unset on non-root disks. |
-| 13     | 135    | Reserved                                                                              |
-| 148    | 360    | Block usage bitplane                                                                  |
-| 509    | 4      | CRC                                                                                   |
+| offset | length | Field                                                 |
+| ------ | ------ | ----------------------------------------------------- |
+| 0      | 8      | Magic number for identifying a fluster drive.Fluster! |
+| 8      | 1      | Bitflags                                              |
+| 9      | 2      | Disk number (u16)                                     |
+| -      | -      | Reserved                                              |
+| 148    | 360    | Block usage bitplane                                  |
+| 509    | 4      | CRC                                                   |
 
 Bitflags:
 

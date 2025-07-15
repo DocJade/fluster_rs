@@ -1,6 +1,6 @@
 // Inode a block, then he moved away.
 
-use crate::disk::{block::{block_structs::RawBlock, crc::add_crc_to_block, inode::inode_struct::{Inode, InodeBlock, InodeBlockError, InodeBlockFlags, InodeDirectory, InodeFile, InodeFlags, InodeReadError, InodeTimestamp}}, generic_structs::{find_space::{find_free_space, BytePingPong}, pointer_struct::DiskPointer}};
+use crate::pool::disk::{block::{block_structs::RawBlock, crc::add_crc_to_block, inode::inode_struct::{Inode, InodeBlock, InodeBlockError, InodeBlockFlags, InodeDirectory, InodeFile, InodeFlags, InodeReadError, InodeTimestamp}}, generic_structs::{find_space::{find_free_space, BytePingPong}, pointer_struct::DiskPointer}};
 
 impl From<RawBlock> for InodeBlock {
     fn from(value: RawBlock) -> Self {

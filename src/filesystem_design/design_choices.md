@@ -21,3 +21,12 @@ Ease of use.
 
 # A lot of stuff seems wasteful cpu wise...
 Think of it this way, 99% of the time we will be waiting for data from disk, so it evens out!
+
+# Why is an entire disk dedicated to information about the pool?
+
+Chances are, if you are using this filesystem, you are storing many files across many floppies.
+
+Finding a file is a slow and tedious process. We have to start from the first disk and search, possibly swapping between many disks before finding the file we are seeking. Most of this overhead comes from looking up the location of the file inode, not loading the file itself.
+
+Dedicating an entire disk to pool information lets us keep a cache of file locations, skipping the entire search process.
+This will result in fewer disk swaps, and a massive speedup in search time.
