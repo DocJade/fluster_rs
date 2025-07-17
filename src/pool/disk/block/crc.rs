@@ -3,7 +3,7 @@
 // Check whether the CRC matches the block or not
 // returns true if crc matches the block correctly.
 pub fn check_crc(block: [u8; 512]) -> bool {
-    let existing: [u8; 4] = block[508..512].try_into().unwrap();
+    let existing: [u8; 4] = block[508..512].try_into().expect("4 = 4");
     let computed: [u8; 4] = compute_crc(&block[0..508]);
     existing == computed
 }

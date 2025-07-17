@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::pool::disk::block::header::{header_methods::HeaderConversionError, header_struct::DiskHeader};
+use crate::pool::disk::block::{block_structs::BlockError, header::{header_methods::HeaderConversionError, header_struct::DiskHeader}};
 
 
 pub struct Disk {
@@ -19,11 +19,15 @@ pub enum DiskError {
     Uninitialized,
     #[error("Disk is not blank")]
     NotBlank,
+    #[error("Wipe failed, disk is in an unknown state.")]
+    WipeFailure,
     // we'll put this back in later if we need it.
     // #[error("There isn't a disk inserted")]
     // NoDiskInserted,
     #[error("This is not the disk we want")]
     WrongDisk,
     #[error(transparent)]
-    BadHeader(#[from] HeaderConversionError)
+    BadHeader(#[from] HeaderConversionError),
+    #[error(transparent)]
+    BlockError(#[from] BlockError),
 }

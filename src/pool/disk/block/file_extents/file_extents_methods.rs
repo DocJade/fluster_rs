@@ -21,8 +21,9 @@ impl FileExtentBlock {
     pub(super) fn from_bytes(block: &RawBlock) -> Self {
         from_bytes(block)
     }
-    pub(super) fn to_bytes(&self) -> RawBlock {
-        to_bytes(self)
+    /// The destination block must be known when calling.
+    pub(super) fn to_bytes(&self, block_number: u16) -> RawBlock {
+        to_bytes(self, block_number)
     }
     /// Attempts to add a file extent to this block
     /// 
@@ -98,7 +99,7 @@ fn from_bytes(block: &RawBlock) -> FileExtentBlock {
     }
 }
 
-fn to_bytes(extent_block: &FileExtentBlock) -> RawBlock {
+fn to_bytes(extent_block: &FileExtentBlock, block_number: u16) -> RawBlock {
 
     let FileExtentBlock {
         flags,
@@ -130,7 +131,7 @@ fn to_bytes(extent_block: &FileExtentBlock) -> RawBlock {
     add_crc_to_block(&mut buffer);
 
     let finished_block: RawBlock = RawBlock {
-        block_index: None,
+        block_index: block_number,
         data: buffer
     };
     
@@ -234,14 +235,14 @@ impl FileExtent {
 
         if !self.flags.contains(ExtentFlags::OnThisDisk) {
             // Disk number
-            vec.extend_from_slice(&self.disk_number.unwrap().to_le_bytes());
+            vec.extend_from_slice(&self.disk_number.expect("Disk numbers are present on non-local extents.").to_le_bytes());
         }
         
         if !self.flags.contains(ExtentFlags::OnDenseDisk) {
             // Start block
-            vec.extend_from_slice(&self.start_block.unwrap().to_le_bytes());
+            vec.extend_from_slice(&self.start_block.expect("Start blocks are on all non-dense file extents.").to_le_bytes());
             // Length
-            vec.push(self.length.unwrap());
+            vec.push(self.length.expect("If we have a start block, we should also have a length."));
         }
 
         vec

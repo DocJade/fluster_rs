@@ -1,2 +1,2 @@
-mod pool_header_methods;
-mod pool_header_struct;
+pub mod pool_header_methods;
+pub mod pool_header_struct;

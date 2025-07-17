@@ -1,4 +1,6 @@
 // Directory tests
+// Unwrapping is okay here, since we want unexpected outcomes to fail tests.
+#![allow(clippy::unwrap_used)]
 
 use rand::{self, random_bool, Rng};
 
@@ -10,7 +12,7 @@ use crate::pool::disk::block::directory::directory_struct::InodeLocation;
 #[test]
 fn blank_directory_block_serialization() {
     let test_block: DirectoryBlock = DirectoryBlock::new();
-    let serialized = test_block.to_bytes();
+    let serialized = test_block.to_bytes(69);
     let deserialized = DirectoryBlock::from_bytes(&serialized);
     assert_eq!(test_block, deserialized)
 }
@@ -44,7 +46,7 @@ fn filled_directory_block_serialization() {
         }
 
         // Check serialization
-        let serialized = test_block.to_bytes();
+        let serialized = test_block.to_bytes(69);
         let deserialized = DirectoryBlock::from_bytes(&serialized);
         assert_eq!(test_block, deserialized)
     }

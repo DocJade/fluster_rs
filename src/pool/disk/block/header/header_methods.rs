@@ -15,6 +15,8 @@ impl DiskHeader {
 pub enum HeaderConversionError {
     #[error("This block is not a header.")]
     NotAHeaderBlock,
+    #[error("This is a pool header, not a normal disk header.")]
+    PoolHeader,
 }
 
 
@@ -38,7 +40,7 @@ fn extract_header(raw_block: &RawBlock) -> Result<DiskHeader, DiskError> {
 
     // Make sure this is actually a header.
     // Check magic and block number.
-    if raw_block.data[0..8] != *"Fluster!".as_bytes() || raw_block.block_index != Some(0){
+    if raw_block.data[0..8] != *"Fluster!".as_bytes() || raw_block.block_index != 0 {
         // Bad input.
 
         // Either the disk has bad data on it, or is probably blank.
@@ -68,6 +70,12 @@ fn extract_header(raw_block: &RawBlock) -> Result<DiskHeader, DiskError> {
             .try_into()
             .expect("Impossible")
     );
+
+    // If this is disk zero, or the reserved pool header bit is set (bit 7),
+    // that means we are currently trying to deserialize the POOL header. Abort.
+    if disk_number == 0 || flags.bits() & 0b1000000 != 0 {
+        return Err(HeaderConversionError::PoolHeader.into());
+    }
 
     // block usage bitplane
     let block_usage_map: [u8; 360] = raw_block.data[148..148 + 360]
@@ -118,16 +126,11 @@ fn to_disk_block(header: &DiskHeader) -> RawBlock {
     assert!(check_crc(buffer));
 
     // Make the RawBlock
+    // Disk headers are always block 0.
     let finished_block: RawBlock = RawBlock {
-        block_index: Some(0),
+        block_index: 0,
         data: buffer
     };
-
-    // Make sure the header actually de and re-serializes properly by extracting the header again
-    let reconstructed_header = extract_header(&finished_block).unwrap();
-
-    // The header must never fail to serialize.
-    assert_eq!(reconstructed_header, *header, "Header serialization issues.");
 
     // All done!
     finished_block

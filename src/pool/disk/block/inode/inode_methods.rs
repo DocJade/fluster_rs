@@ -20,8 +20,8 @@ impl BytePingPong for Inode {
 }
 
 impl InodeBlock {
-    pub(super) fn to_bytes(&self) -> RawBlock {
-        to_raw_bytes(self)
+    pub(super) fn to_bytes(&self, block_number: u16) -> RawBlock {
+        to_raw_bytes(self, block_number)
     }
     pub(super) fn from_bytes(block: &RawBlock) -> Self {
         from_raw_block(&block)
@@ -206,7 +206,7 @@ fn from_raw_block(block: &RawBlock) -> InodeBlock {
     }
 }
 
-fn to_raw_bytes(block: &InodeBlock) -> RawBlock{
+fn to_raw_bytes(block: &InodeBlock, block_number: u16) -> RawBlock{
     let InodeBlock {
         flags,
         bytes_free,
@@ -233,7 +233,7 @@ fn to_raw_bytes(block: &InodeBlock) -> RawBlock{
 
     // Make the block
     let final_block: RawBlock = RawBlock {
-        block_index: None,
+        block_index: block_number,
         data: buffer,
     };
 
@@ -256,16 +256,15 @@ impl Inode {
 
         // Inode data
         // There should never be both a file and a directory in an inode.
-        if self.directory.is_some() {
-            vec.extend(self.directory.as_ref().unwrap().to_bytes());
+        if let Some(directory) = self.directory {
+            vec.extend(directory.to_bytes());
         }
 
-        if self.file.is_some() {
-            vec.extend(self.file.as_ref().unwrap().to_bytes());
+        if let Some(file) = self.file {
+            vec.extend(file.to_bytes());
         }
 
         // Timestamps
-
         // Created
         vec.extend(self.created.to_bytes());
         

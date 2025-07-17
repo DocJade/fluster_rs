@@ -26,28 +26,20 @@ Header format:
 
 Bitflags:
 
-| bit | flag       |
-| --- | ---------- |
-| 0   | Dense Disk |
-| 1   | Reserved   |
-| 2   | Reserved   |
-| 3   | Reserved   |
-| 4   | Reserved   |
-| 5   | Reserved   |
-| 6   | Reserved   |
-| 7   | Reserved   |
-| 8   | Reserved   |
+| bit | flag                                          |
+| --- | --------------------------------------------- |
+| 0   | Dense Disk                                    |
+| 1   | Reserved                                      |
+| 2   | Reserved                                      |
+| 3   | Reserved                                      |
+| 4   | Reserved                                      |
+| 5   | Reserved                                      |
+| 6   | Reserved                                      |
+| 7   | Reserved                                      |
+| 8   | Reserved for Pool headers. Must never be set. |
 
 8 bytes:
 1 byte: bitflags
-0: This is a dense disk
-1: Reserved for future use
-2: Reserved for future use
-3: Reserved for future use
-4: Reserved for future use
-5: Reserved for future use
-6: Reserved for future use
-7: Reserved for future use
 2 bytes: Disk number
 138 bytes: Reserved
 360 bytes: Block usage bitplane

@@ -10,7 +10,20 @@ crc32c = "0.6.8"
 ctrlc = "3.4.7"
 # Multithreading on floppy would be so silly. Serial only.
 easy_fuser = { version = "0.4.1", features = ["serial"] }
+env_logger = "0.11.8"
 lazy_static = "1.5.0"
+log = "0.4.27"
 rand = "0.9.1"
 rprompt = "2.2.0"
 thiserror = "2.0.12"
+
+# Floppy builds should be small enough to fit on a single floppy.
+# Because thats funny.
+[profile.floppy]
+inherits = "release"
+strip = true  # Automatically strip symbols from the binary.
+opt-level = "z"  # Optimize for size.
+lto = true
+codegen-units = 1
+# panic = "abort" # We will NOT use abort. Abort is gross.
+# Todo: automatically compress with upx (Testing showed a 24% ratio!)

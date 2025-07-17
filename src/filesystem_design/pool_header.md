@@ -11,6 +11,20 @@ This raises the requirement to having a minimum of 2 disks, but the overhead sho
 | 9      | 2      | Highest known disk number.                                                                     |
 | 11     | 2      | Disk with the next free block in the pool.<br />Set to u16::MAX if the final disk has no room. |
 | 13     | 2      | Number of blocks free across all disks in the pool.                                            |
-| -      | 509    | Reserved                                                                                       |
+| -      | -      | Reserved                                                                                       |
 |        |        |                                                                                                |
 | 509    | 4      | Block CRC                                                                                      |
+
+Bitflags:
+
+| bit | flag                                      |
+| --- | ----------------------------------------- |
+| 0   | Reserved                                  |
+| 1   | Reserved                                  |
+| 2   | Reserved                                  |
+| 3   | Reserved                                  |
+| 4   | Reserved                                  |
+| 5   | Reserved                                  |
+| 6   | Reserved                                  |
+| 7   | Reserved                                  |
+| 8   | Marks this as a pool header. Must be set. |

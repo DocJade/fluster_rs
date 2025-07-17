@@ -1,8 +1,11 @@
 // inode the tests.
+// Unwrapping is okay here, since we want unexpected outcomes to fail tests.
+#![allow(clippy::unwrap_used)]
 
 // Is there a better way to do these imports? lol
 #[cfg(test)]
 use crate::pool::disk::block::directory::directory_struct::InodeLocation;
+#[cfg(test)]
 use crate::pool::disk::block::inode::inode_struct::InodeBlockError;
 #[cfg(test)]
 use crate::pool::disk::block::inode::inode_struct::{Inode, InodeBlock, InodeDirectory, InodeFile, InodeFlags, InodeTimestamp};
@@ -16,7 +19,7 @@ use crate::pool::disk::generic_structs::pointer_struct::DiskPointer;
 #[test]
 fn blank_inode_block_serialization() {
     let test_block: InodeBlock = InodeBlock::new();
-    let serialized = test_block.to_bytes();
+    let serialized = test_block.to_bytes(69);
     let deserialized = InodeBlock::from_bytes(&serialized);
     assert_eq!(test_block, deserialized)
 }
@@ -62,7 +65,7 @@ fn filled_inode_block_serialization() {
         }
 
         // Check serialization
-        let serialized = test_block.to_bytes();
+        let serialized = test_block.to_bytes(69);
         let deserialized = InodeBlock::from_bytes(&serialized);
         assert_eq!(test_block, deserialized)
     }

@@ -11,16 +11,10 @@ use crate::pool::disk::block::directory::directory_struct::InodeLocation;
 use crate::pool::disk::generic_structs::pointer_struct::DiskPointer;
 
 
-// Conversions back and forth for RawBlock
+// We can convert from a raw block to a directory bock, but not the other way around.
 impl From<RawBlock> for DirectoryBlock {
     fn from(block: RawBlock) -> Self {
         Self::from_bytes(&block)
-    }
-}
-
-impl From<DirectoryBlock> for RawBlock {
-    fn from(block: DirectoryBlock) -> Self {
-        DirectoryBlock::to_bytes(&block)
     }
 }
 
@@ -29,8 +23,9 @@ impl From<DirectoryBlock> for RawBlock {
 
 
 impl DirectoryBlock {
-    pub(super) fn to_bytes(&self) -> RawBlock {
-        directory_block_to_bytes(self)
+    /// Block number must be known at creation time for safe writing.
+    pub(super) fn to_bytes(&self, block_number: u16) -> RawBlock {
+        directory_block_to_bytes(self, block_number)
     }
     pub(super) fn from_bytes(block: &RawBlock) -> Self {
         directory_block_from_bytes(block)
@@ -131,7 +126,7 @@ fn new_directory_block() -> DirectoryBlock {
     }
 }
 
-fn directory_block_to_bytes(block: &DirectoryBlock) -> RawBlock {
+fn directory_block_to_bytes(block: &DirectoryBlock, block_number: u16) -> RawBlock {
     // Deconstruct the bock
     let DirectoryBlock {
         flags,
@@ -161,7 +156,7 @@ fn directory_block_to_bytes(block: &DirectoryBlock) -> RawBlock {
 
     // All done!
     RawBlock {
-        block_index: None,
+        block_index: block_number,
         data: buffer
     }
 

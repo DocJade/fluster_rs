@@ -2,10 +2,12 @@
 // TODO: the names of the functions are kinda hard to keep straight, need a better naming scheme.
 
 use std::{
-    fs::{File, OpenOptions}, io::{Read, Seek}, os::unix::fs::FileExt, path::Path, u16
+    fs::{File, OpenOptions}, io::{Read, Seek}, os::unix::fs::FileExt, path::Path, process::exit, u16
 };
 
-use crate::pool::disk::{block::{block_structs::RawBlock, header::header_struct::{DiskHeader, HeaderFlags}}, disk_struct::{Disk, DiskError}};
+use log::error;
+
+use crate::{filesystem::filesystem_struct::{FLOPPY_PATH, USE_VIRTUAL_DISKS}, pool::disk::{block::{block_structs::{BlockError, RawBlock}, data::data_struct::DataBlock, header::header_struct::{DiskHeader, HeaderFlags}}, disk_struct::{Disk, DiskError}, io::write::write_block_direct}};
 
 // !! Only numbered options should be public! !!
 
@@ -17,22 +19,27 @@ impl Disk {
     // Open the disk currently connected to the system
     // Ensures the disk opened matches the provided ID.
     fn open_numbered(disk_number: u16) -> Result<Disk, DiskError> {
-        open_numbered(disk_number)
+        // Opening numbered disks does not ignore the header, as we need to check it for the disk number.
+        open_numbered(disk_number, false)
     }
 
-    // Used to initlize the data on a disk, not public.
-    fn initialize_numbered(disk_file: &File, disk_number: u16) -> Result<(), DiskError> {
-        initialize_numbered(disk_file, disk_number)
+    // Used to initlize the data on a disk, ==not public==.
+    fn initialize_numbered(disk: &mut Disk, disk_number: u16) -> Result<(), DiskError> {
+        initialize_numbered(disk, disk_number)
     }
 
     //
     //  Public functions
     //
 
-    /// Opens the specified disk.
-    /// Does not check if correct disk is in the drive.
-    pub fn open(disk_number: u16) -> Result<Disk, DiskError> {
-        open_numbered(disk_number)
+    /// Opens the current disk in the drive directly.
+    /// The returned disk will have a spoofed header of all <T>::MAX or other equivalents.
+    /// Does not check disk number, we assume the correct disk is in the drive. It is the callers responsibility to check.
+    /// Does not check headers.
+    /// Does not check CRC.
+    pub fn unchecked_open(disk_number: u16) -> Result<Disk, DiskError> {
+        // We must ignore the header, otherwise we would be checking for a header, which can fail, or CRC could fail.
+        open_numbered(disk_number, true)
     }
 
     /// Waits for user to insert the specified
@@ -42,19 +49,28 @@ impl Disk {
     }
 
     /// Create a new disk. Destroys all data.
-    /// Will not wipe disks that contain the magic.
-    pub fn create(disk_number: u16) -> Result<(), DiskError> {
+    /// Returns the new disk.
+    /// Will not wipe disks that contain a header.
+    pub fn create(disk_number: u16) -> Result<Disk, DiskError> {
         create(disk_number)
     }
 
     /// Destroys ALL data on a disk.
-    pub fn full_wipe(self) {
-        full_wipe(self)
-    }
-
-    /// Destroys the header.
-    pub fn wipe(self) {
+    /// Obviously, this cannot be undone.
+    pub fn wipe(&self) -> Result<(), DiskError> {
         wipe(self)
+    }
+}
+
+
+// Just for this file, we ocasionally need to create a fake header.
+impl DiskHeader {
+    fn spoof() -> Self {
+        Self {
+            flags: HeaderFlags::from_bits_retain(0b11111111),
+            disk_number: u16::MAX,
+            block_usage_map: [1u8; 360],
+        }
     }
 }
 
@@ -67,12 +83,13 @@ impl Disk {
 /// Prompt user to insert the disk we want.
 /// If the disk is already in the drive, no prompt will happen.
 /// Will error out for non-wrong disk related issues.
+/// This function does not disable the CRC check, you must use open() if you are ignoring CRC.
 fn prompt_for_disk(disk_number: u16) -> Result<Disk, DiskError> {
     let mut is_user_an_idiot: bool = false; // Did the user put in the wrong disk when asked?
     let mut disk: Result<Disk, DiskError>;
     loop {
         // Try opening the current disk
-        disk = open_numbered(disk_number);
+        disk = open_numbered(disk_number, false);
         // Is this the correct disk?
         if disk.is_ok() {
             // yes it is
@@ -94,46 +111,28 @@ fn prompt_for_disk(disk_number: u16) -> Result<Disk, DiskError> {
 }
 
 /// Initializes a disk by writing header data.
+/// Returns the newly created disk.
 ///
 /// This will only work on a disk that is blank / header-less.
 /// This will create a disk of any disk number, it is up to the caller to ensure that
 /// duplicate disks are not created, and to track the creation of this new disk.
-fn create(disk_number: u16) -> Result<(), DiskError> {
+fn create(disk_number: u16) -> Result<Disk, DiskError> {
     // Get the current disk
-    let new_disk = get_disk_file(0).unwrap();
+    let new_disk_file = get_disk_file(0)?;
+
+    // Spoof the header, since we're about to give it a new one.
+    let mut disk: Disk = Disk {
+        number: disk_number,
+        header: DiskHeader::spoof(),
+        disk_file: new_disk_file,
+    };
     
     // Now give it some head    er
-    initialize_numbered(&new_disk, disk_number)
+    // This function checks if the disk is blank for us.
+    initialize_numbered(&mut disk, disk_number)?;
 
     // done
-}
-
-/// Wipes a disk, destroying all data contained on it.
-fn full_wipe(disk: Disk) {
-    // bye bye
-    for i in 0..2880 {
-        disk.write_block(
-            RawBlock {
-                block_index: Some(i),
-                data: [0u8; 512]
-            }
-        );
-    }
-    drop(disk); // gone.
-}
-
-/// Wipe just the header.
-fn wipe(disk: Disk) {
-    // bye bye
-    for i in 0..2 {
-        disk.write_block(
-            RawBlock {
-                block_index: Some(i),
-                data: [0u8; 512]
-            }
-        );
-    }
-    drop(disk); // gone.
+    Ok(disk)
 }
 
 
@@ -148,11 +147,11 @@ fn get_disk_file(disk_number: u16) -> Result<File, DiskError> {
 
     // TODO: Prevent blocking (Return NoDiskInserted if file does not load in under 1 second.)
 
-    // If we are running with debug enabled, we are going to use a temp folder instead of the actual disk to speed up
+    // If we are running with virtual disks enabled, we are going to use a temp folder instead of the actual disk to speed up
     // development, waiting for disk seeks is slow and loud lol.
 
-    if cfg!(debug_assertions) {
-        println!("Debug mode on, opening a virtual disk.");
+    if *USE_VIRTUAL_DISKS.lock().expect("Fluster is single threaded.") {
+        println!("Attempting to access virtual disk {disk_number}...");
         // Get the tempfile.
         // These files do not delete themselves.
 
@@ -162,7 +161,7 @@ fn get_disk_file(disk_number: u16) -> Result<File, DiskError> {
             .write(true)
             .create(true)
             .truncate(false)
-            .open("./temp_disks/disk0.fsr").unwrap();
+            .open("./temp_disks/disk0.fsr")?;
 
         // If the tempfile does not exist, that means `create` was never called, which is an issue.
         // This should never be allowed, so an unwrap is okay in this case.
@@ -170,34 +169,31 @@ fn get_disk_file(disk_number: u16) -> Result<File, DiskError> {
         let temp_disk_file = OpenOptions::new()
             .read(true)
             .write(true)
-            .create(false)
+            .create(false) // We will panic if the disk does not exist.
             .truncate(false)
-            .open(format!("./temp_disks/disk{}.fsr", disk_number)).unwrap();
+            .open(format!("./temp_disks/disk{}.fsr", disk_number))?;
+
 
         // Make sure the file is one floppy big, should have no effect on pre-existing files, since
         // they will already be this size.
-        temp_disk_file.set_len(512 * 2880).unwrap(); 
+        temp_disk_file.set_len(512 * 2880)?; 
 
         return Ok(temp_disk_file);
     };
 
-    // ==============================
-    // == !!! POSSIBLE DANGER !!! ==
-    // ==============================
-    // We will be assuming that there is only one floppy disk, and it is always located in
-    // the A: drive.
+    // Get the global path to the floppy disk drive
+    let disk_path = FLOPPY_PATH.lock().expect("Fluster is single threaded.").clone();
 
-    todo!(); // Not sure how this is going to work on linux, or if disk swapping will just work.
-
-    Ok(OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(Path::new(r"\\.\A:"))
-        .unwrap())
+    // Open the disk, or return an error from it
+    match OpenOptions::new().read(true).write(true).open(disk_path) {
+        Ok(ok) => Ok(ok),
+        // Convert that into a BlockError, since this is an IO operation... Kinda?
+        Err(error) => Err(BlockError::from(error).into()),
+    }
 }
 
 /// Look for the magic "Fluster!" string.
-fn check_for_magic(block_bytes: &[u8; 512]) -> bool {
+pub(crate) fn check_for_magic(block_bytes: &[u8]) -> bool {
     // is the "Fluster!" magic present?
     block_bytes[0..8] == *"Fluster!".as_bytes()
 }
@@ -208,18 +204,30 @@ fn read_header(disk_file: &File) -> Result<DiskHeader, DiskError> {
 
     // We need to read a block before we have an actual disk, so we need
     // to call this function directly as a workaround.
-    let header_block = super::io::read::read_block_direct(disk_file, 0);
+    // We do not ignore the CRC here, because a corrupt CRC is a corrupt header.
+    let header_block = super::io::read::read_block_direct(disk_file, 0, false)?;
 
     DiskHeader::extract_header(&header_block)
 }
 
 /// Abstraction for opening disks to allow easier debugging disks
-fn open_numbered(disk_number: u16) -> Result<Disk, DiskError> {
+/// The resulting header can be completely ignored to just get a raw file from the drive with no checks.
+fn open_numbered(disk_number: u16, ignore_header: bool) -> Result<Disk, DiskError> {
     // Get path to the disk
     let disk_file = get_disk_file(disk_number)?;
 
-    // get the header
-    let header = read_header(&disk_file)?;
+    // Get the header
+    // If we are ignoring the header, we will create a blank one.
+    // It is the callers responsibility to ignore this header. The data will obviously be invalid.
+
+    let header: DiskHeader = if ignore_header {
+        // We will make our own header with spoofed data
+        // Set everything to max values, or fill with 1's
+        DiskHeader::spoof()
+    } else {
+        // Get the header normally
+        read_header(&disk_file)?
+    };
 
     // Assemble the disk!
     Ok(Disk {
@@ -229,33 +237,27 @@ fn open_numbered(disk_number: u16) -> Result<Disk, DiskError> {
     })
 }
 
-/// Initialize a disk for usage
+/// Initialize a normal disk for usage. (NOT DATA, NOT POOL)
+/// Expects a disk without a header.
+/// Will wipe the rest of the disk,
 ///
-/// Will not open uninitialized disks.
+/// Errors if provided with a disk that has a header.
 // TODO: Somehow prevent duplicate disk numbers?
-fn initialize_numbered(mut disk_file: &File, disk_number: u16) -> Result<(), DiskError> {
+fn initialize_numbered(disk: &mut Disk, disk_number: u16) -> Result<(), DiskError> {
     // A new, fresh disk!
 
-    // Read in first the block
-    let mut header_block: [u8; 512] = [0u8; 512];
-    disk_file.seek(std::io::SeekFrom::Start(0)).unwrap();
-    disk_file.read_exact(&mut header_block).unwrap();
+    // Read in the first block of the disk and ensue its empty.
+    // CRC is disabled, since we only care if the block is blank.
+    let block = disk.read_block(0, true)?;
 
-    // Sanity check, make sure the disk isn't already initialized, we dont want to
-    // lose data.
-
-    if check_for_magic(&header_block) {
-        // We can't re-initialize a disk with data on it.
+    // Check if blank
+    if !block.data.iter().all(|byte| *byte == 0) {
+        // Disk was not blank.
         return Err(DiskError::NotBlank);
     }
 
-    // Just in case the disk isn't totally blank, we need to wipe any blocks that aren't
-    // available for allocation (ie, the header block, and the inode block).
-    // Yes we are about to write over all of that data anyways, but better safe than sorry.
-    // It would suck to start using some reserved space, just to find junk in there and crash.
-
-    // Wipe the header and inode blocks
-    disk_file.write_all_at(&[0u8; 512 * 2], 0).unwrap();
+    // Wipe the entire disk
+    disk.wipe()?;
 
     // Time to write in all of the header data.
     // Construct the new header
@@ -278,13 +280,40 @@ fn initialize_numbered(mut disk_file: &File, disk_number: u16) -> Result<(), Dis
     let header_block = &header.to_disk_block();
     
     // Use the disk interface to write it safely
-    super::io::write::write_block_direct(disk_file, header_block);
+    disk.write_block(header_block);
 
     // All done!
     Ok(())
 }
 
-// Wipes the disk
-fn wipe_numbered(disk_file: &File, disk_number: u16) -> Result<(), DiskError> {
-    todo!()
+
+/// Wipes a disk, destroying all data contained on it.
+fn wipe(disk: &Disk) -> Result<(), DiskError> {
+    // bye bye
+    for i in 0..2880 {
+        let result = disk.write_block(
+            &RawBlock {
+                block_index: i,
+                data: [0u8; 512]
+            }
+        );
+        // Make sure the block was wiped correctly
+        if let Err(_) = result {
+            // Writing failed.
+            return Err(DiskError::WipeFailure)
+        }
+    }
+    drop(disk); // gone.
+    Ok(())
+}
+
+//
+// Error type conversion
+//
+
+impl From<std::io::Error> for DiskError {
+    fn from(value: std::io::Error) -> Self {
+        // Just cast it to a block error lol
+        BlockError::from(value).into()
+    }
 }

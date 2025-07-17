@@ -1,16 +1,11 @@
 use std::{fs::File, path::{Path, PathBuf}, process::exit, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}};
 
-use fluster_fs::filesystem::filesystem_struct::FlusterFS;
+use fluster_fs::filesystem::filesystem_struct::{FilesystemOptions, FlusterFS};
 use clap::Parser;
-use lazy_static::lazy_static;
 
-// Global varibles
-// We need to access the path quite deep down into the disk functions, passing it all the way down there would be silly.
-// Same with the virtual disk flag.
-lazy_static! {
-    static ref USE_VIRTUAL_DISKS:  Mutex<bool> = Mutex::new(false);
-    static ref FLOPPY_PATH: Mutex<PathBuf> = Mutex::new(PathBuf::new());
-}
+// Logging
+use env_logger::Env;
+
 
 #[derive(Parser)]
 struct Cli {
@@ -22,18 +17,15 @@ struct Cli {
     mount_point: String,
     /// Run with virtual floppy disks for testing.
     #[arg(long)]
-    use_virtual_disks: Option<bool>
+    use_virtual_disks: bool
 }
 
 fn main() {
+    // Start the logger
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+
     // Get the block device that the user specifies is their floppy drive
     let cli = Cli::parse();
-
-    // set the floppy disk path
-    *FLOPPY_PATH.lock().expect("Fluster! Is single threaded.") = PathBuf::from(cli.block_device_path);
-
-    // Set the virtual disk flag
-    *USE_VIRTUAL_DISKS.lock().expect("Fluster! Is single threaded.") = cli.use_virtual_disks.unwrap_or(false);
 
     // get the mount point
     let mount_point = PathBuf::from(cli.mount_point);
@@ -71,8 +63,12 @@ fn main() {
     // Check if the mount point is valid
     std::fs::create_dir_all(&mount_point).unwrap();
 
-    let filesystem: FlusterFS = FlusterFS::new();
+    // Assemble the options
+    let options: FilesystemOptions = FilesystemOptions::new(cli.use_virtual_disks, cli.block_device_path.into());
+
+    let filesystem: FlusterFS = FlusterFS::new(&options);
 
     // Mount it
+    // TODO: Extract this out so tests can be ran against a mounted file system
     easy_fuser::mount(filesystem, &mount_point, &[]).unwrap();
 }

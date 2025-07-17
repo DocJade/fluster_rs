@@ -1,3 +1,3 @@
-mod pool_disk_methods;
-mod pool_disk_struct;
-mod block;
+pub mod pool_disk_methods;
+pub mod pool_disk_struct;
+pub mod block;
