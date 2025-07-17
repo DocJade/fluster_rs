@@ -1,4 +1,4 @@
-mod header_struct;
+pub mod header_struct;
 mod header_methods;
 #[cfg(test)]
 mod tests;

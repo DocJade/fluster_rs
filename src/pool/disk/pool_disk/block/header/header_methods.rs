@@ -3,12 +3,15 @@
 // Imports
 use log::{info, warn};
 
-use super::pool_header_struct::PoolHeader;
-use super::pool_header_struct::PoolHeaderError;
+use crate::filesystem::filesystem_struct::USE_VIRTUAL_DISKS;
+use crate::pool::disk::generic::block::block_structs::RawBlock;
+
+use super::header_struct::PoolDiskHeader;
+use super::header_struct::PoolHeaderError;
 
 // Implementations
 
-impl PoolHeader {
+impl PoolDiskHeader {
     /// Reterive the header from the pool disk
     pub fn read() -> Result<Self, PoolHeaderError> {
         read_pool_header_from_disk()
@@ -18,12 +21,12 @@ impl PoolHeader {
         pool_header_to_raw_block(self)
     }
     /// Try and convert a raw block into a pool header
-    pub fn from_block(block: &RawBlock) -> Result<PoolHeader, PoolHeaderError> {
+    pub fn from_block(block: &RawBlock) -> Result<PoolDiskHeader, PoolHeaderError> {
         pool_header_from_raw_block(block)
     }
 }
 
-fn read_pool_header_from_disk() -> Result<PoolHeader, PoolHeaderError> {
+fn read_pool_header_from_disk() -> Result<PoolDiskHeader, PoolHeaderError> {
     // Get the header block from the pool disk (disk 0)
     // If the header is missing, and there is no fluster magic, ask if we are creating a new pool.
 
@@ -75,7 +78,7 @@ fn read_pool_header_from_disk() -> Result<PoolHeader, PoolHeaderError> {
         
         // Get the header from that block
         // I'm in nesting hell
-        let header: PoolHeader = match PoolHeader::from_block(&block) {
+        let header: PoolDiskHeader = match PoolDiskHeader::from_block(&block) {
             Ok(ok) => {
                 // That's the header we want! All done.
                 return Ok(ok)
@@ -117,7 +120,7 @@ fn read_pool_header_from_disk() -> Result<PoolHeader, PoolHeaderError> {
 
 /// Ask the user if they want to create a new pool with the currently inserted disk.
 /// If so, we blank out the disk
-fn prompt_for_new_pool(disk: Disk) -> Result<Option<PoolHeader>, DiskError> {
+fn prompt_for_new_pool(disk: Disk) -> Result<Option<PoolDiskHeader>, DiskError> {
 
     // if we are running with virtual disks, we skip the prompt.
     if USE_VIRTUAL_DISKS.lock().expect("Fluster is single threaded.").is_some() {
@@ -145,7 +148,7 @@ fn prompt_for_new_pool(disk: Disk) -> Result<Option<PoolHeader>, DiskError> {
     todo!()
 }
 
-fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolHeader, PoolHeaderError> {
+fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolDiskHeader, PoolHeaderError> {
     // As usual, check for the magic
     if !check_for_magic(&block.data) {
         // There is no magic, thus this cannot be a header
@@ -201,7 +204,7 @@ fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolHeader, PoolHeader
     );
 
     Ok(
-        PoolHeader {
+        PoolDiskHeader {
             flags,
             highest_known_disk,
             disk_with_next_free_block,
@@ -210,11 +213,11 @@ fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolHeader, PoolHeader
     )
 }
 
-fn pool_header_to_raw_block(header: &PoolHeader) -> RawBlock {
+fn pool_header_to_raw_block(header: &PoolDiskHeader) -> RawBlock {
 
     // Deconstruct / discombobulate
     #[deny(unused_variables)] // You need to write ALL of them.
-    let PoolHeader {
+    let PoolDiskHeader {
         flags,
         highest_known_disk,
         disk_with_next_free_block,
@@ -251,7 +254,7 @@ fn pool_header_to_raw_block(header: &PoolHeader) -> RawBlock {
     }
 }
 
-fn create_new_pool_disk(disk: Disk) -> Result<PoolHeader, DiskError> {
+fn create_new_pool_disk(disk: Disk) -> Result<PoolDiskHeader, DiskError> {
     // Time for a brand new pool!
     // We will create a brand new header, and write that header to the disk.
     let new_header = new_pool_header();
@@ -286,7 +289,7 @@ fn check_for_external_error(error: &DiskError) -> Result<(), PoolHeaderError> {
 }
 
 // Brand new pool header
-fn new_pool_header() -> PoolHeader {
+fn new_pool_header() -> PoolDiskHeader {
     // Default pool header
 
     // Flags
@@ -303,7 +306,7 @@ fn new_pool_header() -> PoolHeader {
     // How many pool blocks are free? None! We only have the root disk!
     let pool_blocks_free: u16 = 0;
 
-    PoolHeader {
+    PoolDiskHeader {
         flags,
         highest_known_disk,
         disk_with_next_free_block,

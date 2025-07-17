@@ -8,7 +8,7 @@ use thiserror::Error;
 
 /// The header of the pool disk
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct PoolHeader {
+pub struct PoolDiskHeader {
     /// Flags about the pool.
     pub(super) flags: PoolHeaderFlags,
     /// The highest disk number that we have created

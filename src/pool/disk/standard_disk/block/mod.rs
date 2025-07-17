@@ -1,4 +1,4 @@
 mod directory;
 mod file_extents;
-mod header;
+pub mod header;
 mod inode;

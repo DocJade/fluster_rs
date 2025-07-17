@@ -5,7 +5,7 @@ use bitflags::bitflags;
 
 /// The header of a disk
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct DiskHeader {
+pub struct StandardDiskHeader {
     pub flags: HeaderFlags,
     pub disk_number: u16,
     pub block_usage_map: [u8; 360], // not to be indexed directly, use a method to check.
@@ -14,15 +14,7 @@ pub struct DiskHeader {
 
 bitflags! {
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-    pub struct HeaderFlags: u8 {
+    pub struct StandardHeaderFlags: u8 {
         const DenseDisk = 0b00000001;
     }
-}
-
-#[derive(Debug, Error, PartialEq)]
-pub enum HeaderConversionError {
-    #[error("This block is not a header.")]
-    NotAHeaderBlock,
-    #[error("This is a different type of header than the one requested.")]
-    WrongHeader,
 }

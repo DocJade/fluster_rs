@@ -1,3 +1,3 @@
-mod block;
-mod generic_structs;
+pub mod block;
+pub mod generic_structs;
 mod io;

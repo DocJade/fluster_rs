@@ -1,9 +1,11 @@
 // Imports
 use std::{
-    fs::{File, OpenOptions}, io::{Read, Seek}, os::unix::fs::FileExt, path::Path, process::exit, u16
+    fs::{File, OpenOptions}, io::Read, u16
 };
 
 use log::error;
+
+use crate::pool::disk::{drive_struct::DiskError, standard_disk::standard_disk_struct::StandardDisk};
 
 // Implementations
 
@@ -61,8 +63,8 @@ impl StandardDisk {
 }
 
 
-// Just for this file, we ocasionally need to create a fake header.
-impl DiskHeader {
+/// Ocasionally, we need to create fake headers during disk loading.
+impl StandardDiskHeader {
     fn spoof() -> Self {
         Self {
             flags: HeaderFlags::from_bits_retain(0b11111111),

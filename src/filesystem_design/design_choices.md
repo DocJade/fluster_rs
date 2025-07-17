@@ -30,3 +30,9 @@ Finding a file is a slow and tedious process. We have to start from the first di
 
 Dedicating an entire disk to pool information lets us keep a cache of file locations, skipping the entire search process.
 This will result in fewer disk swaps, and a massive speedup in search time.
+
+# Why is the project laid out like that?
+Originally, I didn't want to accidentally give access to private functions used for subsystems, but I ended up repeatedly dividing everything up until I was left with Pool::Disk::(Some disk type) then each disk implements its own innards, or uses generic functions from Pool::Disk.
+
+Organizationally, I feel like it makes sense, but the amount of nesting is pretty wild.
+This is my first time trying to keep a project organized in a sensible way, so... lol.

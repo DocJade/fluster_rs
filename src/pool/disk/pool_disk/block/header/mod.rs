@@ -1,4 +1,4 @@
-pub mod pool_header_struct;
-mod pool_header_methods;
+pub mod header_struct;
+mod header_methods;
 #[cfg(test)]
 mod tests;

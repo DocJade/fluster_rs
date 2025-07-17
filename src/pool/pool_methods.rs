@@ -4,10 +4,10 @@
 
 use std::process::exit;
 use log::error;
-use crate::pool::disk::disk_struct::DiskTypes;
+use crate::pool::disk::drive_struct::DiskTypes;
 use crate::pool::pool_struct::Pool;
 use crate::pool::pool_struct::PoolStatistics;
-use crate::pool::disk::pool_disk::block::header::pool_header_struct::PoolHeader;
+use crate::pool::disk::pool_disk::block::header::header_struct::PoolDiskHeader;
 
 // Implementations
 
@@ -50,7 +50,7 @@ pub(super) fn sync(pool: Pool) -> Result<(), ()> {
 /// Will prompt to make new pools if needed.
 pub(super) fn load() -> Pool {
     // Read in the header. If this fails, we cannot start the filesystem.
-    let header = match PoolHeader::read() {
+    let header = match PoolDiskHeader::read() {
         Ok(ok) => ok,
         Err(error) => {
             // We cannot start the pool without reading in the header!
