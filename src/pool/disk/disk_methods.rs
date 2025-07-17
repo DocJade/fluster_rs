@@ -281,7 +281,7 @@ fn initialize_numbered(disk: &mut Disk, disk_number: u16) -> Result<(), DiskErro
     let header_block = &header.to_disk_block();
     
     // Use the disk interface to write it safely
-    disk.write_block(header_block);
+    disk.write_block(header_block)?;
 
     // All done!
     Ok(())

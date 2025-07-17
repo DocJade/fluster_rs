@@ -30,6 +30,7 @@ pub struct FilesystemOptions {
     pub(super) floppy_drive: PathBuf,
 }
 impl FilesystemOptions {
+    /// Initializes options for the filesystem, also configures the virtual disks if needed.
     pub fn new(use_virtual_disks: Option<PathBuf>, floppy_drive: PathBuf) -> Self {
         // Set the globals
         // set the floppy disk path

@@ -122,8 +122,6 @@ fn to_disk_block(header: &DiskHeader) -> RawBlock {
 
     // Now CRC it
     add_crc_to_block(&mut buffer);
-    // Sanity check
-    assert!(check_crc(buffer));
 
     // Make the RawBlock
     // Disk headers are always block 0.

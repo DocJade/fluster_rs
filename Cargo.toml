@@ -15,6 +15,7 @@ lazy_static = "1.5.0"
 log = "0.4.27"
 rand = "0.9.1"
 rprompt = "2.2.0"
+tempfile = "3.20.0"
 thiserror = "2.0.12"
 
 # Floppy builds should be small enough to fit on a single floppy.

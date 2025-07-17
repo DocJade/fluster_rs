@@ -2,7 +2,7 @@
 
 use std::process::exit;
 
-use crate::pool::{pool_disk::block::pool_header_struct::PoolHeader, pool_struct::{Pool, PoolStatistics}};
+use crate::pool::{pool_disk::block::header::pool_header_struct::PoolHeader, pool_struct::{Pool, PoolStatistics}};
 use log::error;
 
 impl Pool {

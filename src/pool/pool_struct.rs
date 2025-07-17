@@ -1,6 +1,6 @@
 use std::{path::PathBuf, sync::Mutex};
 
-use crate::pool::pool_disk::block::pool_header_struct::PoolHeader;
+use crate::pool::pool_disk::block::header::pool_header_struct::PoolHeader;
 
 
 

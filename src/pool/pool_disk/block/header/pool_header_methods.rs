@@ -1,8 +1,8 @@
 // So no head?
 
-use log::info;
+use log::{info, warn};
 
-use crate::{filesystem::filesystem_struct::USE_VIRTUAL_DISKS, pool::{disk::{block::block_structs::RawBlock, disk_methods::check_for_magic, disk_struct::{Disk, DiskError}}, pool_disk::block::pool_header_struct::{PoolHeader, PoolHeaderError, PoolHeaderFlags}}};
+use crate::{filesystem::filesystem_struct::USE_VIRTUAL_DISKS, pool::{disk::{block::{block_structs::RawBlock, crc::add_crc_to_block}, disk_methods::check_for_magic, disk_struct::{Disk, DiskError}}, pool_disk::block::header::pool_header_struct::{PoolHeader, PoolHeaderError, PoolHeaderFlags}}};
 use crate::pool::disk::disk_struct;
 impl PoolHeader {
     /// Reterive the header from the pool disk
@@ -97,7 +97,9 @@ fn read_pool_header_from_disk() -> Result<PoolHeader, PoolHeaderError> {
                             },
                             Err(error) => {
                                 // The user either declined to create the pool, or an error occurred while creating it.
-                                let _ = check_for_external_error(&error.into())?;
+                                warn!("A new pool was attempted to be created, but the creation failed!");
+                                warn!("Reason: {error}");
+                                check_for_external_error(&error)?;
                                 continue;
                             },
                         };
@@ -116,7 +118,11 @@ fn prompt_for_new_pool(disk: Disk) -> Result<Option<PoolHeader>, DiskError> {
     // if we are running with virtual disks, we skip the prompt.
     if USE_VIRTUAL_DISKS.lock().expect("Fluster is single threaded.").is_some() {
         // Using virtual disks, we are going to create the pool immediately.
-        create_new_pool_header(disk)?;
+        return Ok(Some(create_new_pool_disk(disk)?));
+    } else {
+        // If we are running a test, we should never be asking for user input, thus we should always
+        // be using virtual disks.
+        assert!(!cfg!(test));
     }
 
     // Ask the user if they want to create a new pool starting on this disk (hereafer disk 0 / root disk)
@@ -190,22 +196,70 @@ fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolHeader, PoolHeader
             .expect("Impossible")
     );
 
-    return Ok(
+    Ok(
         PoolHeader {
             flags,
             highest_known_disk,
             disk_with_next_free_block,
             pool_blocks_free,
         }
-    );
+    )
 }
 
 fn pool_header_to_raw_block(header: &PoolHeader) -> RawBlock {
-    todo!()
+
+    // Deconstruct / discombobulate
+    #[deny(unused_variables)] // You need to write ALL of them.
+    let PoolHeader {
+        flags,
+        highest_known_disk,
+        disk_with_next_free_block,
+        pool_blocks_free,
+    } = header;
+
+    // Create buffer for the header
+    let mut buffer: [u8; 512] = [0u8; 512];
+
+    // The magic
+    buffer[0..8].copy_from_slice("Fluster!".as_bytes());
+
+    // Flags
+    buffer[8] = flags.bits();
+
+    // Highest known disk
+    buffer[9..9 + 2].copy_from_slice(&highest_known_disk.to_le_bytes());
+    
+    // Disk with next free block
+    buffer[11..11 + 2].copy_from_slice(&disk_with_next_free_block.to_le_bytes());
+    
+    // Free blocks
+    buffer[13..13 + 2].copy_from_slice(&pool_blocks_free.to_le_bytes());
+
+
+    // Add the CRC
+    // TODO: Make sure there is a test for valid crcs on this header type
+    add_crc_to_block(&mut buffer);
+    
+    // This needs to always go at block 0
+    RawBlock {
+        block_index: 0,
+        data: buffer,
+    }
 }
 
-fn create_new_pool_header(disk: Disk) -> Result<PoolHeader, DiskError> {
-    todo!()
+fn create_new_pool_disk(disk: Disk) -> Result<PoolHeader, DiskError> {
+    // Time for a brand new pool!
+    // We will create a brand new header, and write that header to the disk.
+    let new_header = new_pool_header();
+
+    // Now we need to write that
+    let writeable_block: RawBlock = new_header.to_block();
+
+    // Write it to the disk!
+    disk.write_block(&writeable_block)?;
+    
+    // Done!
+    Ok(new_header)
 }
 
 /// Returns () if we can recover, use ? to percolate the error easily.
@@ -225,4 +279,30 @@ fn check_for_external_error(error: &DiskError) -> Result<(), PoolHeaderError> {
         DiskError::WipeFailure => todo!(),
     }
 
+}
+
+// Brand new pool header
+fn new_pool_header() -> PoolHeader {
+    // Default pool header
+
+    // Flags
+    let mut flags: PoolHeaderFlags = PoolHeaderFlags::empty();
+    // Needs the required bit
+    flags.insert(PoolHeaderFlags::RequiredHeaderBit);
+
+    // The highest known disk for a brand new pool is the root disk itself, zero.
+    let highest_known_disk: u16 = 0;
+
+    // The disk with the next free block is, no disk!
+    let disk_with_next_free_block: u16 = u16::MAX;
+
+    // How many pool blocks are free? None! We only have the root disk!
+    let pool_blocks_free: u16 = 0;
+
+    PoolHeader {
+        flags,
+        highest_known_disk,
+        disk_with_next_free_block,
+        pool_blocks_free,
+    }
 }

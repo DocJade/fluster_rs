@@ -1,0 +1,45 @@
+// Head in the pool? Preposterous!
+// Unwrapping is okay here, since we want unexpected outcomes to fail tests.
+#![allow(clippy::unwrap_used)]
+
+use crate::pool::disk::block::block_structs::RawBlock;
+use crate::pool::pool_disk::block::header::pool_header_struct::PoolHeader;
+use crate::pool::pool_disk::block::header::pool_header_struct::PoolHeaderFlags;
+use rand::rngs::ThreadRng;
+use rand::Rng;
+
+// Ensure we can encode and decode a block
+#[test]
+fn block_ping_pong() {
+    for _ in 0..1000 {
+        let new_block = PoolHeader::random();
+        // Wizard, CAST!
+        let raw_block: RawBlock = new_block.to_block();
+        // Again!
+        let banach_tarski: PoolHeader = PoolHeader::from_block(&raw_block).unwrap();
+
+        assert_eq!(new_block, banach_tarski)
+    }
+}
+
+#[cfg(test)]
+impl PoolHeader {
+    fn random() -> Self {
+        let mut random: ThreadRng = rand::rng();
+        Self {
+            flags: PoolHeaderFlags::random(),
+            highest_known_disk: random.random(),
+            disk_with_next_free_block: random.random(),
+            pool_blocks_free: random.random(),
+        }
+    }
+}
+
+
+#[cfg(test)]
+impl PoolHeaderFlags {
+    fn random() -> Self {
+        // Currently we only have the marker bit.
+        PoolHeaderFlags::RequiredHeaderBit
+    }
+}

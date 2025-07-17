@@ -2,18 +2,11 @@
 // Unwrapping is okay here, since we want unexpected outcomes to fail tests.
 #![allow(clippy::unwrap_used)]
 
-// Is there a better way to do these imports? lol
-#[cfg(test)]
 use crate::pool::disk::block::directory::directory_struct::InodeLocation;
-#[cfg(test)]
 use crate::pool::disk::block::inode::inode_struct::InodeBlockError;
-#[cfg(test)]
 use crate::pool::disk::block::inode::inode_struct::{Inode, InodeBlock, InodeDirectory, InodeFile, InodeFlags, InodeTimestamp};
-#[cfg(test)]
 use rand::rngs::ThreadRng;
-#[cfg(test)]
 use rand::Rng;
-#[cfg(test)]
 use crate::pool::disk::generic_structs::pointer_struct::DiskPointer;
 
 #[test]
