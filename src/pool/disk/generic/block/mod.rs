@@ -1,4 +1,4 @@
-mod data;
+pub mod data;
 mod block_methods;
-mod block_structs;
-mod crc;
+pub mod block_structs;
+pub mod crc;

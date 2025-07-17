@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use tempfile::{tempdir, TempDir};
 
-use crate::filesystem::filesystem_struct::{FilesystemOptions, FlusterFS};
+use super::filesystem_struct::*;
 
 #[test]
 // Try starting up the filesystem

@@ -1,6 +1,7 @@
 // Stuff for block structs!
 
 // Imports
+use super::block_structs::BlockError;
 
 
 // Implementations
@@ -8,6 +9,7 @@
 //
 // Error type
 //
+
 
 impl From<std::io::Error> for BlockError {
     fn from(value: std::io::Error) -> Self {

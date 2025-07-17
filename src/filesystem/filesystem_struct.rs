@@ -1,10 +1,12 @@
 // This is where the fun begins
 
-use std::{path::PathBuf, process::exit, sync::Mutex};
+// Imports
 
+use std::{path::PathBuf, sync::Mutex};
 use easy_fuser::templates::DefaultFuseHandler;
-
 use crate::pool::pool_struct::Pool;
+
+// Structs, Enums, Flags
 
 pub struct FlusterFS {
     pub(super) inner: Box<DefaultFuseHandler>,
@@ -28,30 +30,4 @@ pub struct FilesystemOptions {
     pub(super) use_virtual_disks: Option<PathBuf>,
     /// The location of the floppy drive block device
     pub(super) floppy_drive: PathBuf,
-}
-impl FilesystemOptions {
-    /// Initializes options for the filesystem, also configures the virtual disks if needed.
-    pub fn new(use_virtual_disks: Option<PathBuf>, floppy_drive: PathBuf) -> Self {
-        // Set the globals
-        // set the floppy disk path
-        *FLOPPY_PATH.lock().expect("Fluster! Is single threaded.") = floppy_drive.clone();
-
-        // Set the virtual disk flag if needed
-        if let Some(ref path) = use_virtual_disks {
-            // Sanity checks
-            // Make sure this is a directory, and that the directory already exists
-            if !path.is_dir() || !path.exists() {
-                // Why must you do this
-                println!("Virtual disk argument must be a valid path to a pre-existing directory.");
-                exit(-1);
-            }
-
-            *USE_VIRTUAL_DISKS.lock().expect("Fluster! Is single threaded.") = Some(path.to_path_buf());
-        };
-
-        Self {
-            use_virtual_disks,
-            floppy_drive,
-        }
-    }
 }

@@ -7,6 +7,8 @@
 // Imports
 
 use std::{fs::File, io::Write, os::{unix::fs::FileExt}};
+use super::super::block::block_structs::BlockError;
+use super::super::block::block_structs::RawBlock;
 
 // Implementations
 

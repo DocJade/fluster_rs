@@ -7,6 +7,9 @@
 // Imports
 
 use std::{fs::File, os::unix::fs::FileExt};
+use super::super::block::crc::check_crc;
+use super::super::block::block_structs::BlockError;
+use super::super::block::block_structs::RawBlock;
 
 
 // Implementations

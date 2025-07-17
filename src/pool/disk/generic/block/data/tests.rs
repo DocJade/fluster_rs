@@ -2,7 +2,9 @@
 
 // Imports
 
-use rand::{random_range, rngs::ThreadRng, Rng, RngCore};
+use rand::{random_range, rngs::ThreadRng, RngCore};
+
+use super::data_struct::DataBlock;
 
 // Tests
 

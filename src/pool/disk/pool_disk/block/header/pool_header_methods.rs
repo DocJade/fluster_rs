@@ -3,6 +3,9 @@
 // Imports
 use log::{info, warn};
 
+use super::pool_header_struct::PoolHeader;
+use super::pool_header_struct::PoolHeaderError;
+
 // Implementations
 
 impl PoolHeader {

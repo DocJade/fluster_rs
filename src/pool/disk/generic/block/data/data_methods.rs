@@ -5,6 +5,8 @@
 // Imports
 
 use std::cmp::min;
+use super::data_struct::DataBlock;
+
 
 // Implementations
 

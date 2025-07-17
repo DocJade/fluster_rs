@@ -2,11 +2,11 @@
 // Unwrapping is okay here, since we want unexpected outcomes to fail tests.
 #![allow(clippy::unwrap_used)]
 
-use crate::pool::disk::block::block_structs::RawBlock;
-use crate::pool::pool_disk::block::header::pool_header_struct::PoolHeader;
-use crate::pool::pool_disk::block::header::pool_header_struct::PoolHeaderFlags;
+// Imports
 use rand::rngs::ThreadRng;
 use rand::Rng;
+
+// Tests
 
 // Ensure we can encode and decode a block
 #[test]

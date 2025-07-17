@@ -1,12 +1,13 @@
 // Did you know, if lightning struct a pool, everyone dies?
 // Imports
-use std::{path::PathBuf, sync::Mutex};
+
+use crate::pool::disk::pool_disk::block::header::pool_header_struct::PoolHeader;
 
 
 // Structs, Enums, Flags
 
 // All of the information we need about a pool to do our job.
-pub struct Pool {
+pub(super) struct Pool {
     pub(super) header: PoolHeader,
     /// Pool statistics are not saved to disk, they exist only at runtime.
     pub(super) statistics: PoolStatistics,
