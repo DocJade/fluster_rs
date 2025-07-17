@@ -150,18 +150,19 @@ fn get_disk_file(disk_number: u16) -> Result<File, DiskError> {
     // If we are running with virtual disks enabled, we are going to use a temp folder instead of the actual disk to speed up
     // development, waiting for disk seeks is slow and loud lol.
 
-    if *USE_VIRTUAL_DISKS.lock().expect("Fluster is single threaded.") {
+    if let Some(ref path) = *USE_VIRTUAL_DISKS.lock().expect("Fluster is single threaded.") {
         println!("Attempting to access virtual disk {disk_number}...");
         // Get the tempfile.
         // These files do not delete themselves.
 
-        // if disk 0 is missing, we need to make it.
+        // if disk 0 is missing, we need to make it,
+        // because the pool cannot create disk 0 without first loading itself... from disk 0.
         let _ = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .truncate(false)
-            .open("./temp_disks/disk0.fsr")?;
+            .open(path.join("disk0.fsr"))?;
 
         // If the tempfile does not exist, that means `create` was never called, which is an issue.
         // This should never be allowed, so an unwrap is okay in this case.
@@ -171,7 +172,7 @@ fn get_disk_file(disk_number: u16) -> Result<File, DiskError> {
             .write(true)
             .create(false) // We will panic if the disk does not exist.
             .truncate(false)
-            .open(format!("./temp_disks/disk{}.fsr", disk_number))?;
+            .open(path.join(format!("disk{disk_number}.fsr"))).expect("Disks should be created before read.");
 
 
         // Make sure the file is one floppy big, should have no effect on pre-existing files, since
@@ -179,7 +180,7 @@ fn get_disk_file(disk_number: u16) -> Result<File, DiskError> {
         temp_disk_file.set_len(512 * 2880)?; 
 
         return Ok(temp_disk_file);
-    };
+    }
 
     // Get the global path to the floppy disk drive
     let disk_path = FLOPPY_PATH.lock().expect("Fluster is single threaded.").clone();

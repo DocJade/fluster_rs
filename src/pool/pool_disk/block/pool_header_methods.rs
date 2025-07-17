@@ -29,7 +29,7 @@ fn read_pool_header_from_disk() -> Result<PoolHeader, PoolHeaderError> {
     // Get block 0 of disk 0
 
     // if we are running with virtual disks, we skip the prompt.
-    if !*USE_VIRTUAL_DISKS.lock().expect("Fluster is single threaded.") {
+    if !USE_VIRTUAL_DISKS.lock().expect("Fluster is single threaded.").is_some() {
         // Not using virtual disks, prompt the user...
         let _ = rprompt::prompt_reply("Please insert the pool root disk (Disk 0), then press enter.");
     }
@@ -114,7 +114,7 @@ fn read_pool_header_from_disk() -> Result<PoolHeader, PoolHeaderError> {
 fn prompt_for_new_pool(disk: Disk) -> Result<Option<PoolHeader>, DiskError> {
 
     // if we are running with virtual disks, we skip the prompt.
-    if *USE_VIRTUAL_DISKS.lock().expect("Fluster is single threaded.") {
+    if USE_VIRTUAL_DISKS.lock().expect("Fluster is single threaded.").is_some() {
         // Using virtual disks, we are going to create the pool immediately.
         create_new_pool_header(disk)?;
     }

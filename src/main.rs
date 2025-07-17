@@ -15,9 +15,9 @@ struct Cli {
     /// The mount point to mount the Fluster pool.
     #[arg(long)]
     mount_point: String,
-    /// Run with virtual floppy disks for testing.
+    /// Run with virtual floppy disks for testing. Path to put tempfiles in.
     #[arg(long)]
-    use_virtual_disks: bool
+    use_virtual_disks: Option<String>
 }
 
 fn main() {
@@ -64,7 +64,9 @@ fn main() {
     std::fs::create_dir_all(&mount_point).unwrap();
 
     // Assemble the options
-    let options: FilesystemOptions = FilesystemOptions::new(cli.use_virtual_disks, cli.block_device_path.into());
+    let use_virtual_disks: Option<PathBuf> = cli.use_virtual_disks.map(PathBuf::from);
+
+    let options: FilesystemOptions = FilesystemOptions::new(use_virtual_disks, cli.block_device_path.into());
 
     let filesystem: FlusterFS = FlusterFS::new(&options);
 
