@@ -68,7 +68,7 @@ fn main() {
 
     let options: FilesystemOptions = FilesystemOptions::new(use_virtual_disks, cli.block_device_path.into());
 
-    let filesystem: FlusterFS = FlusterFS::new(&options);
+    let filesystem: FlusterFS = FlusterFS::start(&options);
 
     // Mount it
     // TODO: Extract this out so tests can be ran against a mounted file system

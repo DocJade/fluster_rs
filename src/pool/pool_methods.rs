@@ -1,18 +1,24 @@
 // Interacting with the pool
 
-use std::process::exit;
+// Imports
 
-use crate::pool::{pool_disk::block::header::pool_header_struct::PoolHeader, pool_struct::{Pool, PoolStatistics}};
+use std::process::exit;
 use log::error;
+
+// Implementations
 
 impl Pool {
     /// Sync information about the pool to disk
-    pub fn sync(self) -> Result<(), ()> {
+    pub fn sync(&self) -> Result<(), ()> {
         sync(self)
     }
     /// Read in pool information from disk
-    pub fn initialize() -> Self {
-        initialize()
+    pub fn load() -> Self {
+        load()
+    }
+    /// Brand new pools need to run some setup functions to get everything in a ready to use state.
+    fn initalize(&self) -> Result<(),()> {
+        initalize_pool(self)
     }
 }
 
@@ -36,8 +42,9 @@ pub(super) fn sync(pool: Pool) -> Result<(), ()> {
 }
 
 
-/// Read in pool information from disk
-pub(super) fn initialize() -> Pool {
+/// Read in pool information from disk.
+/// Will prompt to make new pools if needed.
+pub(super) fn load() -> Pool {
     // Read in the header. If this fails, we cannot start the filesystem.
     let header = match PoolHeader::read() {
         Ok(ok) => ok,
@@ -55,4 +62,19 @@ pub(super) fn initialize() -> Pool {
         header,
         statistics: PoolStatistics::new(),
     }
+}
+
+/// Set up stuff for a brand new pool
+fn initalize_pool(pool: &Pool) -> Result<(),()> {
+    // Things a pool needs:
+    // A second disk to start storing inodes on.
+    // A root directory.
+
+    // Lets get that second disk going
+    todo!()
+}
+
+/// Add a new disk to the pool.
+fn add_disk(pool: &Pool, disk_type: DiskTypes, disk_number: u16) -> Result<(),()> {
+
 }

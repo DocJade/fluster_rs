@@ -1,8 +1,9 @@
+// Did you know, if lightning struct a pool, everyone dies?
+// Imports
 use std::{path::PathBuf, sync::Mutex};
 
-use crate::pool::pool_disk::block::header::pool_header_struct::PoolHeader;
 
-
+// Structs, Enums, Flags
 
 // All of the information we need about a pool to do our job.
 pub struct Pool {
