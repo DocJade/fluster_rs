@@ -1,13 +1,22 @@
 // So no head?
 
 // Imports
-use log::{info, warn};
+
+use std::fs::File;
+
+use log::debug;
+use log::info;
+use log::warn;
 
 use crate::filesystem::filesystem_struct::USE_VIRTUAL_DISKS;
+use crate::pool::disk::blank_disk::blank_disk_struct::BlankDisk;
 use crate::pool::disk::drive_methods::check_for_magic;
+use crate::pool::disk::drive_struct::DiskType;
 use crate::pool::disk::drive_struct::FloppyDrive;
+use crate::pool::disk::drive_struct::FloppyDriveError;
 use crate::pool::disk::generic::block::block_structs::RawBlock;
 use crate::pool::disk::generic::block::crc::add_crc_to_block;
+use crate::pool::disk::generic::disk_trait::GenericDiskMethods;
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolHeaderFlags;
 
 use super::header_struct::PoolDiskHeader;
@@ -17,7 +26,7 @@ use super::header_struct::PoolHeaderError;
 
 impl PoolDiskHeader {
     /// Reterive the header from the pool disk
-    pub fn read() -> Result<Self, PoolHeaderError> {
+    pub fn read() -> Result<Self, FloppyDriveError> {
         read_pool_header_from_disk()
     }
     /// Convert the pool header into a RawBlock
@@ -32,7 +41,7 @@ impl PoolDiskHeader {
 
 /// This function bypasses the usual disk types.
 /// I dont want to rewrite this right now. It'll do.
-fn read_pool_header_from_disk() -> Result<PoolDiskHeader, PoolHeaderError> {
+fn read_pool_header_from_disk() -> Result<PoolDiskHeader, FloppyDriveError> {
     // Get the header block from the pool disk (disk 0)
     // If the header is missing, and there is no fluster magic, ask if we are creating a new pool.
 
@@ -59,10 +68,10 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, PoolHeaderError> {
             Ok(ok) => ok,
             Err(error) => {
                 // Opening the disk failed, check if we can recover
-                let _ = check_for_external_error(&error)?;
+                check_for_external_error(&error)?;
                 // We are still here, error was not fatal, try again...
-                info!("Reading opening the disk failed, but was not fatal.");
-                info!("Error type: {error}");
+                warn!("Reading opening the disk failed, but was not fatal.");
+                warn!("Error type: {error}");
                 // Try again
                 continue;
             },
@@ -72,77 +81,50 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, PoolHeaderError> {
         // Find out what it is.
 
         match some_disk {
-            crate::pool::disk::drive_struct::DiskType::Pool(pool_disk) => todo!(),
-            crate::pool::disk::drive_struct::DiskType::Standard(standard_disk) => {return Err(PoolHeaderError::Invalid)},
-            crate::pool::disk::drive_struct::DiskType::Dense(dense_disk) => todo!(),
-            crate::pool::disk::drive_struct::DiskType::Unknown => todo!(),
-            crate::pool::disk::drive_struct::DiskType::Blank => todo!(),
-        }
-
-        // Read in block 0, which should contain the header.
-        // We skip CRC checks, since we will check the CRC when reconstructing the header.
-        let block: RawBlock = match read_disk.read_block(0, true) {
-            Ok(ok) => ok,
-            Err(error) => {
-                // Reading the block failed...
-                let _ = check_for_external_error(&error.clone().into())?;
-                info!("Reading block 0 from the pool disk failed, but was not fatal.");
-                info!("Error type: {error}");
-                // Try again
+            crate::pool::disk::drive_struct::DiskType::Pool(pool_disk) => {
+                // This is what we want!
+                return Ok(pool_disk.header)
+            },
+            crate::pool::disk::drive_struct::DiskType::Standard(standard_disk) => {
+                // For any disk type other than Blank, we will ask if user wants to wipe it.
+                display_info_and_ask_wipe(DiskType::Standard(standard_disk));
+                // Start the loop over, if they wiped the disk, the outcome will change.
                 continue;
             },
-        };
-        
-        // Get the header from that block
-        // I'm in nesting hell
-        let header: PoolDiskHeader = match PoolDiskHeader::from_block(&block) {
-            Ok(ok) => {
-                // That's the header we want! All done.
-                return Ok(ok)
+            crate::pool::disk::drive_struct::DiskType::Dense(dense_disk) => {
+                display_info_and_ask_wipe(DiskType::Dense(dense_disk));
+                continue;
             },
-            Err(error) => {
-                // Extracting the header failed.
-                match error {
-                    PoolHeaderError::Invalid => {
-                        // Ask the user if they want to wipe this disk
-                        todo!()
-                    },
-                    PoolHeaderError::Blank => {
-                        // Ask the user if they want to initialize the disk
-                        match prompt_for_new_pool(read_disk) {
-                            Ok(ok) => {
-                                // Did they say yes?
-                                if let Some(header) = ok {
-                                    // Header was created and pool was initalized.
-                                    return Ok(header);
-                                };
-                                // They said no :(
-                                continue;
-                            },
-                            Err(error) => {
-                                // The user either declined to create the pool, or an error occurred while creating it.
-                                warn!("A new pool was attempted to be created, but the creation failed!");
-                                warn!("Reason: {error}");
-                                check_for_external_error(&error)?;
-                                continue;
-                            },
-                        };
-                    }
-                }
-            }
-        };
+            crate::pool::disk::drive_struct::DiskType::Unknown(file) => {
+                display_info_and_ask_wipe(DiskType::Unknown(file));
+                continue;
+            },
+            crate::pool::disk::drive_struct::DiskType::Blank(disk) => {
+                // The disk is blank, we will ask if the user wants to create a new pool.
+                prompt_for_new_pool(disk);
+                // The user either created a new pool, or didnt, so we just continue and run through this again.
+                continue;
+            },
+        }
+
+        // One of the branch arms has to be hit.
+        unreachable!();
+
     }
 }
 
 
 /// Ask the user if they want to create a new pool with the currently inserted disk.
 /// If so, we blank out the disk
-fn prompt_for_new_pool(disk: Disk) -> Result<Option<PoolDiskHeader>, DiskError> {
+fn prompt_for_new_pool(disk: BlankDisk) -> Result<(), FloppyDriveError> {
 
     // if we are running with virtual disks, we skip the prompt.
     if USE_VIRTUAL_DISKS.lock().expect("Fluster is single threaded.").is_some() {
+        debug!("We are running with virtual disks, skipping the new pool prompt.");
         // Using virtual disks, we are going to create the pool immediately.
-        return Ok(Some(create_new_pool_disk(disk)?));
+        create_new_pool_disk(disk)?;
+        // Return, next loop will catch that this has changed.
+        return Ok(());
     } else {
         // If we are running a test, we should never be asking for user input, thus we should always
         // be using virtual disks.
@@ -157,7 +139,7 @@ fn prompt_for_new_pool(disk: Disk) -> Result<Option<PoolDiskHeader>, DiskError> 
             break
         } else if reply.to_lowercase().starts_with('n') {
             // They dont wanna make a new one.
-            return Ok(None)
+            return Ok(());
         }
         println!("Try again.")
     }
@@ -271,8 +253,9 @@ fn pool_header_to_raw_block(header: &PoolDiskHeader) -> RawBlock {
     }
 }
 
-fn create_new_pool_disk(disk: Disk) -> Result<PoolDiskHeader, DiskError> {
+fn create_new_pool_disk(mut disk: BlankDisk) -> Result<(), FloppyDriveError> {
     // Time for a brand new pool!
+    debug!("A new pool disk was created.");
     // We will create a brand new header, and write that header to the disk.
     let new_header = new_pool_header();
 
@@ -283,24 +266,25 @@ fn create_new_pool_disk(disk: Disk) -> Result<PoolDiskHeader, DiskError> {
     disk.write_block(&writeable_block)?;
     
     // Done!
-    Ok(new_header)
+    Ok(())
 }
 
 /// Returns () if we can recover, use ? to percolate the error easily.
-fn check_for_external_error(error: &DiskError) -> Result<(), PoolHeaderError> {
+fn check_for_external_error(error: &FloppyDriveError) -> Result<(), FloppyDriveError> {
     // There are certian types of errors we cannot recover from when reading in disks.
     // Reasons are documented next to their corresponding match arms.
 
+    warn!("Encountered an error while attempting to get information about the currently inserted floppy.");
+    warn!("{error}");
+
+    // TODO: I just wanna get things working, i'll fix this later.
     match error {
-        DiskError::Uninitialized => todo!(),
-        // This only happens if we are attempting to initalize a new disk to add to the pool, wont happen in here.
-        DiskError::NotBlank => unreachable!(),
-        // We do not call functions that check disk numbers, this variant is impossible.
-        DiskError::WrongDisk => unreachable!(),
-        // This result type is for the other kind of disk header.
-        DiskError::BadHeader(_) => unreachable!(),
-        DiskError::BlockError(block_error) => todo!(),
-        DiskError::WipeFailure => todo!(),
+        FloppyDriveError::Uninitialized => todo!(),
+        FloppyDriveError::NotBlank => todo!(),
+        FloppyDriveError::WipeFailure => todo!(),
+        FloppyDriveError::WrongDisk => todo!(),
+        FloppyDriveError::BadHeader(header_conversion_error) => todo!(),
+        FloppyDriveError::BlockError(block_error) => todo!(),
     }
 
 }
@@ -329,4 +313,28 @@ fn new_pool_header() -> PoolDiskHeader {
         disk_with_next_free_block,
         pool_blocks_free,
     }
+}
+
+/// Takes in a non-blank disk and displays info about it, then asks the user if they would like to wipe the disk.
+/// Wipes the disk if the user asks, returns nothing.
+/// Will also return nothing if the user does not wipe the disk.
+fn display_info_and_ask_wipe(disk: DiskType) -> Result<(), FloppyDriveError> {
+    // This isn't a very friendly interface, but it'll do for now.
+    
+    // Display the disk type
+    println!("The disk inserted is not a pool disk. It is of type {disk:?}.");
+    print!("Would you like to wipe this disk?");
+    loop {
+        let answer = rprompt::prompt_reply("y/n")?.to_ascii_lowercase().contains('y');
+        if answer {
+            // Wipe time!
+            todo!()
+        } else {
+            // No wipe.
+            print!("Okay this disk will not be wiped.");
+            let _ = rprompt::prompt_reply("Please insert another disk (That you think the pool is on), then hit return.")?;
+            return Ok(());
+        }
+    }
+    
 }

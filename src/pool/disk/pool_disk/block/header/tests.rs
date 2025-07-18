@@ -6,25 +6,30 @@
 use rand::rngs::ThreadRng;
 use rand::Rng;
 
+use crate::pool::disk::generic::block::block_structs::RawBlock;
+use crate::pool::disk::pool_disk::block::header::header_struct::PoolHeaderFlags;
+use crate::pool::disk::pool_disk::block::header::header_struct::PoolDiskHeader;
+
 // Tests
 
 // Ensure we can encode and decode a block
 #[test]
 fn block_ping_pong() {
     for _ in 0..1000 {
-        let new_block = PoolHeader::random();
+        let new_block = PoolDiskHeader::random();
         // Wizard, CAST!
         let raw_block: RawBlock = new_block.to_block();
         // Again!
-        let banach_tarski: PoolHeader = PoolHeader::from_block(&raw_block).unwrap();
+        let banach_tarski: PoolDiskHeader = PoolDiskHeader::from_block(&raw_block).unwrap();
 
         assert_eq!(new_block, banach_tarski)
     }
 }
 
 #[cfg(test)]
-impl PoolHeader {
+impl PoolDiskHeader {
     fn random() -> Self {
+
         let mut random: ThreadRng = rand::rng();
         Self {
             flags: PoolHeaderFlags::random(),

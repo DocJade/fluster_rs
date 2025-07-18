@@ -41,7 +41,7 @@ impl PoolStatistics {
 
 
 /// Sync information about the pool to disk
-pub(super) fn sync(pool: Pool) -> Result<(), ()> {
+pub(super) fn sync(pool: &Pool) -> Result<(), ()> {
     todo!()
 }
 

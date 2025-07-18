@@ -5,6 +5,8 @@
 
 // Implementations
 
+use crate::pool::disk::{generic::block::{block_structs::RawBlock, crc::add_crc_to_block}, standard_disk::block::directory::directory_struct::{DirectoryBlock, DirectoryBlockError, DirectoryBlockFlags, DirectoryFlags, DirectoryItem, InodeLocation}};
+
 
 // We can convert from a raw block to a directory bock, but not the other way around.
 impl From<RawBlock> for DirectoryBlock {

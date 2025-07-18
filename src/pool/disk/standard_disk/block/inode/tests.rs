@@ -7,6 +7,20 @@
 
 // Tests
 
+use rand::rngs::ThreadRng;
+use rand::Rng;
+use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+
+#[cfg(test)]
+use crate::pool::disk::standard_disk::block::directory::directory_struct::InodeLocation;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeBlockError;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeDirectory;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeTimestamp;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeBlock;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeFlags;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeFile;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::Inode;
+
 #[test]
 fn blank_inode_block_serialization() {
     let test_block: InodeBlock = InodeBlock::new();
@@ -79,7 +93,7 @@ fn inode_block_fragmentation() {
             },
             Err(err) => {
                 match err {
-                    crate::pool::disk::block::inode::inode_struct::InodeBlockError::NotEnoughSpace => {
+                    InodeBlockError::NotEnoughSpace => {
                         // We are out of space, so remove a random inode.
                         // pick one
                         let to_remove: usize = random.random_range(0..inode_offsets.len());
@@ -89,7 +103,7 @@ fn inode_block_fragmentation() {
                         let _ = inode_offsets.swap_remove(to_remove);
                         continue;
                     },
-                    crate::pool::disk::block::inode::inode_struct::InodeBlockError::BlockIsFragmented => {
+                    InodeBlockError::BlockIsFragmented => {
                         // this is our desired outcome.
                         return
                     },

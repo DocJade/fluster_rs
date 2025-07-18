@@ -5,6 +5,8 @@
 
 // Implementations
 
+use crate::pool::disk::{generic::block::{block_structs::RawBlock, crc::add_crc_to_block}, standard_disk::block::file_extents::file_extents_struct::{ExtentFlags, FileExtent, FileExtentBlock, FileExtentBlockError, FileExtentBlockFlags, FileExtentPointer}};
+
 // Impl the conversion from RawBlock
 impl From<RawBlock> for FileExtentBlock {
     fn from(value: RawBlock) -> FileExtentBlock {

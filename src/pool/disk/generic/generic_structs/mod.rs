@@ -1,3 +1,2 @@
-mod find_space;
-mod pointer_struct;
-pub mod get_disk_number;
+pub mod find_space;
+pub mod pointer_struct;

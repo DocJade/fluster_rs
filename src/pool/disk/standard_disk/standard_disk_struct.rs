@@ -5,7 +5,7 @@
 use super::block::header::header_struct::StandardDiskHeader;
 
 // Structs, Enums, Flags
-
+#[derive(Debug)]
 pub struct StandardDisk {
     /// Which disk is this?
     pub number: u16,

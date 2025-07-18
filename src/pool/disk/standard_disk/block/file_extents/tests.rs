@@ -3,9 +3,14 @@
 // Imports
 
 
+use rand::rngs::ThreadRng;
+use rand::Rng;
+use super::file_extents_struct::FileExtent;
+use super::file_extents_struct::ExtentFlags;
+use super::file_extents_struct::FileExtentBlock;
+
 
 // Tests
-
 
 #[test]
 fn random_extents_serialization() {
@@ -42,7 +47,6 @@ fn full_extent_block() {
             }, 
             Err(err) => match err {
                 super::file_extents_struct::FileExtentBlockError::NotEnoughSpace => break, // full
-                _ => todo!(),
             },
         }
     }
@@ -83,7 +87,6 @@ impl FileExtentBlock {
                 Ok(_) => {}, 
                 Err(err) => match err {
                     super::file_extents_struct::FileExtentBlockError::NotEnoughSpace => break, // full
-                    _ => todo!(),
                 },
             }
         }

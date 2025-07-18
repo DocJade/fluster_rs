@@ -5,6 +5,8 @@
 use bitflags::bitflags;
 use thiserror::Error;
 
+use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+
 // Structs, Enums, Flags
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

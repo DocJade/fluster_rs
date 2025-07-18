@@ -2,6 +2,10 @@
 
 // Imports
 
+use std::fs::File;
+use crate::pool::disk::{blank_disk::blank_disk_struct::BlankDisk, generic::disk_trait::GenericDiskMethods, unknown_disk::unknown_disk_struct::UnknownDisk};
+
+use enum_dispatch::enum_dispatch;
 use thiserror::Error;
 
 use crate::pool::disk::{dense_disk::dense_disk_struct::DenseDisk, generic::block::block_structs::{BlockError, RawBlock}, pool_disk::pool_disk_struct::PoolDisk, standard_disk::standard_disk_struct::StandardDisk};
@@ -18,12 +22,14 @@ pub struct FloppyDrive {
 }
 
 /// The different types of disks contained within a pool.
+#[enum_dispatch]
+#[derive(Debug)]
 pub enum DiskType {
     Pool(PoolDisk),
     Standard(StandardDisk),
     Dense(DenseDisk),
-    Unknown,
-    Blank
+    Unknown(UnknownDisk),
+    Blank(BlankDisk)
 }
 
 
@@ -61,7 +67,7 @@ pub enum FloppyDriveError {
 pub trait DiskBootstrap {
     // TODO: Let disk bootstraps fail.
     /// Create brand new disk.
-    fn bootstrap(block: RawBlock) -> Self;
+    fn bootstrap(file: std::fs::File, disk_number: u16) -> Result<Self, FloppyDriveError> where Self: std::marker::Sized;
     /// Create self from incoming header block.
     fn from_header(block: RawBlock) -> Self;
 }

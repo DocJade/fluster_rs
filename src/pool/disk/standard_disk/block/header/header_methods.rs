@@ -1,11 +1,11 @@
 // Imports
 
-use thiserror::Error;
+use crate::pool::disk::{drive_struct::{FloppyDriveError, HeaderConversionError}, generic::block::{block_structs::RawBlock, crc::add_crc_to_block}, standard_disk::block::header::header_struct::{StandardDiskHeader, StandardHeaderFlags}};
 
 // Implementations
 
-impl DiskHeader {
-    pub fn extract_header(raw_block: &RawBlock) -> Result<DiskHeader, DiskError> {
+impl StandardDiskHeader {
+    pub fn extract_header(raw_block: &RawBlock) -> Result<StandardDiskHeader, FloppyDriveError> {
         extract_header(raw_block)
     }
     pub fn to_disk_block(&self) -> RawBlock {
@@ -15,8 +15,8 @@ impl DiskHeader {
 
 
 // Impl the conversion from a RawBlock to a DiskHeader
-impl TryFrom<RawBlock> for DiskHeader {
-    type Error = DiskError;
+impl TryFrom<RawBlock> for StandardDiskHeader {
+    type Error = FloppyDriveError;
 
     fn try_from(value: RawBlock) -> Result<Self, Self::Error> {
         extract_header(&value)
@@ -27,7 +27,7 @@ impl TryFrom<RawBlock> for DiskHeader {
 // Functions
 
 /// Extract header info from a disk
-fn extract_header(raw_block: &RawBlock) -> Result<DiskHeader, DiskError> {
+fn extract_header(raw_block: &RawBlock) -> Result<StandardDiskHeader, FloppyDriveError> {
     // Time to pull apart the header!
 
     
@@ -41,20 +41,20 @@ fn extract_header(raw_block: &RawBlock) -> Result<DiskHeader, DiskError> {
         // Check if the disk is blank
         if raw_block.data.iter().all(|&x| x == 0) {
             // The block is completely blank.
-            return Err(DiskError::Uninitialized)
+            return Err(FloppyDriveError::Uninitialized)
         }
 
         // Is this a fresh IBM disk?
         if raw_block.data[510..] == [0x55, 0xAA] {
             // Wow, a brand new floppy.
-            return Err(DiskError::Uninitialized)
+            return Err(FloppyDriveError::Uninitialized)
         }
 
         return Err(HeaderConversionError::NotAHeaderBlock.into())
     }
 
     // Bit flags
-    let flags: HeaderFlags = HeaderFlags::from_bits_retain(
+    let flags: StandardHeaderFlags = StandardHeaderFlags::from_bits_retain(
         raw_block.data[8]
     );
 
@@ -68,7 +68,7 @@ fn extract_header(raw_block: &RawBlock) -> Result<DiskHeader, DiskError> {
     // If this is disk zero, or the reserved pool header bit is set (bit 7),
     // that means we are currently trying to deserialize the POOL header. Abort.
     if disk_number == 0 || flags.bits() & 0b1000000 != 0 {
-        return Err(HeaderConversionError::PoolHeader.into());
+        return Err(HeaderConversionError::WrongHeader.into());
     }
 
     // block usage bitplane
@@ -77,7 +77,7 @@ fn extract_header(raw_block: &RawBlock) -> Result<DiskHeader, DiskError> {
     .expect("Impossible.");
 
     Ok(
-        DiskHeader {
+        StandardDiskHeader {
             flags,
             disk_number,
             block_usage_map,
@@ -87,13 +87,13 @@ fn extract_header(raw_block: &RawBlock) -> Result<DiskHeader, DiskError> {
 }
 
 /// Converts the header type into its equivalent 512 byte block
-fn to_disk_block(header: &DiskHeader) -> RawBlock {
+fn to_disk_block(header: &StandardDiskHeader) -> RawBlock {
     
     // Now, this might seem stupid to reconstruct the struct immediately, but
     // doing this ensures that if the struct is updated, we have to look at this function
     // as well.
 
-    let DiskHeader {
+    let StandardDiskHeader {
         flags,
         disk_number,
         block_usage_map,

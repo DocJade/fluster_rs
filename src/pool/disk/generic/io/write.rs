@@ -13,8 +13,8 @@ use super::super::block::block_structs::RawBlock;
 // Implementations
 
 
-/// DO NOT USE THIS FUNCTION OUTSIDE OF DISK INITIALIZATION
-/// USE THE READ METHOD ON YOUR DISKS DIRECTLY.
+
+/// Write a block to the currently inserted disk in the floppy drive
 pub(crate) fn write_block_direct(mut disk_file: &File, block: &RawBlock) -> Result<(), BlockError> {
     // Bounds checking
     if block.block_index >= 2880 {

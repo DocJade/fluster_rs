@@ -1,4 +1,4 @@
-mod directory_struct;
-mod directory_methods;
+pub mod directory_struct;
+pub mod directory_methods;
 #[cfg(test)]
 mod tests;

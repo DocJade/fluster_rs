@@ -14,10 +14,7 @@ use super::super::block::block_structs::RawBlock;
 
 // Implementations
 
-// Read a block on the currently inserted disk
-// TODO: Error handling
-/// DO NOT USE THIS FUNCTION OUTSIDE OF DISK INITIALIZATION
-/// USE THE READ METHOD ON YOUR DISKS DIRECTLY.
+/// Read a block on the currently inserted disk in the floppy drive
 pub(crate) fn read_block_direct(disk_file: &File, block_index: u16, ignore_crc: bool) -> Result<RawBlock, BlockError> {
 
     // Bounds checking

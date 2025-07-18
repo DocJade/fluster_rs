@@ -8,6 +8,9 @@ use tempfile::{tempdir, TempDir};
 
 use super::filesystem_struct::*;
 
+use test_log::test; // We want to see logs while testing.
+
+
 #[test]
 // Try starting up the filesystem
 fn initialize_pool() {

@@ -41,10 +41,10 @@ bitflags! {
 
 // Points to a specific inode globally
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub(crate) struct InodeLocation {
-    pub(crate) disk: Option<u16>,
-    pub(crate) block: u16,
-    pub(crate) index: u8,
+pub struct InodeLocation {
+    pub disk: Option<u16>,
+    pub block: u16,
+    pub index: u8,
 }
 
 // Error types

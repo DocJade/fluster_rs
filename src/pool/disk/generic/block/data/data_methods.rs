@@ -28,7 +28,7 @@ impl DataBlock {
     pub(super) fn new() -> Self {
         Self {
             length: 0, // empty
-            data: [0u8; 506],
+            data: [0u8; 508],
         }
     }
 }
@@ -36,8 +36,8 @@ impl DataBlock {
 // Writes as many bytes as we can fit, or until we hit the end of the slice
 fn write_to_block(block: &mut DataBlock, bytes: &[u8]) -> u16 {
     // Calculate how many bytes to write
-    // We can write at most 506 bytes, so try to grab that many, or as much as we can.
-    let number_of_bytes_to_write: u16 = min(506_usize, bytes.len()).try_into().expect("Max is always 512");
+    // We can write at most 508 bytes, so try to grab that many, or as much as we can.
+    let number_of_bytes_to_write: u16 = min(508_usize, bytes.len()).try_into().expect("Max is always 512");
 
     // Copy that many bytes in
     block.data[..number_of_bytes_to_write as usize].copy_from_slice(&bytes[..number_of_bytes_to_write as usize]);

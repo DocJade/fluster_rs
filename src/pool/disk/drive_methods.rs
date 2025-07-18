@@ -6,7 +6,10 @@
 
 // Imports
 
+use crate::pool::disk::blank_disk::blank_disk_struct::BlankDisk;
+use crate::pool::disk::drive_struct::DiskBootstrap;
 use crate::pool::disk::generic::block::block_structs::BlockError;
+use crate::pool::disk::generic::disk_trait::GenericDiskMethods;
 use crate::pool::disk::generic::io::read::read_block_direct;
 
 use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
@@ -17,6 +20,7 @@ use crate::pool::disk::pool_disk::pool_disk_struct::PoolDisk;
 
 use crate::filesystem::filesystem_struct::USE_VIRTUAL_DISKS;
 use crate::filesystem::filesystem_struct::FLOPPY_PATH;
+use crate::pool::disk::unknown_disk::unknown_disk_struct::UnknownDisk;
 
 use super::drive_struct::FloppyDriveError;
 use super::drive_struct::FloppyDrive;
@@ -56,18 +60,18 @@ fn open_and_deduce_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> 
     // We need to read a block before we have an actual disk, so we need
     // to call this function directly as a workaround.
     // We must ignore the CRC here, since we know nothing about the disk.
-    let header_block = read_block_direct(disk_file, 0, false)?;
+    let header_block = read_block_direct(&disk_file, 0, true)?;
 
     // Now we check for the magic
-    if !check_for_magic(header_block.data) {
+    if !check_for_magic(&header_block.data) {
         // The magic is missing, check if the block is empty
         if header_block.data.iter().all(|byte| *byte == 0) {
             // Block is completely blank.
-            return Ok(DiskType::Blank)
+            return Ok(DiskType::Blank(BlankDisk::new(disk_file)))
         }
         // Otherwise, we dont know what kind of disk this is.
         // Its probably not a fluster disk.
-        return Ok(DiskType::Unknown)
+        return Ok(DiskType::Unknown(UnknownDisk::new(disk_file)))
     }
 
     // Magic exists, time to figure out what kind of disk this is.
@@ -75,18 +79,19 @@ fn open_and_deduce_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> 
 
 
     // Pool disk.
-    if header_block[8] & 0b10000000 != 0 {
-        return Ok(DiskType::Pool(PoolDisk::bootstrap(header_block)))
+    // The header reads should check the CRC of the block.
+    if header_block.data[8] & 0b10000000 != 0 {
+        return Ok(DiskType::Pool(PoolDisk::from_header(header_block)))
     }
 
     // Dense disk.
-    if header_block[8] & 0b01000000 != 0 {
-        return Ok(DiskType::Dense(DenseDisk::bootstrap(header_block)))
+    if header_block.data[8] & 0b01000000 != 0 {
+        return Ok(DiskType::Dense(DenseDisk::from_header(header_block)))
     }
 
     // Standard disk.
-    if header_block[8] & 0b00100000 != 0 {
-        return Ok(DiskType::Standard(StandardDisk::bootstrap(header_block)))
+    if header_block.data[8] & 0b00100000 != 0 {
+        return Ok(DiskType::Standard(StandardDisk::from_header(header_block)))
     }
     
     // it should be impossible to get here
@@ -172,7 +177,7 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
             // Check if this is the right disk number
             if disk_number == ok.get_disk_number() {
                 // Thats the right disk!
-                return ok;
+                return Ok(ok);
             }
         }
         
@@ -185,5 +190,13 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
             is_user_an_idiot = true;
         }
         let _ = rprompt::prompt_reply(format!("Please insert disk {disk_number}, then press enter."));
+    }
+}
+
+
+// Error conversion
+impl From<std::io::Error> for FloppyDriveError {
+    fn from(value: std::io::Error) -> Self {
+        FloppyDriveError::BlockError(BlockError::from(value))
     }
 }
