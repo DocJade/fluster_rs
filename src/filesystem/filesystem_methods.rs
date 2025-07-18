@@ -4,14 +4,14 @@
 
 // Imports
 
-use std::path::PathBuf;
-use std::process::exit;
-use easy_fuser::{templates::DefaultFuseHandler, FuseHandler};
-use crate::pool::pool_struct::Pool;
 use super::filesystem_struct::FLOPPY_PATH;
-use super::filesystem_struct::USE_VIRTUAL_DISKS;
 use super::filesystem_struct::FilesystemOptions;
 use super::filesystem_struct::FlusterFS;
+use super::filesystem_struct::USE_VIRTUAL_DISKS;
+use crate::pool::pool_struct::Pool;
+use easy_fuser::{FuseHandler, templates::DefaultFuseHandler};
+use std::path::PathBuf;
+use std::process::exit;
 
 // Implementations
 
@@ -47,7 +47,9 @@ impl FilesystemOptions {
                 exit(-1);
             }
 
-            *USE_VIRTUAL_DISKS.lock().expect("Fluster! Is single threaded.") = Some(path.to_path_buf());
+            *USE_VIRTUAL_DISKS
+                .lock()
+                .expect("Fluster! Is single threaded.") = Some(path.to_path_buf());
         };
 
         Self {
@@ -67,5 +69,4 @@ impl FuseHandler<PathBuf> for FlusterFS {
     fn get_inner(&self) -> &dyn FuseHandler<PathBuf> {
         self.inner.as_ref()
     }
-
 }

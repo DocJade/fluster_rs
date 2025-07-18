@@ -2,7 +2,7 @@
 
 // Imports
 
-use rand::{random_range, rngs::ThreadRng, RngCore};
+use rand::{RngCore, random_range, rngs::ThreadRng};
 
 use super::data_struct::DataBlock;
 
@@ -25,7 +25,10 @@ fn random_block() {
 
         // assertions
         assert_eq!(bytes_read, amount_written);
-        assert_eq!(read_buffer[..bytes_read as usize], data[..amount_written as usize]);
+        assert_eq!(
+            read_buffer[..bytes_read as usize],
+            data[..amount_written as usize]
+        );
     }
 }
 
@@ -40,7 +43,7 @@ fn large_store_bytes_in_blocks() {
     // Arrays cannot be used here, you will overflow the stack.
     let data_size = random_range(MEGABYTE * 16..MEGABYTE * 32);
     let mut data: Vec<u8> = vec![0u8; data_size as usize];
-    
+
     // Fill-er up!
     random.fill_bytes(&mut data);
 
@@ -50,7 +53,10 @@ fn large_store_bytes_in_blocks() {
     let mut write_index: usize = 0;
     while write_index < data_size {
         let mut block = DataBlock::new();
-        let bytes_written: usize = block.write(&data[write_index..data_size]).try_into().unwrap();
+        let bytes_written: usize = block
+            .write(&data[write_index..data_size])
+            .try_into()
+            .unwrap();
 
         blocks.push(block);
 
@@ -66,7 +72,7 @@ fn large_store_bytes_in_blocks() {
         // Did we actually get anything?
         if amount_read == 0 {
             // Done reading
-            break
+            break;
         }
         read_index += amount_read as usize;
     }

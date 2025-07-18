@@ -2,14 +2,14 @@
 
 // Imports
 
-use std::{path::PathBuf, sync::Mutex};
-use easy_fuser::templates::DefaultFuseHandler;
 use crate::pool::pool_struct::Pool;
+use easy_fuser::templates::DefaultFuseHandler;
+use std::{path::PathBuf, sync::Mutex};
 // Structs, Enums, Flags
 
 pub struct FlusterFS {
     pub(super) inner: Box<DefaultFuseHandler>,
-    pub(super) pool_info: Pool
+    pub(super) pool_info: Pool,
 }
 
 use lazy_static::lazy_static;
@@ -18,7 +18,7 @@ use lazy_static::lazy_static;
 // We need to access the path quite deep down into the disk functions, passing it all the way down there would be silly.
 // Same with the virtual disk flag.
 lazy_static! {
-    pub(crate) static ref USE_VIRTUAL_DISKS:  Mutex<Option<PathBuf>> = Mutex::new(None);
+    pub(crate) static ref USE_VIRTUAL_DISKS: Mutex<Option<PathBuf>> = Mutex::new(None);
     pub(crate) static ref FLOPPY_PATH: Mutex<PathBuf> = Mutex::new(PathBuf::new());
 }
 

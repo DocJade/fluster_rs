@@ -6,21 +6,23 @@
 
 // Imports
 
-use std::{fs::File, os::unix::fs::FileExt};
-use super::super::block::crc::check_crc;
 use super::super::block::block_structs::BlockError;
 use super::super::block::block_structs::RawBlock;
-
+use super::super::block::crc::check_crc;
+use std::{fs::File, os::unix::fs::FileExt};
 
 // Implementations
 
 /// Read a block on the currently inserted disk in the floppy drive
-pub(crate) fn read_block_direct(disk_file: &File, block_index: u16, ignore_crc: bool) -> Result<RawBlock, BlockError> {
-
+pub(crate) fn read_block_direct(
+    disk_file: &File,
+    block_index: u16,
+    ignore_crc: bool,
+) -> Result<RawBlock, BlockError> {
     // Bounds checking
     if block_index >= 2880 {
         // This block is impossible to access.
-        return Err(BlockError::InvalidOffset)
+        return Err(BlockError::InvalidOffset);
     }
 
     // allocate space for the block
@@ -32,20 +34,17 @@ pub(crate) fn read_block_direct(disk_file: &File, block_index: u16, ignore_crc: 
     // Seek to the requested block and read 512 bytes from it
     disk_file.read_exact_at(&mut read_buffer, read_offset)?;
 
-
     // Check the CRC, unless the user disabled it on this call.
     // CRC checks should only be disabled when absolutely needed, such as
     // when reading in unknown blocks from unknown disks to check headers.
     if !ignore_crc && !check_crc(read_buffer) {
-        // CRC check failed, 
+        // CRC check failed,
         return Err(BlockError::InvalidCRC);
     }
 
     // send it.
-    Ok(
-        RawBlock {
-            block_index,
-            data: read_buffer,
-        }
-    )
+    Ok(RawBlock {
+        block_index,
+        data: read_buffer,
+    })
 }

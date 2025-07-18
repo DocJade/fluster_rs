@@ -12,7 +12,7 @@ pub(super) struct DirectoryItem {
     pub(super) flags: DirectoryFlags,
     pub(super) name_length: u8,
     pub(super) name: String,
-    pub(super) location: InodeLocation
+    pub(super) location: InodeLocation,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -21,7 +21,7 @@ pub(super) struct DirectoryBlock {
     pub(super) bytes_free: u16,
     // The disk pointer will automatically deduced from the flags
     pub(super) next_block: u16,
-    pub(super) directory_items: Vec<DirectoryItem>
+    pub(super) directory_items: Vec<DirectoryItem>,
 }
 
 bitflags! {

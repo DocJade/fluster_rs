@@ -2,13 +2,11 @@
 
 // Imports
 
-
-use rand::rngs::ThreadRng;
-use rand::Rng;
-use super::file_extents_struct::FileExtent;
 use super::file_extents_struct::ExtentFlags;
+use super::file_extents_struct::FileExtent;
 use super::file_extents_struct::FileExtentBlock;
-
+use rand::Rng;
+use rand::rngs::ThreadRng;
 
 // Tests
 
@@ -44,7 +42,7 @@ fn full_extent_block() {
                 // keep track of the extents we put in
                 extents.push(new_extent);
                 // keep going
-            }, 
+            }
             Err(err) => match err {
                 super::file_extents_struct::FileExtentBlockError::NotEnoughSpace => break, // full
             },
@@ -65,11 +63,7 @@ fn random_block_serialization() {
     }
 }
 
-
-
-
 // Helper functions
-
 
 #[cfg(test)]
 impl FileExtentBlock {
@@ -80,11 +74,11 @@ impl FileExtentBlock {
         loop {
             // consider stopping early
             if random.random_bool(0.50) {
-                break
+                break;
             }
             let new_extent: FileExtent = FileExtent::random();
             match test_block.add_extent(new_extent) {
-                Ok(_) => {}, 
+                Ok(_) => {}
                 Err(err) => match err {
                     super::file_extents_struct::FileExtentBlockError::NotEnoughSpace => break, // full
                 },
@@ -124,7 +118,9 @@ impl FileExtent {
         }
 
         // Ensure that only one of the two flags is set.
-        assert!(!(flags.contains(ExtentFlags::OnDenseDisk) && flags.contains(ExtentFlags::OnThisDisk)));
+        assert!(
+            !(flags.contains(ExtentFlags::OnDenseDisk) && flags.contains(ExtentFlags::OnThisDisk))
+        );
 
         // All done.
         FileExtent {

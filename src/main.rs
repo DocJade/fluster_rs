@@ -1,11 +1,17 @@
-use std::{fs::File, path::{Path, PathBuf}, process::exit, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}};
+use std::{
+    path::PathBuf,
+    process::exit,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 
-use fluster_fs::filesystem::filesystem_struct::{FilesystemOptions, FlusterFS};
 use clap::Parser;
+use fluster_fs::filesystem::filesystem_struct::{FilesystemOptions, FlusterFS};
 
 // Logging
 use env_logger::Env;
-
 
 #[derive(Parser)]
 struct Cli {
@@ -17,7 +23,7 @@ struct Cli {
     mount_point: String,
     /// Run with virtual floppy disks for testing. Path to put tempfiles in.
     #[arg(long)]
-    use_virtual_disks: Option<String>
+    use_virtual_disks: Option<String>,
 }
 
 fn main() {
@@ -29,7 +35,6 @@ fn main() {
 
     // get the mount point
     let mount_point = PathBuf::from(cli.mount_point);
-
 
     // Functions from easy_fuser/examples/zip_fs/src/main.rs
 
@@ -53,12 +58,8 @@ fn main() {
         println!("Received Ctrl+C, unmounting...");
         cleanup(&mount_point_ctrlc, &onceflag_ctrlc);
         exit(1);
-    }).unwrap();
-
-
-
-
-
+    })
+    .unwrap();
 
     // Check if the mount point is valid
     std::fs::create_dir_all(&mount_point).unwrap();
@@ -66,7 +67,8 @@ fn main() {
     // Assemble the options
     let use_virtual_disks: Option<PathBuf> = cli.use_virtual_disks.map(PathBuf::from);
 
-    let options: FilesystemOptions = FilesystemOptions::new(use_virtual_disks, cli.block_device_path.into());
+    let options: FilesystemOptions =
+        FilesystemOptions::new(use_virtual_disks, cli.block_device_path.into());
 
     let filesystem: FlusterFS = FlusterFS::start(&options);
 

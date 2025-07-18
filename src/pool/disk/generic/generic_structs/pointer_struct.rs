@@ -3,7 +3,7 @@
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) struct DiskPointer {
     pub(crate) disk: u16,
-    pub(crate) block: u16
+    pub(crate) block: u16,
 }
 
 impl DiskPointer {
@@ -26,13 +26,18 @@ impl DiskPointer {
         let mut random = rand::rng();
         Self {
             disk: random.random(),
-            block: random.random()
+            block: random.random(),
         }
     }
 }
 
 // Quick function to turn a u16 and flags into a DiskPointer
-pub(in crate::pool::disk) fn u16_to_disk_pointer(number: u16, is_local: bool, current_disk: u16, default_block: u16) -> DiskPointer {
+pub(in crate::pool::disk) fn u16_to_disk_pointer(
+    number: u16,
+    is_local: bool,
+    current_disk: u16,
+    default_block: u16,
+) -> DiskPointer {
     if is_local {
         DiskPointer {
             disk: current_disk,

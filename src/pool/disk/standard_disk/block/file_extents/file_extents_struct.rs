@@ -12,7 +12,7 @@ pub struct FileExtent {
     pub(super) flags: ExtentFlags,
     pub(super) disk_number: Option<u16>, // not included on local blocks
     pub(super) start_block: Option<u16>, // inclusive // not included on dense disks
-    pub(super) length: Option<u8>, // in blocks // not included on dense disks
+    pub(super) length: Option<u8>,       // in blocks // not included on dense disks
 }
 
 bitflags! {
@@ -32,14 +32,13 @@ pub struct FileExtentBlock {
     pub(super) flags: FileExtentBlockFlags,
     pub(super) bytes_free: u16,
     pub(super) next_block: FileExtentPointer,
-    pub(super) extents: Vec<FileExtent>
-    
+    pub(super) extents: Vec<FileExtent>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct FileExtentPointer {
     pub(super) disk_number: u16,
-    pub(super) block_index: u16
+    pub(super) block_index: u16,
 }
 
 bitflags! {

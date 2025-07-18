@@ -4,7 +4,6 @@
 
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolDiskHeader;
 
-
 // Structs, Enums, Flags
 #[derive(Debug)]
 pub struct PoolDisk {

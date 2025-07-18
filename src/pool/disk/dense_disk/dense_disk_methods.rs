@@ -2,7 +2,14 @@
 
 use std::fs::File;
 
-use crate::pool::disk::{drive_struct::{DiskBootstrap, FloppyDriveError}, generic::{block::block_structs::{BlockError, RawBlock}, disk_trait::GenericDiskMethods, io::{read::read_block_direct, write::write_block_direct}}};
+use crate::pool::disk::{
+    drive_struct::{DiskBootstrap, FloppyDriveError},
+    generic::{
+        block::block_structs::{BlockError, RawBlock},
+        disk_trait::GenericDiskMethods,
+        io::{read::read_block_direct, write::write_block_direct},
+    },
+};
 
 use super::dense_disk_struct::DenseDisk;
 
@@ -34,7 +41,7 @@ impl GenericDiskMethods for DenseDisk {
     }
 
     #[doc = " Get the inner file used for IO operations"]
-    fn disk_file(&mut self) ->  &mut File {
+    fn disk_file(&mut self) -> &mut File {
         &mut self.disk_file
     }
 

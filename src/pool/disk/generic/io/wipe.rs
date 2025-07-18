@@ -2,7 +2,7 @@
 
 use std::fs::File;
 
-use crate::pool::disk::{generic::block::block_structs::{BlockError, RawBlock}};
+use crate::pool::disk::generic::block::block_structs::{BlockError, RawBlock};
 
 /// Wipes ALL data on ALL blocks on the disk.
 pub(crate) fn destroy_disk(disk: &mut File) -> Result<(), BlockError> {
@@ -20,5 +20,5 @@ pub(crate) fn wipe_block(disk: &mut File, block_number: u16) -> Result<(), Block
         block_index: block_number,
         data: [0u8; 512],
     };
-    super::write::write_block_direct(&disk, &blanker)
+    super::write::write_block_direct(disk, &blanker)
 }

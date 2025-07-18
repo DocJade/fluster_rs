@@ -1,11 +1,25 @@
 // Imports
 use std::{
-    fs::{File, OpenOptions}, io::Read, u16
+    fs::{File, OpenOptions},
+    io::Read,
+    u16,
 };
 
 use log::error;
 
-use crate::pool::disk::{blank_disk::blank_disk_struct::BlankDisk, drive_struct::{DiskBootstrap, DiskType, FloppyDriveError}, generic::{block::block_structs::{BlockError, RawBlock}, disk_trait::GenericDiskMethods, io::{read::read_block_direct, write::write_block_direct}}, standard_disk::{block::header::header_struct::{StandardDiskHeader, StandardHeaderFlags}, standard_disk_struct::StandardDisk}};
+use crate::pool::disk::{
+    blank_disk::blank_disk_struct::BlankDisk,
+    drive_struct::{DiskBootstrap, DiskType, FloppyDriveError},
+    generic::{
+        block::block_structs::{BlockError, RawBlock},
+        disk_trait::GenericDiskMethods,
+        io::{read::read_block_direct, write::write_block_direct},
+    },
+    standard_disk::{
+        block::header::header_struct::{StandardDiskHeader, StandardHeaderFlags},
+        standard_disk_struct::StandardDisk,
+    },
+};
 
 // Implementations
 
@@ -21,7 +35,6 @@ impl DiskBootstrap for StandardDisk {
         todo!()
     }
 }
-
 
 /// Ocasionally, we need to create fake headers during disk loading.
 impl StandardDiskHeader {
@@ -45,14 +58,13 @@ impl StandardDiskHeader {
 /// This will create a disk of any disk number, it is up to the caller to ensure that
 /// duplicate disks are not created, and to track the creation of this new disk.
 fn create(file: File, disk_number: u16) -> Result<StandardDisk, FloppyDriveError> {
-
     // Spoof the header, since we're about to give it a new one.
     let mut disk: StandardDisk = StandardDisk {
         number: disk_number,
         header: StandardDiskHeader::spoof(),
         disk_file: file,
     };
-    
+
     // Now give it some head    er
     // This function checks if the disk is blank for us.
     initialize_numbered(&mut disk, disk_number)?;
@@ -60,7 +72,6 @@ fn create(file: File, disk_number: u16) -> Result<StandardDisk, FloppyDriveError
     // done
     Ok(disk)
 }
-
 
 //
 // Private functions
@@ -94,15 +105,13 @@ fn initialize_numbered(disk: &mut StandardDisk, disk_number: u16) -> Result<(), 
 
     // Now serialize that, and write it
     let header_block = &header.to_disk_block();
-    
+
     // Use the disk interface to write it safely
     disk.write_block(header_block)?;
 
     // All done!
     Ok(())
 }
-
-
 
 // Generic disk operations
 impl GenericDiskMethods for StandardDisk {
@@ -118,7 +127,7 @@ impl GenericDiskMethods for StandardDisk {
     }
 
     #[doc = " Get the inner file used for IO operations"]
-    fn disk_file(&mut self) ->  &mut File {
+    fn disk_file(&mut self) -> &mut File {
         &mut self.disk_file
     }
 

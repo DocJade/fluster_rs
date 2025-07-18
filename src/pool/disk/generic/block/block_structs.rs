@@ -12,7 +12,7 @@ pub struct RawBlock {
     /// Which block on the disk this is
     pub block_index: u16,
     /// The block in its entirety.
-    pub data: [u8; 512]
+    pub data: [u8; 512],
 }
 
 // Error types for block level operations.
@@ -38,5 +38,4 @@ pub enum BlockError {
     // remote file share as a floppy for some reason.
     #[error("The OS returned an unknown error when attempting to access the file")]
     Unknown(String),
-
 }

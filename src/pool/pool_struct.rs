@@ -3,7 +3,6 @@
 
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolDiskHeader;
 
-
 // Structs, Enums, Flags
 
 // All of the information we need about a pool to do our job.
@@ -27,7 +26,6 @@ pub struct PoolStatistics {
     /// Rolling cache hit rate.
     pub(super) cache_hit_rate: f32,
 }
-
 
 /// Somebody peed in the pool.
 pub enum PoolError {

@@ -4,22 +4,21 @@
 
 // Imports
 
-
 // Tests
 
-use rand::rngs::ThreadRng;
-use rand::Rng;
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+use rand::Rng;
+use rand::rngs::ThreadRng;
 
 #[cfg(test)]
 use crate::pool::disk::standard_disk::block::directory::directory_struct::InodeLocation;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::Inode;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeBlock;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeBlockError;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeDirectory;
-use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeTimestamp;
-use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeBlock;
-use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeFlags;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeFile;
-use crate::pool::disk::standard_disk::block::inode::inode_struct::Inode;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeFlags;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeTimestamp;
 
 #[test]
 fn blank_inode_block_serialization() {
@@ -40,7 +39,7 @@ fn fill_inode_block() {
         if add_result.is_err() {
             // It must be full, its impossible to fragment without removing items.
             assert_eq!(add_result.err().unwrap(), InodeBlockError::NotEnoughSpace);
-            break
+            break;
         }
         // Keep track of all added inodes so we can validate them.
         added_inodes.push(inode);
@@ -65,7 +64,7 @@ fn filled_inode_block_serialization() {
             if add_result.is_err() {
                 // It must be full, its impossible to fragment without removing items.
                 assert_eq!(add_result.err().unwrap(), InodeBlockError::NotEnoughSpace);
-                break
+                break;
             }
         }
 
@@ -90,7 +89,7 @@ fn inode_block_fragmentation() {
             Ok(ok) => {
                 // Add this offset to our list so we can delete it later to cause fragmentation.
                 inode_offsets.push(ok);
-            },
+            }
             Err(err) => {
                 match err {
                     InodeBlockError::NotEnoughSpace => {
@@ -98,19 +97,21 @@ fn inode_block_fragmentation() {
                         // pick one
                         let to_remove: usize = random.random_range(0..inode_offsets.len());
                         // Remove inode
-                        test_block.try_remove_inode(inode_offsets[to_remove]).unwrap();
+                        test_block
+                            .try_remove_inode(inode_offsets[to_remove])
+                            .unwrap();
                         // Remove stored offset
                         let _ = inode_offsets.swap_remove(to_remove);
                         continue;
-                    },
+                    }
                     InodeBlockError::BlockIsFragmented => {
                         // this is our desired outcome.
-                        return
-                    },
+                        return;
+                    }
                     // Other errors should not happen
                     _ => panic!(),
                 }
-            },
+            }
         }
     }
 }
@@ -140,7 +141,6 @@ fn inode_correct_sizes() {
         }
     }
 }
-
 
 #[test]
 // Inodes should be the same size when re/deserializing them
@@ -199,7 +199,7 @@ impl Inode {
                 file: Some(InodeFile::get_random()),
                 directory: None,
                 created: InodeTimestamp::get_random(),
-                modified: InodeTimestamp::get_random()
+                modified: InodeTimestamp::get_random(),
             }
         } else {
             // A directory
@@ -208,7 +208,7 @@ impl Inode {
                 file: None,
                 directory: Some(InodeDirectory::get_random()),
                 created: InodeTimestamp::get_random(),
-                modified: InodeTimestamp::get_random()
+                modified: InodeTimestamp::get_random(),
             }
         }
     }
@@ -226,7 +226,7 @@ impl InodeFile {
 }
 
 #[cfg(test)]
-impl InodeTimestamp { 
+impl InodeTimestamp {
     fn get_random() -> Self {
         let mut random = rand::rng();
         InodeTimestamp {

@@ -4,12 +4,11 @@
 
 use std::path::PathBuf;
 
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 
 use super::filesystem_struct::*;
 
 use test_log::test; // We want to see logs while testing.
-
 
 #[test]
 // Try starting up the filesystem
@@ -20,14 +19,9 @@ fn initialize_pool() {
     let _fs: FlusterFS = FlusterFS::start(&fs_options);
 }
 
-
-
-
 //
 // Helper functions
 //
-
-
 
 // Temporary directories for virtual disks
 fn get_new_temp_dir() -> TempDir {

@@ -1,8 +1,13 @@
 use std::fs::File;
 
-use crate::pool::disk::{generic::{block::block_structs::{BlockError, RawBlock}, disk_trait::GenericDiskMethods, io::write::write_block_direct}, unknown_disk::unknown_disk_struct::UnknownDisk};
-
-
+use crate::pool::disk::{
+    generic::{
+        block::block_structs::{BlockError, RawBlock},
+        disk_trait::GenericDiskMethods,
+        io::write::write_block_direct,
+    },
+    unknown_disk::unknown_disk_struct::UnknownDisk,
+};
 
 impl GenericDiskMethods for UnknownDisk {
     #[doc = " Read a block"]
@@ -18,7 +23,7 @@ impl GenericDiskMethods for UnknownDisk {
     }
 
     #[doc = " Get the inner file used for IO operations"]
-    fn disk_file(&mut self) ->  &mut File {
+    fn disk_file(&mut self) -> &mut File {
         &mut self.disk_file
     }
 
@@ -31,8 +36,6 @@ impl GenericDiskMethods for UnknownDisk {
 
 impl UnknownDisk {
     pub fn new(file: File) -> Self {
-        Self {
-            disk_file: file
-        }
+        Self { disk_file: file }
     }
 }

@@ -11,7 +11,6 @@ pub struct StandardDiskHeader {
     pub block_usage_map: [u8; 360], // not to be indexed directly, use a method to check.
 }
 
-
 bitflags! {
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct StandardHeaderFlags: u8 {

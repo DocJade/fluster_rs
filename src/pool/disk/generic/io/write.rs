@@ -6,20 +6,18 @@
 
 // Imports
 
-use std::{fs::File, io::Write, os::{unix::fs::FileExt}};
 use super::super::block::block_structs::BlockError;
 use super::super::block::block_structs::RawBlock;
+use std::{fs::File, io::Write, os::unix::fs::FileExt};
 
 // Implementations
-
-
 
 /// Write a block to the currently inserted disk in the floppy drive
 pub(crate) fn write_block_direct(mut disk_file: &File, block: &RawBlock) -> Result<(), BlockError> {
     // Bounds checking
     if block.block_index >= 2880 {
         // This block is impossible to access.
-        return Err(BlockError::InvalidOffset)
+        return Err(BlockError::InvalidOffset);
     }
 
     // Calculate the offset into the disk

@@ -3,12 +3,12 @@
 #![allow(clippy::unwrap_used)]
 
 // Imports
-use rand::rngs::ThreadRng;
 use rand::Rng;
+use rand::rngs::ThreadRng;
 
 use crate::pool::disk::generic::block::block_structs::RawBlock;
-use crate::pool::disk::pool_disk::block::header::header_struct::PoolHeaderFlags;
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolDiskHeader;
+use crate::pool::disk::pool_disk::block::header::header_struct::PoolHeaderFlags;
 
 // Tests
 
@@ -29,7 +29,6 @@ fn block_ping_pong() {
 #[cfg(test)]
 impl PoolDiskHeader {
     fn random() -> Self {
-
         let mut random: ThreadRng = rand::rng();
         Self {
             flags: PoolHeaderFlags::random(),
@@ -39,7 +38,6 @@ impl PoolDiskHeader {
         }
     }
 }
-
 
 #[cfg(test)]
 impl PoolHeaderFlags {

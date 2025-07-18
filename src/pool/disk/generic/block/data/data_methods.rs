@@ -4,22 +4,21 @@
 
 // Imports
 
-use std::cmp::min;
 use super::data_struct::DataBlock;
-
+use std::cmp::min;
 
 // Implementations
 
 impl DataBlock {
     /// Write data to this block from the provided buffer.
-    /// 
+    ///
     /// Returns number of bytes written.
     pub(super) fn write(&mut self, bytes: &[u8]) -> u16 {
         write_to_block(self, bytes)
     }
     /// Read all data from this block into the provided buffer.
     /// Buffer must be at least 506 bytes to allow a full block read.
-    /// 
+    ///
     /// Returns number of bytes read.
     pub(super) fn read(&self, buffer: &mut [u8]) -> u16 {
         read_from_block(self, buffer)
@@ -37,10 +36,13 @@ impl DataBlock {
 fn write_to_block(block: &mut DataBlock, bytes: &[u8]) -> u16 {
     // Calculate how many bytes to write
     // We can write at most 508 bytes, so try to grab that many, or as much as we can.
-    let number_of_bytes_to_write: u16 = min(508_usize, bytes.len()).try_into().expect("Max is always 512");
+    let number_of_bytes_to_write: u16 = min(508_usize, bytes.len())
+        .try_into()
+        .expect("Max is always 512");
 
     // Copy that many bytes in
-    block.data[..number_of_bytes_to_write as usize].copy_from_slice(&bytes[..number_of_bytes_to_write as usize]);
+    block.data[..number_of_bytes_to_write as usize]
+        .copy_from_slice(&bytes[..number_of_bytes_to_write as usize]);
 
     // Update the length with how many bytes are in the block
     block.length = number_of_bytes_to_write;

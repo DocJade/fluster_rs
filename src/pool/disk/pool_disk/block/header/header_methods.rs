@@ -51,14 +51,19 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, FloppyDriveError> {
     // Get block 0 of disk 0
 
     // if we are running with virtual disks, we skip the prompt.
-    if !USE_VIRTUAL_DISKS.lock().expect("Fluster is single threaded.").is_some() {
+    if !USE_VIRTUAL_DISKS
+        .lock()
+        .expect("Fluster is single threaded.")
+        .is_some()
+    {
         // Not using virtual disks, prompt the user...
-        let _ = rprompt::prompt_reply("Please insert the pool root disk (Disk 0), then press enter.");
+        let _ =
+            rprompt::prompt_reply("Please insert the pool root disk (Disk 0), then press enter.");
     }
 
     // We will contain all of our logic within a loop, so if the user inserts the incorrect disk we can ask for another, etc
     // This is messy. Sorry.
-    
+
     loop {
         // Attempt to extract the header
         // First we need to open the disk, which can fail for various reasons.
@@ -74,7 +79,7 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, FloppyDriveError> {
                 warn!("Error type: {error}");
                 // Try again
                 continue;
-            },
+            }
         };
 
         // We've now read in either the PoolDisk, or some other type of disk.
@@ -83,43 +88,44 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, FloppyDriveError> {
         match some_disk {
             crate::pool::disk::drive_struct::DiskType::Pool(pool_disk) => {
                 // This is what we want!
-                return Ok(pool_disk.header)
-            },
+                return Ok(pool_disk.header);
+            }
             crate::pool::disk::drive_struct::DiskType::Standard(standard_disk) => {
                 // For any disk type other than Blank, we will ask if user wants to wipe it.
                 display_info_and_ask_wipe(DiskType::Standard(standard_disk));
                 // Start the loop over, if they wiped the disk, the outcome will change.
                 continue;
-            },
+            }
             crate::pool::disk::drive_struct::DiskType::Dense(dense_disk) => {
                 display_info_and_ask_wipe(DiskType::Dense(dense_disk));
                 continue;
-            },
+            }
             crate::pool::disk::drive_struct::DiskType::Unknown(file) => {
                 display_info_and_ask_wipe(DiskType::Unknown(file));
                 continue;
-            },
+            }
             crate::pool::disk::drive_struct::DiskType::Blank(disk) => {
                 // The disk is blank, we will ask if the user wants to create a new pool.
                 prompt_for_new_pool(disk);
                 // The user either created a new pool, or didnt, so we just continue and run through this again.
                 continue;
-            },
+            }
         }
 
         // One of the branch arms has to be hit.
         unreachable!();
-
     }
 }
-
 
 /// Ask the user if they want to create a new pool with the currently inserted disk.
 /// If so, we blank out the disk
 fn prompt_for_new_pool(disk: BlankDisk) -> Result<(), FloppyDriveError> {
-
     // if we are running with virtual disks, we skip the prompt.
-    if USE_VIRTUAL_DISKS.lock().expect("Fluster is single threaded.").is_some() {
+    if USE_VIRTUAL_DISKS
+        .lock()
+        .expect("Fluster is single threaded.")
+        .is_some()
+    {
         debug!("We are running with virtual disks, skipping the new pool prompt.");
         // Using virtual disks, we are going to create the pool immediately.
         create_new_pool_disk(disk)?;
@@ -136,7 +142,7 @@ fn prompt_for_new_pool(disk: BlankDisk) -> Result<(), FloppyDriveError> {
     loop {
         let reply = rprompt::prompt_reply("y/n: ")?; // Weirdly enough, this is an IO error, lol
         if reply.to_lowercase().starts_with('y') {
-            break
+            break;
         } else if reply.to_lowercase().starts_with('n') {
             // They dont wanna make a new one.
             return Ok(());
@@ -155,11 +161,11 @@ fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolDiskHeader, PoolHe
         // The disk may be blank though.
         if block.data.iter().all(|byte| *byte == 0) {
             // Disk is blank
-            return Err(PoolHeaderError::Blank)
+            return Err(PoolHeaderError::Blank);
         }
 
         // Something else is wrong.
-        return Err(PoolHeaderError::Invalid)
+        return Err(PoolHeaderError::Invalid);
     }
 
     // Pool headers always have bit 7 set in the flags, other headers are forbidden from writing this bit.
@@ -167,53 +173,40 @@ fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolDiskHeader, PoolHe
         Some(ok) => ok,
         None => {
             // extra bits in the flags were set, either this isn't a pool header, or it is corrupted in some way.
-            return Err(PoolHeaderError::Invalid)
-        },
+            return Err(PoolHeaderError::Invalid);
+        }
     };
-    
+
     // Make sure the pool header bit is indeed set.
     if !flags.contains(PoolHeaderFlags::RequiredHeaderBit) {
         // The header must have missed the joke, since it didn't quite get the bit.
         // Not a pool header.
-        return Err(PoolHeaderError::Invalid)
+        return Err(PoolHeaderError::Invalid);
     }
 
     // Now we can actually start extracting the header.
 
     // Highest disk
-    let highest_known_disk: u16 = u16::from_le_bytes(
-            block.data[9..9 + 2]
-            .try_into()
-            .expect("Impossible")
-    );
+    let highest_known_disk: u16 =
+        u16::from_le_bytes(block.data[9..9 + 2].try_into().expect("Impossible"));
 
     // Disk with next free block
-    let disk_with_next_free_block: u16 = u16::from_le_bytes(
-            block.data[11..11 + 2]
-            .try_into()
-            .expect("Impossible")
-    );
+    let disk_with_next_free_block: u16 =
+        u16::from_le_bytes(block.data[11..11 + 2].try_into().expect("Impossible"));
 
-    
     // Blocks free in pool
-    let pool_blocks_free: u16 = u16::from_le_bytes(
-            block.data[13..13 + 2]
-            .try_into()
-            .expect("Impossible")
-    );
+    let pool_blocks_free: u16 =
+        u16::from_le_bytes(block.data[13..13 + 2].try_into().expect("Impossible"));
 
-    Ok(
-        PoolDiskHeader {
-            flags,
-            highest_known_disk,
-            disk_with_next_free_block,
-            pool_blocks_free,
-        }
-    )
+    Ok(PoolDiskHeader {
+        flags,
+        highest_known_disk,
+        disk_with_next_free_block,
+        pool_blocks_free,
+    })
 }
 
 fn pool_header_to_raw_block(header: &PoolDiskHeader) -> RawBlock {
-
     // Deconstruct / discombobulate
     #[deny(unused_variables)] // You need to write ALL of them.
     let PoolDiskHeader {
@@ -234,18 +227,17 @@ fn pool_header_to_raw_block(header: &PoolDiskHeader) -> RawBlock {
 
     // Highest known disk
     buffer[9..9 + 2].copy_from_slice(&highest_known_disk.to_le_bytes());
-    
+
     // Disk with next free block
     buffer[11..11 + 2].copy_from_slice(&disk_with_next_free_block.to_le_bytes());
-    
+
     // Free blocks
     buffer[13..13 + 2].copy_from_slice(&pool_blocks_free.to_le_bytes());
-
 
     // Add the CRC
     // TODO: Make sure there is a test for valid crcs on this header type
     add_crc_to_block(&mut buffer);
-    
+
     // This needs to always go at block 0
     RawBlock {
         block_index: 0,
@@ -264,7 +256,7 @@ fn create_new_pool_disk(mut disk: BlankDisk) -> Result<(), FloppyDriveError> {
 
     // Write it to the disk!
     disk.write_block(&writeable_block)?;
-    
+
     // Done!
     Ok(())
 }
@@ -274,7 +266,9 @@ fn check_for_external_error(error: &FloppyDriveError) -> Result<(), FloppyDriveE
     // There are certian types of errors we cannot recover from when reading in disks.
     // Reasons are documented next to their corresponding match arms.
 
-    warn!("Encountered an error while attempting to get information about the currently inserted floppy.");
+    warn!(
+        "Encountered an error while attempting to get information about the currently inserted floppy."
+    );
     warn!("{error}");
 
     // TODO: I just wanna get things working, i'll fix this later.
@@ -286,7 +280,6 @@ fn check_for_external_error(error: &FloppyDriveError) -> Result<(), FloppyDriveE
         FloppyDriveError::BadHeader(header_conversion_error) => todo!(),
         FloppyDriveError::BlockError(block_error) => todo!(),
     }
-
 }
 
 // Brand new pool header
@@ -320,21 +313,24 @@ fn new_pool_header() -> PoolDiskHeader {
 /// Will also return nothing if the user does not wipe the disk.
 fn display_info_and_ask_wipe(disk: DiskType) -> Result<(), FloppyDriveError> {
     // This isn't a very friendly interface, but it'll do for now.
-    
+
     // Display the disk type
     println!("The disk inserted is not a pool disk. It is of type {disk:?}.");
     print!("Would you like to wipe this disk?");
     loop {
-        let answer = rprompt::prompt_reply("y/n")?.to_ascii_lowercase().contains('y');
+        let answer = rprompt::prompt_reply("y/n")?
+            .to_ascii_lowercase()
+            .contains('y');
         if answer {
             // Wipe time!
             todo!()
         } else {
             // No wipe.
             print!("Okay this disk will not be wiped.");
-            let _ = rprompt::prompt_reply("Please insert another disk (That you think the pool is on), then hit return.")?;
+            let _ = rprompt::prompt_reply(
+                "Please insert another disk (That you think the pool is on), then hit return.",
+            )?;
             return Ok(());
         }
     }
-    
 }

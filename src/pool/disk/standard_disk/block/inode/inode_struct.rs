@@ -21,12 +21,12 @@ pub(super) struct Inode {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(super) struct InodeFile {
     pub(super) size: u64,
-    pub(super) pointer: DiskPointer // Points to extents
+    pub(super) pointer: DiskPointer, // Points to extents
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(super) struct InodeDirectory {
-    pub(super) pointer: DiskPointer // Points to directory
+    pub(super) pointer: DiskPointer, // Points to directory
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -52,7 +52,7 @@ pub(super) struct InodeBlock {
     // Manipulating Inodes must be done through methods on the struct
     pub(super) bytes_free: u16,
     pub(super) next_inode_block: u16,
-    pub(super) inodes_data: [u8; 503]
+    pub(super) inodes_data: [u8; 503],
 }
 
 bitflags! {

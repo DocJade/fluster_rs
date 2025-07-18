@@ -31,7 +31,10 @@ pub fn find_free_space<T: BytePingPong>(data: &[u8], requested_space: usize) -> 
     let mut index: usize = 0;
 
     // Sanity check, are we requesting more bytes than there is room possibly for bytes?
-    assert!(requested_space <= data.len(), "We shouldn't try to find `x` bytes free space in a slice smaller than `x`.");
+    assert!(
+        requested_space <= data.len(),
+        "We shouldn't try to find `x` bytes free space in a slice smaller than `x`."
+    );
 
     // We wont search bytes that are too far into the block to have enough space after them
     // for the incoming data.
@@ -51,11 +54,13 @@ pub fn find_free_space<T: BytePingPong>(data: &[u8], requested_space: usize) -> 
         }
 
         // The bit is not set. Check if there's room
-        let enough_space: bool = data[index..index + requested_space].iter().all(|&byte| byte == 0);
+        let enough_space: bool = data[index..index + requested_space]
+            .iter()
+            .all(|&byte| byte == 0);
 
         if enough_space {
             // Found space!
-            return Some(index)
+            return Some(index);
         }
 
         // There was a byte in the way, find which byte caused it

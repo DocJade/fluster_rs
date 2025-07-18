@@ -4,7 +4,7 @@
 
 // Imports
 
-use rand::{self, random_bool, Rng};
+use rand::{self, Rng, random_bool};
 
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryBlock;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryBlockError;
@@ -32,7 +32,6 @@ fn directory_item_serialization() {
     }
 }
 
-
 #[test]
 fn filled_directory_block_serialization() {
     for _ in 0..1000 {
@@ -40,13 +39,11 @@ fn filled_directory_block_serialization() {
         // Fill with random inodes until we run out of room.
         loop {
             match test_block.try_add_item(DirectoryItem::get_random()) {
-                Ok(_) => { break },
-                Err(err) => {
-                    match err {
-                        DirectoryBlockError::NotEnoughSpace => todo!(),
-                        _ => panic!("Got an error while adding item!")
-                    }
-                }
+                Ok(_) => break,
+                Err(err) => match err {
+                    DirectoryBlockError::NotEnoughSpace => todo!(),
+                    _ => panic!("Got an error while adding item!"),
+                },
             }
         }
 
@@ -78,13 +75,13 @@ fn adding_and_removing_updates_size() {
         let mut test_block: DirectoryBlock = DirectoryBlock::new();
         let random_item: DirectoryItem = DirectoryItem::get_random();
         let new_free = test_block.bytes_free;
-        
+
         test_block.try_add_item(random_item.clone()).unwrap();
         let added_free = test_block.bytes_free;
-        
+
         test_block.try_remove_item(random_item).unwrap();
         let removed_free = test_block.bytes_free;
-        
+
         // Added should have less space
         assert!(added_free < new_free);
         // removed should have more space
@@ -93,7 +90,6 @@ fn adding_and_removing_updates_size() {
         assert!(new_free == removed_free);
     }
 }
-
 
 // Impl for going gorilla mode, absolutely ape shit, etc
 
@@ -137,5 +133,4 @@ fn get_random_name() -> String {
 
     // make the string
     Alphanumeric.sample_string(&mut random, random_length as usize)
-
 }

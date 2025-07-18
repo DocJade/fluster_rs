@@ -6,7 +6,18 @@ use std::fs::File;
 
 use log::error;
 
-use crate::pool::disk::{drive_struct::{DiskBootstrap, FloppyDriveError}, generic::{block::{block_structs::{BlockError, RawBlock}, crc::check_crc}, disk_trait::GenericDiskMethods, io::{read::read_block_direct, write::write_block_direct}}, pool_disk::block::header::header_struct::PoolDiskHeader};
+use crate::pool::disk::{
+    drive_struct::{DiskBootstrap, FloppyDriveError},
+    generic::{
+        block::{
+            block_structs::{BlockError, RawBlock},
+            crc::check_crc,
+        },
+        disk_trait::GenericDiskMethods,
+        io::{read::read_block_direct, write::write_block_direct},
+    },
+    pool_disk::block::header::header_struct::PoolDiskHeader,
+};
 
 use super::pool_disk_struct::PoolDisk;
 
@@ -33,7 +44,7 @@ impl DiskBootstrap for PoolDisk {
         Self {
             number: 0,
             #[allow(clippy::unwrap_used)] // TODO: remove unwrap.
-            header: PoolDiskHeader::from_block(&block).unwrap(), 
+            header: PoolDiskHeader::from_block(&block).unwrap(),
             disk_file: file,
         }
     }
@@ -53,7 +64,7 @@ impl GenericDiskMethods for PoolDisk {
     }
 
     #[doc = " Get the inner file used for IO operations"]
-    fn disk_file(&mut self) ->  &mut File {
+    fn disk_file(&mut self) -> &mut File {
         &mut self.disk_file
     }
 

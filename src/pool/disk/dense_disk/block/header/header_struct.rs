@@ -2,10 +2,7 @@
 
 // Imports
 
-
 // Structs, Enums, Flags
 
 /// The header for dense disks
-pub struct DenseDiskHeader {
-
-}
+pub struct DenseDiskHeader {}

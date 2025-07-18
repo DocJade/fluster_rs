@@ -5,7 +5,6 @@
 pub struct DataBlock {
     // Number of data bytes on the disk
     // You can only interact with this data via methods.
-    pub(in super) length: u16,
-    pub(in super) data: [u8; 508]
-    // The last 
+    pub(super) length: u16,
+    pub(super) data: [u8; 508], // The last
 }

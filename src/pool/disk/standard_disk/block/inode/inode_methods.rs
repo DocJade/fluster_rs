@@ -2,20 +2,23 @@
 
 // Imports
 
-
 // Implementations
 
+use super::inode_struct::Inode;
+use super::inode_struct::InodeBlock;
+use super::inode_struct::InodeBlockError;
+use super::inode_struct::InodeBlockFlags;
+use super::inode_struct::InodeFlags;
+use super::inode_struct::InodeReadError;
 use crate::pool::disk::generic::block::crc::add_crc_to_block;
 use crate::pool::disk::generic::generic_structs::find_space::find_free_space;
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
-use crate::pool::disk::generic::{block::block_structs::RawBlock, generic_structs::find_space::BytePingPong};
-use crate::pool::disk::standard_disk::block::inode::inode_struct::{InodeDirectory, InodeFile, InodeTimestamp};
-use super::inode_struct::InodeReadError;
-use super::inode_struct::InodeBlockError;
-use super::inode_struct::InodeBlockFlags;
-use super::inode_struct::InodeBlock;
-use super::inode_struct::InodeFlags;
-use super::inode_struct::Inode;
+use crate::pool::disk::generic::{
+    block::block_structs::RawBlock, generic_structs::find_space::BytePingPong,
+};
+use crate::pool::disk::standard_disk::block::inode::inode_struct::{
+    InodeDirectory, InodeFile, InodeTimestamp,
+};
 
 impl From<RawBlock> for InodeBlock {
     fn from(value: RawBlock) -> Self {
@@ -42,7 +45,7 @@ impl InodeBlock {
         from_raw_block(&block)
     }
     /// Create a new inode block
-    /// 
+    ///
     /// New Inode blocks are the new final block on the disk.
     /// New Inode blocks do not point to the next block (as none exists).
     /// Caller is responsible with updating previous block to point to this new block.
@@ -51,7 +54,7 @@ impl InodeBlock {
     }
     /// Try to add an Inode to this block.
     /// Updates the byte usage counter.
-    /// 
+    ///
     /// Returns the index of the added inode. (the first inode is 0)
     pub fn try_add_inode(&mut self, inode: Inode) -> Result<u16, InodeBlockError> {
         inode_block_try_add_inode(self, inode)
@@ -59,13 +62,13 @@ impl InodeBlock {
     /// Removes inodes based off of the offset into the block. (NOT index!)
     /// Updates the byte usage counter.
     /// This does not remove the data the inode points to. The caller is responsible for propagation.
-    /// 
+    ///
     /// Returns nothing.
     pub fn try_remove_inode(&mut self, inode_offset: u16) -> Result<(), InodeBlockError> {
         inode_block_try_remove_inode(self, inode_offset)
     }
     /// Try and read an inode from the block.
-    /// 
+    ///
     /// Returns Inode.
     pub fn try_read_inode(&self, inode_offset: u16) -> Result<Inode, InodeReadError> {
         inode_block_try_read_inode(self, inode_offset)
@@ -89,7 +92,10 @@ fn inode_block_try_read_inode(block: &InodeBlock, offset: u16) -> Result<Inode, 
     return Ok(Inode::from_bytes(&block.inodes_data[offset as usize..]));
 }
 
-fn inode_block_try_remove_inode(block: &mut InodeBlock, inode_offset: u16) -> Result<(), InodeBlockError> {
+fn inode_block_try_remove_inode(
+    block: &mut InodeBlock,
+    inode_offset: u16,
+) -> Result<(), InodeBlockError> {
     // Attempt to remove an inode from the block
 
     // Assumption:
@@ -97,12 +103,12 @@ fn inode_block_try_remove_inode(block: &mut InodeBlock, inode_offset: u16) -> Re
     // There isn't a great way to check this besides scanning through the entire block to find all of the
     // inodes, but we can at least check the marker bit.
     // Additionally, if there are extra unused bits set in the flags, this is almost certainly an invalid offset.
-    let flags = match InodeFlags::from_bits(block.inodes_data[inode_offset as usize])  {
+    let flags = match InodeFlags::from_bits(block.inodes_data[inode_offset as usize]) {
         Some(ok) => ok,
         None => {
             // Unused bits are set. This cannot be the start of an inode.
             return Err(InodeBlockError::InvalidOffset);
-        },
+        }
     };
 
     if !flags.contains(InodeFlags::MarkerBit) {
@@ -113,11 +119,16 @@ fn inode_block_try_remove_inode(block: &mut InodeBlock, inode_offset: u16) -> Re
 
     // Assumption: There is a valid inode at the provided offset
     // Yes the cast back and forth is silly, but at least its easy.
-    let inode_to_remove_length: usize = Inode::from_bytes(&block.inodes_data[inode_offset as usize..]).to_bytes().len();
+    let inode_to_remove_length: usize =
+        Inode::from_bytes(&block.inodes_data[inode_offset as usize..])
+            .to_bytes()
+            .len();
 
     // Blank out those bytes
     // This range is inclusive because we are removing the last byte of the item as well, not just up to the last byte.
-    block.inodes_data[inode_offset as usize..inode_offset as usize + inode_to_remove_length].iter_mut().for_each(|byte| *byte = 0);
+    block.inodes_data[inode_offset as usize..inode_offset as usize + inode_to_remove_length]
+        .iter_mut()
+        .for_each(|byte| *byte = 0);
 
     // sanity check, bytes are now empty
     #[cfg(test)]
@@ -126,7 +137,6 @@ fn inode_block_try_remove_inode(block: &mut InodeBlock, inode_offset: u16) -> Re
             assert_eq!(block.inodes_data[inode_offset as usize + i], 0)
         }
     }
-    
 
     // update how many bytes are free
     block.bytes_free += inode_to_remove_length as u16;
@@ -135,8 +145,10 @@ fn inode_block_try_remove_inode(block: &mut InodeBlock, inode_offset: u16) -> Re
     Ok(())
 }
 
-fn inode_block_try_add_inode(inode_block: &mut InodeBlock, new_inode: Inode) -> Result<u16, InodeBlockError> {
-
+fn inode_block_try_add_inode(
+    inode_block: &mut InodeBlock,
+    new_inode: Inode,
+) -> Result<u16, InodeBlockError> {
     // Attempt to add an inode to the block.
 
     // Check if we have room for the new inode.
@@ -145,16 +157,16 @@ fn inode_block_try_add_inode(inode_block: &mut InodeBlock, new_inode: Inode) -> 
 
     if new_inode_length > inode_block.bytes_free.into() {
         // We don't have room for this inode. The caller will have to use another block.
-        return Err(InodeBlockError::NotEnoughSpace)
+        return Err(InodeBlockError::NotEnoughSpace);
     }
 
     // find a spot to put our new Inode
-    let offset = match find_free_space::<Inode>(&inode_block.inodes_data, new_inode_length){
+    let offset = match find_free_space::<Inode>(&inode_block.inodes_data, new_inode_length) {
         Some(ok) => ok,
         None => {
             // couldn't find enough space, block must be fragmented.
             return Err(InodeBlockError::BlockIsFragmented);
-        },
+        }
     };
 
     // Put in the Inode
@@ -170,7 +182,6 @@ fn inode_block_try_add_inode(inode_block: &mut InodeBlock, new_inode: Inode) -> 
 }
 
 fn new_inode_block() -> InodeBlock {
-
     // Create the flags
     // By default, the bit for being the final block is set.
     let flags: InodeBlockFlags = InodeBlockFlags::FinalInodeBlockOnThisDisk;
@@ -198,19 +209,18 @@ fn new_inode_block() -> InodeBlock {
 }
 
 fn from_raw_block(block: &RawBlock) -> InodeBlock {
-
     // Flags
     let flags: InodeBlockFlags = InodeBlockFlags::from_bits_retain(block.data[0]);
 
     // Bytes free
     let bytes_free: u16 = u16::from_le_bytes(block.data[1..1 + 2].try_into().expect("2 into 2"));
-    
+
     // Next inode block
-    let next_inode_block: u16 = u16::from_le_bytes(block.data[3..3 + 2].try_into().expect("2 into 2"));
+    let next_inode_block: u16 =
+        u16::from_le_bytes(block.data[3..3 + 2].try_into().expect("2 into 2"));
 
     // Inodes
     let inodes_data: [u8; 503] = block.data[5..5 + 503].try_into().expect("503 into 503");
-    
 
     // All done
     InodeBlock {
@@ -221,7 +231,7 @@ fn from_raw_block(block: &RawBlock) -> InodeBlock {
     }
 }
 
-fn to_raw_bytes(block: &InodeBlock, block_number: u16) -> RawBlock{
+fn to_raw_bytes(block: &InodeBlock, block_number: u16) -> RawBlock {
     let InodeBlock {
         flags,
         bytes_free,
@@ -282,7 +292,7 @@ impl Inode {
         // Timestamps
         // Created
         vec.extend(self.created.to_bytes());
-        
+
         // Modified
         vec.extend(self.modified.to_bytes());
 
@@ -298,7 +308,8 @@ impl Inode {
         let mut timestamp_offset: usize = 0;
 
         // Flags
-        let flags: InodeFlags = InodeFlags::from_bits(bytes[0]).expect("Flags should only have used bits set.");
+        let flags: InodeFlags =
+            InodeFlags::from_bits(bytes[0]).expect("Flags should only have used bits set.");
         timestamp_offset += 1;
 
         // We must have the marker bit.
@@ -307,31 +318,39 @@ impl Inode {
         // File or directory
         let file: Option<InodeFile> = if flags.contains(InodeFlags::FileType) {
             timestamp_offset += 12;
-            Some(InodeFile::from_bytes(bytes[1..1 + 12].try_into().expect("12 = 12")))
+            Some(InodeFile::from_bytes(
+                bytes[1..1 + 12].try_into().expect("12 = 12"),
+            ))
         } else {
             None
         };
-        
+
         let directory: Option<InodeDirectory> = if !flags.contains(InodeFlags::FileType) {
             timestamp_offset += 4;
-            Some(InodeDirectory::from_bytes(bytes[1..1 + 4].try_into().expect("4 = 4")))
+            Some(InodeDirectory::from_bytes(
+                bytes[1..1 + 4].try_into().expect("4 = 4"),
+            ))
         } else {
             None
         };
-        
+
         // Timestamps
-        
+
         // Created
         let created: InodeTimestamp = InodeTimestamp::from_bytes(
-            bytes[timestamp_offset..timestamp_offset + 12].try_into().expect("12 = 12")
+            bytes[timestamp_offset..timestamp_offset + 12]
+                .try_into()
+                .expect("12 = 12"),
         );
-        
+
         // Created timestamp is 12 bytes.
         timestamp_offset += 12;
-        
+
         // Modified
         let modified: InodeTimestamp = InodeTimestamp::from_bytes(
-            bytes[timestamp_offset..timestamp_offset + 12].try_into().expect("12 = 12")
+            bytes[timestamp_offset..timestamp_offset + 12]
+                .try_into()
+                .expect("12 = 12"),
         );
 
         // Done.

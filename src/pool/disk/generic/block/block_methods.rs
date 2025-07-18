@@ -3,20 +3,17 @@
 // Imports
 use super::block_structs::BlockError;
 
-
 // Implementations
 
 //
 // Error type
 //
 
-
 impl From<std::io::Error> for BlockError {
     fn from(value: std::io::Error) -> Self {
         extract_read_error(value)
     }
 }
-
 
 fn extract_read_error(error: std::io::Error) -> BlockError {
     // What happened?
