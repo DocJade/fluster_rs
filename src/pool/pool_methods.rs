@@ -4,7 +4,7 @@
 
 use std::process::exit;
 use log::error;
-use crate::pool::disk::drive_struct::DiskTypes;
+use crate::pool::disk::drive_struct::DiskType;
 use crate::pool::pool_struct::Pool;
 use crate::pool::pool_struct::PoolStatistics;
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolDiskHeader;
@@ -79,6 +79,6 @@ fn initalize_pool(pool: &Pool) -> Result<(),()> {
 }
 
 /// Add a new disk to the pool.
-fn add_disk(pool: &Pool, disk_type: DiskTypes, disk_number: u16) -> Result<(),()> {
+fn add_disk(pool: &Pool, disk_type: DiskType, disk_number: u16) -> Result<(),()> {
     todo!()
 }

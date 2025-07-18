@@ -5,6 +5,6 @@ pub trait HasDiskNumber {
     fn get_disk_number(&self) -> u16;
 }
 
-pub fn find_free_space<T: HasDiskNumber>(disk: T) -> u16 {
+pub fn get_disk_number<T: HasDiskNumber>(disk: T) -> u16 {
     disk.get_disk_number()
 }

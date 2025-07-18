@@ -1,19 +1,14 @@
-// Pool disk
-
-//Imports
+// Sometimes dense people still do things
 
 use crate::pool::disk::drive_struct::DiskBootstrap;
 
-use super::pool_disk_struct::PoolDisk;
+use super::dense_disk_struct::DenseDisk;
 
-// Implementations
-
-impl PoolDisk {
+impl DenseDisk {
     // todo
 }
 
-// Bootstrapping
-impl DiskBootstrap for PoolDisk {
+impl DiskBootstrap for DenseDisk {
     fn bootstrap(block: crate::pool::disk::generic::block::block_structs::RawBlock) -> Self {
         todo!()
     }

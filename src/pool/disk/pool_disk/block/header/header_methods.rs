@@ -4,7 +4,11 @@
 use log::{info, warn};
 
 use crate::filesystem::filesystem_struct::USE_VIRTUAL_DISKS;
+use crate::pool::disk::drive_methods::check_for_magic;
+use crate::pool::disk::drive_struct::FloppyDrive;
 use crate::pool::disk::generic::block::block_structs::RawBlock;
+use crate::pool::disk::generic::block::crc::add_crc_to_block;
+use crate::pool::disk::pool_disk::block::header::header_struct::PoolHeaderFlags;
 
 use super::header_struct::PoolDiskHeader;
 use super::header_struct::PoolHeaderError;
@@ -26,6 +30,8 @@ impl PoolDiskHeader {
     }
 }
 
+/// This function bypasses the usual disk types.
+/// I dont want to rewrite this right now. It'll do.
 fn read_pool_header_from_disk() -> Result<PoolDiskHeader, PoolHeaderError> {
     // Get the header block from the pool disk (disk 0)
     // If the header is missing, and there is no fluster magic, ask if we are creating a new pool.
@@ -49,7 +55,7 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, PoolHeaderError> {
         // First we need to open the disk, which can fail for various reasons.
         // This is the unchecked method, so we will need to read the header off ourself.
         // If this fails, check if its unrecoverable, if it isnt, handle that
-        let read_disk = match Disk::unchecked_open(0) {
+        let some_disk = match FloppyDrive::open_direct(0) {
             Ok(ok) => ok,
             Err(error) => {
                 // Opening the disk failed, check if we can recover
@@ -61,6 +67,17 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, PoolHeaderError> {
                 continue;
             },
         };
+
+        // We've now read in either the PoolDisk, or some other type of disk.
+        // Find out what it is.
+
+        match some_disk {
+            crate::pool::disk::drive_struct::DiskType::Pool(pool_disk) => todo!(),
+            crate::pool::disk::drive_struct::DiskType::Standard(standard_disk) => {return Err(PoolHeaderError::Invalid)},
+            crate::pool::disk::drive_struct::DiskType::Dense(dense_disk) => todo!(),
+            crate::pool::disk::drive_struct::DiskType::Unknown => todo!(),
+            crate::pool::disk::drive_struct::DiskType::Blank => todo!(),
+        }
 
         // Read in block 0, which should contain the header.
         // We skip CRC checks, since we will check the CRC when reconstructing the header.
