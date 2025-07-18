@@ -1,3 +1,4 @@
-pub mod filesystem_struct;
 mod filesystem_methods;
+pub mod filesystem_struct;
+#[cfg(test)]
 mod tests;

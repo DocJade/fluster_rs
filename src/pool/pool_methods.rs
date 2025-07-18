@@ -1,18 +1,28 @@
 // Interacting with the pool
 
+// Imports
+
+use crate::pool::disk::drive_struct::DiskType;
+use crate::pool::disk::pool_disk::block::header::header_struct::PoolDiskHeader;
+use crate::pool::pool_struct::Pool;
+use crate::pool::pool_struct::PoolStatistics;
+use log::error;
 use std::process::exit;
 
-use crate::pool::{pool_disk::block::header::pool_header_struct::PoolHeader, pool_struct::{Pool, PoolStatistics}};
-use log::error;
+// Implementations
 
 impl Pool {
     /// Sync information about the pool to disk
-    pub fn sync(self) -> Result<(), ()> {
+    pub fn sync(&self) -> Result<(), ()> {
         sync(self)
     }
     /// Read in pool information from disk
-    pub fn initialize() -> Self {
-        initialize()
+    pub fn load() -> Self {
+        load()
+    }
+    /// Brand new pools need to run some setup functions to get everything in a ready to use state.
+    fn initalize(&self) -> Result<(), ()> {
+        initalize_pool(self)
     }
 }
 
@@ -29,17 +39,16 @@ impl PoolStatistics {
     }
 }
 
-
 /// Sync information about the pool to disk
-pub(super) fn sync(pool: Pool) -> Result<(), ()> {
+pub(super) fn sync(pool: &Pool) -> Result<(), ()> {
     todo!()
 }
 
-
-/// Read in pool information from disk
-pub(super) fn initialize() -> Pool {
+/// Read in pool information from disk.
+/// Will prompt to make new pools if needed.
+pub(super) fn load() -> Pool {
     // Read in the header. If this fails, we cannot start the filesystem.
-    let header = match PoolHeader::read() {
+    let header = match PoolDiskHeader::read() {
         Ok(ok) => ok,
         Err(error) => {
             // We cannot start the pool without reading in the header!
@@ -48,11 +57,26 @@ pub(super) fn initialize() -> Pool {
             println!("Reason: {error}");
             println!("Fluster will now exit.");
             exit(-1);
-        },
+        }
     };
 
     Pool {
         header,
         statistics: PoolStatistics::new(),
     }
+}
+
+/// Set up stuff for a brand new pool
+fn initalize_pool(pool: &Pool) -> Result<(), ()> {
+    // Things a pool needs:
+    // A second disk to start storing inodes on.
+    // A root directory.
+
+    // Lets get that second disk going
+    todo!()
+}
+
+/// Add a new disk to the pool.
+fn add_disk(pool: &Pool, disk_type: DiskType, disk_number: u16) -> Result<(), ()> {
+    todo!()
 }

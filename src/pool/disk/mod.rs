@@ -1,5 +1,8 @@
-pub(super) mod disk_struct;
-pub(super) mod disk_methods;
-mod io;
-pub mod block;
-mod generic_structs;
+pub mod blank_disk;
+pub mod dense_disk;
+mod drive_methods;
+pub mod drive_struct;
+pub mod generic;
+pub mod pool_disk;
+pub mod standard_disk;
+pub mod unknown_disk;
