@@ -6,6 +6,8 @@
 
 // Imports
 
+use log::debug;
+
 use crate::pool::disk::blank_disk::blank_disk_struct::BlankDisk;
 use crate::pool::disk::drive_struct::DiskBootstrap;
 use crate::pool::disk::generic::block::block_structs::BlockError;
@@ -81,17 +83,17 @@ fn open_and_deduce_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> 
     // Pool disk.
     // The header reads should check the CRC of the block.
     if header_block.data[8] & 0b10000000 != 0 {
-        return Ok(DiskType::Pool(PoolDisk::from_header(header_block)))
+        return Ok(DiskType::Pool(PoolDisk::from_header(header_block, disk_file)))
     }
 
     // Dense disk.
     if header_block.data[8] & 0b01000000 != 0 {
-        return Ok(DiskType::Dense(DenseDisk::from_header(header_block)))
+        return Ok(DiskType::Dense(DenseDisk::from_header(header_block, disk_file)))
     }
 
     // Standard disk.
     if header_block.data[8] & 0b00100000 != 0 {
-        return Ok(DiskType::Standard(StandardDisk::from_header(header_block)))
+        return Ok(DiskType::Standard(StandardDisk::from_header(header_block, disk_file)))
     }
     
     // it should be impossible to get here
@@ -112,7 +114,7 @@ fn get_floppy_drive_file(disk_number: u16) -> Result<File, FloppyDriveError> {
     // development, waiting for disk seeks is slow and loud lol.
 
     if let Some(ref path) = *USE_VIRTUAL_DISKS.lock().expect("Fluster is single threaded.") {
-        println!("Attempting to access virtual disk {disk_number}...");
+        debug!("Attempting to access virtual disk {disk_number}...");
         // Get the tempfile.
         // These files do not delete themselves.
 

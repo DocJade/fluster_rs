@@ -68,6 +68,6 @@ pub trait DiskBootstrap {
     // TODO: Let disk bootstraps fail.
     /// Create brand new disk.
     fn bootstrap(file: std::fs::File, disk_number: u16) -> Result<Self, FloppyDriveError> where Self: std::marker::Sized;
-    /// Create self from incoming header block.
-    fn from_header(block: RawBlock) -> Self;
+    /// Create self from incoming header block and file.
+    fn from_header(block: RawBlock, file: File) -> Self;
 }

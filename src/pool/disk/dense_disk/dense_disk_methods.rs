@@ -11,11 +11,11 @@ impl DenseDisk {
 }
 
 impl DiskBootstrap for DenseDisk {
-    fn bootstrap(file: std::fs::File, disk_number: u16) -> Result<Self, FloppyDriveError> {
+    fn bootstrap(file: File, disk_number: u16) -> Result<Self, FloppyDriveError> {
         todo!()
     }
 
-    fn from_header(block: crate::pool::disk::generic::block::block_structs::RawBlock) -> Self {
+    fn from_header(block: RawBlock, file: File) -> Self {
         // TODO: Check CRC.
         todo!()
     }

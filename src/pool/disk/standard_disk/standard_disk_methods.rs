@@ -16,7 +16,7 @@ impl DiskBootstrap for StandardDisk {
         create(file, disk_number)
     }
 
-    fn from_header(block: crate::pool::disk::generic::block::block_structs::RawBlock) -> Self {
+    fn from_header(block: RawBlock, file: File) -> Self {
         // TODO: Check CRC.
         todo!()
     }

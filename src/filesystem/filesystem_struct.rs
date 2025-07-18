@@ -5,7 +5,6 @@
 use std::{path::PathBuf, sync::Mutex};
 use easy_fuser::templates::DefaultFuseHandler;
 use crate::pool::pool_struct::Pool;
-
 // Structs, Enums, Flags
 
 pub struct FlusterFS {
