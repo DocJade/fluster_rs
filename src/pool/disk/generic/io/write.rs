@@ -13,6 +13,7 @@ use std::{fs::File, io::Write, os::unix::fs::FileExt};
 // Implementations
 
 /// Write a block to the currently inserted disk in the floppy drive
+/// ONLY FOR LOWER LEVEL USE, USE CHECKED_WRITE()!
 pub(crate) fn write_block_direct(mut disk_file: &File, block: &RawBlock) -> Result<(), BlockError> {
     // Bounds checking
     if block.block_index >= 2880 {

@@ -5,7 +5,7 @@ use std::fs::File;
 use crate::pool::disk::{
     drive_struct::{DiskBootstrap, FloppyDriveError},
     generic::{
-        block::block_structs::{BlockError, RawBlock},
+        block::{allocate::block_allocation::BlockAllocation, block_structs::{BlockError, RawBlock}},
         disk_trait::GenericDiskMethods,
         io::{read::read_block_direct, write::write_block_direct},
     },
@@ -28,10 +28,22 @@ impl DiskBootstrap for DenseDisk {
     }
 }
 
+// Block allocator
+// This disk has block level allocations
+impl BlockAllocation for DenseDisk {
+    fn get_allocation_table(&self) -> &[u8] {
+        &self.block_usage_map
+    }
+
+    fn set_allocation_table(&mut self, new_table: &[u8]) {
+        self.block_usage_map = new_table.try_into().expect("Incoming table should be the same as outgoing.");
+    }
+}
+
 impl GenericDiskMethods for DenseDisk {
     #[doc = " Read a block"]
     #[doc = " Cannot bypass CRC."]
-    fn read_block(self, block_number: u16) -> Result<RawBlock, BlockError> {
+    fn read_block(&self, block_number: u16) -> Result<RawBlock, BlockError> {
         read_block_direct(&self.disk_file, block_number, false)
     }
 

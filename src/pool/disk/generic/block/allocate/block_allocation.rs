@@ -1,7 +1,5 @@
 // Find, reserve, or even free blocks!
 
-use std::collections::HashSet;
-
 // We do not allow these operations to be misused, if invalid state is provided, we panic.
 // We will not:
 // free bytes that are already free

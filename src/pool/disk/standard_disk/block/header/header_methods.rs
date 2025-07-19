@@ -32,39 +32,12 @@ impl TryFrom<RawBlock> for StandardDiskHeader {
 fn extract_header(raw_block: &RawBlock) -> Result<StandardDiskHeader, FloppyDriveError> {
     // Time to pull apart the header!
 
-    // Make sure this is actually a header.
-    // Check magic and block number.
-    if raw_block.data[0..8] != *"Fluster!".as_bytes() || raw_block.block_index != 0 {
-        // Bad input.
-
-        // Either the disk has bad data on it, or is probably blank.
-        // Check if the disk is blank
-        if raw_block.data.iter().all(|&x| x == 0) {
-            // The block is completely blank.
-            return Err(FloppyDriveError::Uninitialized);
-        }
-
-        // Is this a fresh IBM disk?
-        if raw_block.data[510..] == [0x55, 0xAA] {
-            // Wow, a brand new floppy.
-            return Err(FloppyDriveError::Uninitialized);
-        }
-
-        return Err(HeaderConversionError::NotAHeaderBlock.into());
-    }
-
     // Bit flags
     let flags: StandardHeaderFlags = StandardHeaderFlags::from_bits_retain(raw_block.data[8]);
 
     // The disk number
     let disk_number: u16 =
         u16::from_le_bytes(raw_block.data[9..9 + 2].try_into().expect("Impossible"));
-
-    // If this is disk zero, or the reserved pool header bit is set (bit 7),
-    // that means we are currently trying to deserialize the POOL header. Abort.
-    if disk_number == 0 || flags.bits() & 0b1000000 != 0 {
-        return Err(HeaderConversionError::WrongHeader.into());
-    }
 
     // block usage bitplane
     let block_usage_map: [u8; 360] = raw_block.data[148..148 + 360]

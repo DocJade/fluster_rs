@@ -43,3 +43,6 @@ I've had too many hobby projects in the pass where I've thought to myself, "The 
 I'd prefer too many comments over a headache trying to reverse-engineer what I was thinking previously.
 
 Also it lowers the bar of entry for the casual viewer :D
+
+# Why do some of the higher level abstractions use so many generic traits?
+While writing this project, I learned more and more about traits, so I started using them because they're cool!

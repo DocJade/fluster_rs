@@ -28,14 +28,14 @@ Bitflags:
 
 | bit | flag                                          |
 | --- | --------------------------------------------- |
-| 0   | Dense Disk                                    |
+| 0   | Reserved                                      |
 | 1   | Reserved                                      |
 | 2   | Reserved                                      |
 | 3   | Reserved                                      |
 | 4   | Reserved                                      |
 | 5   | Reserved                                      |
-| 6   | Reserved                                      |
-| 7   | Reserved                                      |
+| 6   | Marker bit, Must always be set.               |
+| 7   | Reserved for Dense disks.  Must never be set. |
 | 8   | Reserved for Pool headers. Must never be set. |
 
 8 bytes:

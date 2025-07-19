@@ -35,6 +35,7 @@ impl PoolDiskHeader {
             highest_known_disk: random.random(),
             disk_with_next_free_block: random.random(),
             pool_blocks_free: random.random(),
+            block_usage_map: random_allocations(),
         }
     }
 }
@@ -45,4 +46,13 @@ impl PoolHeaderFlags {
         // Currently we only have the marker bit.
         PoolHeaderFlags::RequiredHeaderBit
     }
+}
+
+fn random_allocations() -> [u8; 360] {
+    let mut random: ThreadRng = rand::rng();
+    let mut buffer = [0u8; 360];
+    for byte in buffer.iter_mut() {
+        *byte = random.random()
+    }
+    buffer
 }

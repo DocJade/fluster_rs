@@ -199,11 +199,15 @@ fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolDiskHeader, PoolHe
     let pool_blocks_free: u16 =
         u16::from_le_bytes(block.data[13..13 + 2].try_into().expect("Impossible"));
 
+    // Block allocation map
+    let block_usage_map: [u8; 360] = block.data[148..148 + 360].try_into().expect("Impossible");
+
     Ok(PoolDiskHeader {
         flags,
         highest_known_disk,
         disk_with_next_free_block,
         pool_blocks_free,
+        block_usage_map,
     })
 }
 
@@ -215,6 +219,7 @@ fn pool_header_to_raw_block(header: &PoolDiskHeader) -> RawBlock {
         highest_known_disk,
         disk_with_next_free_block,
         pool_blocks_free,
+        block_usage_map
     } = header;
 
     // Create buffer for the header
@@ -234,6 +239,9 @@ fn pool_header_to_raw_block(header: &PoolDiskHeader) -> RawBlock {
 
     // Free blocks
     buffer[13..13 + 2].copy_from_slice(&pool_blocks_free.to_le_bytes());
+
+    // Block usage map
+    buffer[148..148 + 360].copy_from_slice(block_usage_map);
 
     // Add the CRC
     // TODO: Make sure there is a test for valid crcs on this header type
@@ -301,10 +309,16 @@ fn new_pool_header() -> PoolDiskHeader {
     // How many pool blocks are free? None! We only have the root disk!
     let pool_blocks_free: u16 = 0;
 
+    // What blocks are free on the pool disk? Not the first one!
+    let mut block_usage_map: [u8; 360] = [0u8; 360];
+    block_usage_map[0] = 0b10000000;
+    
+
     PoolDiskHeader {
         flags,
         highest_known_disk,
         disk_with_next_free_block,
         pool_blocks_free,
+        block_usage_map
     }
 }

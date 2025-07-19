@@ -6,13 +6,13 @@ This raises the requirement to having a minimum of 2 disks, but the overhead sho
 
 | Offset | Length | Field                                                                                          |
 | ------ | ------ | ---------------------------------------------------------------------------------------------- |
-| 0      | 8      | Magic number for idenifying a fluster drive `Fluster!`                                       |
+| 0      | 8      | Magic number for idenifying a fluster drive `Fluster!`                                         |
 | 8      | 1      | Bitflags                                                                                       |
 | 9      | 2      | Highest known disk number.                                                                     |
 | 11     | 2      | Disk with the next free block in the pool.<br />Set to u16::MAX if the final disk has no room. |
 | 13     | 2      | Number of blocks free across all disks in the pool.                                            |
 | -      | -      | Reserved                                                                                       |
-|        |        |                                                                                                |
+| 148    | 360    | Block usage bitplane                                                                           |
 | 509    | 4      | Block CRC                                                                                      |
 
 Bitflags:

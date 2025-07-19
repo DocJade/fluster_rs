@@ -11,7 +11,7 @@ use crate::pool::disk::{
     blank_disk::blank_disk_struct::BlankDisk,
     drive_struct::{DiskBootstrap, DiskType, FloppyDriveError},
     generic::{
-        block::block_structs::{BlockError, RawBlock},
+        block::{allocate::block_allocation::BlockAllocation, block_structs::{BlockError, RawBlock}},
         disk_trait::GenericDiskMethods,
         io::{read::read_block_direct, write::write_block_direct},
     },
@@ -29,7 +29,10 @@ impl DiskBootstrap for StandardDisk {
     fn bootstrap(file: File, disk_number: u16) -> Result<StandardDisk, FloppyDriveError> {
         // Make the disk
         let disk = create(file, disk_number)?;
+        // Now that we have a disk, we can use the safe IO.
+
         // Write the inode block
+        let inode_block = InodeBlock;
 
         // write the directory block
         todo!()
@@ -41,11 +44,22 @@ impl DiskBootstrap for StandardDisk {
     }
 }
 
+// This disk has block level allocations
+impl BlockAllocation for StandardDisk {
+    fn get_allocation_table(&self) -> &[u8] {
+        &self.block_usage_map
+    }
+
+    fn set_allocation_table(&mut self, new_table: &[u8]) {
+        self.block_usage_map = new_table.try_into().expect("Incoming table should be the same as outgoing.");
+    }
+}
+
 /// Ocasionally, we need to create fake headers during disk loading.
 impl StandardDiskHeader {
     fn spoof() -> Self {
         Self {
-            flags: StandardHeaderFlags::from_bits_retain(0b11111111),
+            flags: StandardHeaderFlags::from_bits_retain(0b00100000), // Gotta set that marker bit.
             disk_number: u16::MAX,
             block_usage_map: [1u8; 360],
         }
@@ -67,6 +81,7 @@ fn create(file: File, disk_number: u16) -> Result<StandardDisk, FloppyDriveError
     let mut disk: StandardDisk = StandardDisk {
         number: disk_number,
         header: StandardDiskHeader::spoof(),
+        block_usage_map: [0u8; 360],
         disk_file: file,
     };
 
@@ -100,7 +115,7 @@ fn initialize_numbered(disk: &mut StandardDisk, disk_number: u16) -> Result<(), 
     // New disks do have a few pre-allocated blocks, namely the header and the first inode block
     // So construct a map accordingly
     let mut block_usage_map: [u8; 360] = [0u8; 360];
-    block_usage_map[0] = 0b11000000; // TODO: Document that the block map is indexed literally, as in block 0 is the first bit.
+    block_usage_map[0] = 0b10000000; // We will set up the other 2 blocks later
 
     let header = StandardDiskHeader {
         flags,
@@ -122,7 +137,7 @@ fn initialize_numbered(disk: &mut StandardDisk, disk_number: u16) -> Result<(), 
 impl GenericDiskMethods for StandardDisk {
     #[doc = " Read a block"]
     #[doc = " Cannot bypass CRC."]
-    fn read_block(self, block_number: u16) -> Result<RawBlock, BlockError> {
+    fn read_block(&self, block_number: u16) -> Result<RawBlock, BlockError> {
         read_block_direct(&self.disk_file, block_number, false)
     }
 

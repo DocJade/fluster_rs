@@ -17,6 +17,8 @@ pub struct PoolDiskHeader {
     pub disk_with_next_free_block: u16,
     /// The number of free blocks across all disks
     pub pool_blocks_free: u16,
+    /// Map of used blocks on this disk
+    pub block_usage_map: [u8; 360],
 }
 
 bitflags! {

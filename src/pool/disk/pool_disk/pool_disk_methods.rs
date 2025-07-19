@@ -10,8 +10,7 @@ use crate::pool::disk::{
     drive_struct::{DiskBootstrap, FloppyDriveError},
     generic::{
         block::{
-            block_structs::{BlockError, RawBlock},
-            crc::check_crc,
+            allocate::block_allocation::BlockAllocation, block_structs::{BlockError, RawBlock}, crc::check_crc
         },
         disk_trait::GenericDiskMethods,
         io::{read::read_block_direct, write::write_block_direct},
@@ -41,12 +40,26 @@ impl DiskBootstrap for PoolDisk {
             todo!()
         };
         // CRC is good, construct the disk...
+        #[allow(clippy::unwrap_used)] // TODO: remove unwrap.
+        let header = PoolDiskHeader::from_block(&block).unwrap();
         Self {
-            number: 0,
-            #[allow(clippy::unwrap_used)] // TODO: remove unwrap.
-            header: PoolDiskHeader::from_block(&block).unwrap(),
+            number: 0, // The pool disk is always disk 0
+            header,
+            block_usage_map: header.block_usage_map,
             disk_file: file,
         }
+    }
+}
+
+// Block allocator
+// This disk has block level allocations
+impl BlockAllocation for PoolDisk {
+    fn get_allocation_table(&self) -> &[u8] {
+        &self.block_usage_map
+    }
+
+    fn set_allocation_table(&mut self, new_table: &[u8]) {
+        self.block_usage_map = new_table.try_into().expect("Incoming table should be the same as outgoing.");
     }
 }
 
@@ -54,7 +67,7 @@ impl DiskBootstrap for PoolDisk {
 impl GenericDiskMethods for PoolDisk {
     #[doc = " Read a block"]
     #[doc = " Cannot bypass CRC."]
-    fn read_block(self, block_number: u16) -> Result<RawBlock, BlockError> {
+    fn read_block(&self, block_number: u16) -> Result<RawBlock, BlockError> {
         read_block_direct(&self.disk_file, block_number, false)
     }
 

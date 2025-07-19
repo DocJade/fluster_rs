@@ -14,7 +14,7 @@ use crate::pool::disk::{
 impl GenericDiskMethods for BlankDisk {
     #[doc = " Read a block"]
     #[doc = " Cannot bypass CRC."]
-    fn read_block(self, _block_number: u16) -> Result<RawBlock, BlockError> {
+    fn read_block(&self, _block_number: u16) -> Result<RawBlock, BlockError> {
         // We should NEVER read a block from a blank disk, why would we do that?
         unreachable!()
     }
