@@ -4,21 +4,21 @@
 
 // Imports
 
-use rand::{self, Rng, random_bool};
+use rand::{self, Rng};
 
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryBlock;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryBlockError;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryFlags;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryItem;
-use crate::pool::disk::standard_disk::block::directory::directory_struct::InodeLocation;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
 
 // Tests
 
 #[test]
 fn blank_directory_block_serialization() {
     let test_block: DirectoryBlock = DirectoryBlock::new();
-    let serialized = test_block.to_bytes(69);
-    let deserialized = DirectoryBlock::from_bytes(&serialized);
+    let serialized = test_block.to_block(69);
+    let deserialized = DirectoryBlock::from_block(&serialized);
     assert_eq!(test_block, deserialized)
 }
 
@@ -48,8 +48,8 @@ fn filled_directory_block_serialization() {
         }
 
         // Check serialization
-        let serialized = test_block.to_bytes(69);
-        let deserialized = DirectoryBlock::from_bytes(&serialized);
+        let serialized = test_block.to_block(69);
+        let deserialized = DirectoryBlock::from_block(&serialized);
         assert_eq!(test_block, deserialized)
     }
 }

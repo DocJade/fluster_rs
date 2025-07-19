@@ -13,10 +13,10 @@ use crate::pool::disk::{
     generic::{
         block::{allocate::block_allocation::BlockAllocation, block_structs::{BlockError, RawBlock}},
         disk_trait::GenericDiskMethods,
-        io::{read::read_block_direct, write::write_block_direct},
+        io::{checked_io::CheckedIO, read::read_block_direct, write::write_block_direct},
     },
     standard_disk::{
-        block::header::header_struct::{StandardDiskHeader, StandardHeaderFlags},
+        block::{directory::directory_struct::DirectoryBlock, header::header_struct::{StandardDiskHeader, StandardHeaderFlags}, inode::inode_struct::InodeBlock},
         standard_disk_struct::StandardDisk,
     },
 };
@@ -28,13 +28,24 @@ use crate::pool::disk::{
 impl DiskBootstrap for StandardDisk {
     fn bootstrap(file: File, disk_number: u16) -> Result<StandardDisk, FloppyDriveError> {
         // Make the disk
-        let disk = create(file, disk_number)?;
+        let mut disk = create(file, disk_number)?;
         // Now that we have a disk, we can use the safe IO.
 
         // Write the inode block
-        let inode_block = InodeBlock;
+        let inode_block = InodeBlock::new();
+        let inode_writer = inode_block.to_block(1);
+        disk.checked_write(&inode_writer)?;
 
         // write the directory block
+        let directory_block = DirectoryBlock::new();
+        let directory_writer = directory_block.to_block(2);
+        disk.checked_write(&directory_writer)?;
+
+        // if this is disk 1 then we need to add the root directory and inode
+        if disk_number == 1 {
+            // The special case!
+            todo!()
+        }
         todo!()
     }
 

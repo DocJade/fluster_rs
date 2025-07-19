@@ -5,6 +5,8 @@
 use bitflags::bitflags;
 use thiserror::Error;
 
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
+
 // Structs / Enums / Flags
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -16,7 +18,7 @@ pub(super) struct DirectoryItem {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub(super) struct DirectoryBlock {
+pub struct DirectoryBlock {
     pub(super) flags: DirectoryBlockFlags,
     pub(super) bytes_free: u16,
     // The disk pointer will automatically deduced from the flags
@@ -37,14 +39,6 @@ bitflags! {
     pub struct DirectoryBlockFlags: u8 {
         const FinalDirectoryBlockOnThisDisk = 0b00000001;
     }
-}
-
-// Points to a specific inode globally
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct InodeLocation {
-    pub disk: Option<u16>,
-    pub block: u16,
-    pub index: u8,
 }
 
 // Error types

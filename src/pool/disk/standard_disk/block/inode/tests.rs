@@ -11,7 +11,7 @@ use rand::Rng;
 use rand::rngs::ThreadRng;
 
 #[cfg(test)]
-use crate::pool::disk::standard_disk::block::directory::directory_struct::InodeLocation;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::Inode;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeBlock;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeBlockError;
@@ -23,8 +23,8 @@ use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeTimestamp
 #[test]
 fn blank_inode_block_serialization() {
     let test_block: InodeBlock = InodeBlock::new();
-    let serialized = test_block.to_bytes(69);
-    let deserialized = InodeBlock::from_bytes(&serialized);
+    let serialized = test_block.to_block(69);
+    let deserialized = InodeBlock::from_block(&serialized);
     assert_eq!(test_block, deserialized)
 }
 
@@ -69,8 +69,8 @@ fn filled_inode_block_serialization() {
         }
 
         // Check serialization
-        let serialized = test_block.to_bytes(69);
-        let deserialized = InodeBlock::from_bytes(&serialized);
+        let serialized = test_block.to_block(69);
+        let deserialized = InodeBlock::from_block(&serialized);
         assert_eq!(test_block, deserialized)
     }
 }

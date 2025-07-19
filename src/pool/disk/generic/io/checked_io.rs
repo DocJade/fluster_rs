@@ -6,7 +6,7 @@ use crate::pool::disk::generic::{block::{allocate::block_allocation::BlockAlloca
 // A fancy new trait thats built out of other traits!
 // Automatically add it to all types that implement the subtypes we need.
 impl<T: BlockAllocation + GenericDiskMethods> CheckedIO for T {}
-trait CheckedIO: BlockAllocation + GenericDiskMethods {
+pub trait CheckedIO: BlockAllocation + GenericDiskMethods {
     /// Read a block from the disk, ensuring it has already been allocated, as to not read junk.
     /// Panics if block was not allocated.
     fn checked_read(&self, block_number: u16) -> Result<RawBlock, BlockError> {

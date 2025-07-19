@@ -6,25 +6,24 @@
 
 use crate::pool::disk::{
     generic::block::{block_structs::RawBlock, crc::add_crc_to_block},
-    standard_disk::block::directory::directory_struct::{
+    standard_disk::block::{directory::directory_struct::{
         DirectoryBlock, DirectoryBlockError, DirectoryBlockFlags, DirectoryFlags, DirectoryItem,
-        InodeLocation,
-    },
+    }, inode::inode_struct::InodeLocation},
 };
 
 // We can convert from a raw block to a directory bock, but not the other way around.
 impl From<RawBlock> for DirectoryBlock {
     fn from(block: RawBlock) -> Self {
-        Self::from_bytes(&block)
+        Self::from_block(&block)
     }
 }
 
 impl DirectoryBlock {
     /// Block number must be known at creation time for safe writing.
-    pub(super) fn to_bytes(&self, block_number: u16) -> RawBlock {
+    pub fn to_block(&self, block_number: u16) -> RawBlock {
         directory_block_to_bytes(self, block_number)
     }
-    pub(super) fn from_bytes(block: &RawBlock) -> Self {
+    pub fn from_block(block: &RawBlock) -> Self {
         directory_block_from_bytes(block)
     }
     /// Try to add an DirectoryItem to this block.
@@ -48,7 +47,7 @@ impl DirectoryBlock {
     /// New directory blocks are the new final block on the disk.
     /// New directory blocks do not point to the next block (as none exists).
     /// Caller is responsible with updating previous block to point to this new block.
-    pub(super) fn new() -> Self {
+    pub fn new() -> Self {
         new_directory_block()
     }
 }
@@ -294,45 +293,5 @@ impl DirectoryItem {
             name,
             location,
         }
-    }
-}
-
-impl InodeLocation {
-    fn to_bytes(&self) -> Vec<u8> {
-        let mut vec: Vec<u8> = Vec::with_capacity(5); // Max size of this type
-
-        // Disk number
-        if self.disk.is_some() {
-            vec.extend_from_slice(&self.disk.expect("Already checked").to_le_bytes());
-        }
-
-        // Block on disk
-        vec.extend_from_slice(&self.block.to_le_bytes());
-
-        // index into the block
-        vec.push(self.index);
-
-        vec
-    }
-    /// Do not feed more than 5 bytes.
-    fn from_bytes(bytes: &[u8]) -> Self {
-        // Disk number
-        let mut index: usize = 0;
-        // we need to extract the disk number if length is 5
-        let disk: Option<u16> = if bytes.len() == 5 {
-            index += 2; // Offset by 2 bytes, since the next items are relative to this
-            Some(u16::from_le_bytes(bytes[..2].try_into().expect("2 = 2")))
-        } else {
-            None
-        };
-
-        // Block on disk
-        let block: u16 = u16::from_le_bytes(bytes[index..index + 2].try_into().expect("2 = 2"));
-        index += 2;
-
-        // Index into Inode block
-        let index: u8 = bytes[index];
-
-        Self { disk, block, index }
     }
 }

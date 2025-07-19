@@ -16,6 +16,7 @@ use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 use crate::pool::disk::generic::{
     block::block_structs::RawBlock, generic_structs::find_space::BytePingPong,
 };
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::{
     InodeDirectory, InodeFile, InodeTimestamp,
 };
@@ -38,10 +39,10 @@ impl BytePingPong for Inode {
 }
 
 impl InodeBlock {
-    pub(super) fn to_bytes(&self, block_number: u16) -> RawBlock {
+    pub fn to_block(&self, block_number: u16) -> RawBlock {
         to_raw_bytes(self, block_number)
     }
-    pub(super) fn from_bytes(block: &RawBlock) -> Self {
+    pub fn from_block(block: &RawBlock) -> Self {
         from_raw_block(&block)
     }
     /// Create a new inode block
@@ -56,7 +57,7 @@ impl InodeBlock {
     /// Updates the byte usage counter.
     ///
     /// Returns the index of the added inode. (the first inode is 0)
-    pub fn try_add_inode(&mut self, inode: Inode) -> Result<u16, InodeBlockError> {
+    pub fn try_add_inode(&mut self, inode: Inode) -> Result<u8, InodeBlockError> {
         inode_block_try_add_inode(self, inode)
     }
     /// Removes inodes based off of the offset into the block. (NOT index!)
@@ -70,7 +71,7 @@ impl InodeBlock {
     /// Try and read an inode from the block.
     ///
     /// Returns Inode.
-    pub fn try_read_inode(&self, inode_offset: u16) -> Result<Inode, InodeReadError> {
+    pub fn try_read_inode(&self, inode_offset: u8) -> Result<Inode, InodeReadError> {
         inode_block_try_read_inode(self, inode_offset)
     }
 }
@@ -79,9 +80,12 @@ impl InodeBlock {
 // Functions
 //
 
-fn inode_block_try_read_inode(block: &InodeBlock, offset: u16) -> Result<Inode, InodeReadError> {
+fn inode_block_try_read_inode(block: &InodeBlock, offset: u8) -> Result<Inode, InodeReadError> {
     // Attempt to read in the inode at this location
     // extract function at bottom of file
+
+    // We read inodes as an index into the block, not an offset
+    todo!();
 
     // Bounds checking
     if offset as usize > block.inodes_data.len() {
@@ -94,9 +98,12 @@ fn inode_block_try_read_inode(block: &InodeBlock, offset: u16) -> Result<Inode, 
 
 fn inode_block_try_remove_inode(
     block: &mut InodeBlock,
-    inode_offset: u16,
+    inode_offset: u8,
 ) -> Result<(), InodeBlockError> {
     // Attempt to remove an inode from the block
+
+    // We read inodes as an index into the block, not an offset
+    todo!();
 
     // Assumption:
     // Caller gave us a valid offset.
@@ -148,7 +155,7 @@ fn inode_block_try_remove_inode(
 fn inode_block_try_add_inode(
     inode_block: &mut InodeBlock,
     new_inode: Inode,
-) -> Result<u16, InodeBlockError> {
+) -> Result<u8, InodeBlockError> {
     // Attempt to add an inode to the block.
 
     // Check if we have room for the new inode.
@@ -176,6 +183,10 @@ fn inode_block_try_add_inode(
     // Cast from usize to u16 should be fine in all cases,
     // how would an inode be more than 2^16 bytes? lol.
     inode_block.bytes_free -= new_inode_length as u16;
+
+    // Now we need to figure out where into the inode block we ended up.
+    // We arent using byte offsets, we are using an index into all of the inodes in the block.
+    todo!();
 
     // Return that offset, we're done.
     Ok(offset.try_into().expect("max of 503 is < u16"))
@@ -261,9 +272,6 @@ fn to_raw_bytes(block: &InodeBlock, block_number: u16) -> RawBlock {
         block_index: block_number,
         data: buffer,
     };
-
-    // sanity check
-    assert_eq!(block, &InodeBlock::from_bytes(&final_block));
 
     final_block
 }
@@ -409,5 +417,70 @@ impl InodeFlags {
     pub fn new() -> Self {
         // We need the marker bit.
         InodeFlags::MarkerBit
+    }
+}
+
+impl InodeLocation {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut vec: Vec<u8> = Vec::with_capacity(5); // Max size of this type
+
+        // Disk number
+        if self.disk.is_some() {
+            vec.extend_from_slice(&self.disk.expect("Already checked").to_le_bytes());
+        }
+
+        // Block on disk
+        vec.extend_from_slice(&self.block.to_le_bytes());
+
+        // index into the block
+        vec.push(self.index);
+
+        vec
+    }
+    /// Do not feed more than 5 bytes.
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        // Disk number
+        let mut index: usize = 0;
+        // we need to extract the disk number if length is 5
+        let disk: Option<u16> = if bytes.len() == 5 {
+            index += 2; // Offset by 2 bytes, since the next items are relative to this
+            Some(u16::from_le_bytes(bytes[..2].try_into().expect("2 = 2")))
+        } else {
+            None
+        };
+
+        // Block on disk
+        let block: u16 = u16::from_le_bytes(bytes[index..index + 2].try_into().expect("2 = 2"));
+        index += 2;
+
+        // Index into Inode block
+        let index: u8 = bytes[index];
+
+        Self { disk, block, index }
+    }
+}
+
+
+impl InodeBlock {
+    /// Find the next block in the inode chain, if it exists.
+    pub fn next_block(&self, current_disk: u16) -> Option<DiskPointer> {
+        // First check if we have anywhere to go
+        if self.next_inode_block == u16::MAX {
+            // This is the end of the chain.
+            return None;
+        }
+        if self.flags.intersects(InodeBlockFlags::FinalInodeBlockOnThisDisk) {
+            // This is the last block on the disk. Go to the new disk
+            Some(DiskPointer {
+                disk: self.next_inode_block,
+                block: 1, // Block 1 on every standard disk is an inode block.
+            })
+        } else {
+            // Its on this disk.
+            Some(DiskPointer {
+                disk: current_disk,
+                block: self.next_inode_block,
+            })
+        }
     }
 }
