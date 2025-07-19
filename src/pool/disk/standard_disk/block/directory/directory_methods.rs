@@ -276,12 +276,12 @@ impl DirectoryItem {
         index += name_length as usize;
 
         // inode location
-        // must be fed either 3 or 5 bytes depending on type
+        // must be fed either 4 or 6 bytes depending on type
         let location_length: usize = if flags.contains(DirectoryFlags::OnThisDisk) {
-            // On this disk, so 3
-            3
+            // On this disk, so 4
+            4
         } else {
-            5
+            6
         };
 
         let location: InodeLocation =
