@@ -36,3 +36,10 @@ Originally, I didn't want to accidentally give access to private functions used 
 
 Organizationally, I feel like it makes sense, but the amount of nesting is pretty wild.
 This is my first time trying to keep a project organized in a sensible way, so... lol.
+
+# Why are there so many comments?
+I've had too many hobby projects in the pass where I've thought to myself, "The code is self documenting". Sure, that might be the case, but the amount of mental effort it takes to understand what's going on 3 days after I wrote something is a LOT higher than if I just left some comments.
+
+I'd prefer too many comments over a headache trying to reverse-engineer what I was thinking previously.
+
+Also it lowers the bar of entry for the casual viewer :D
