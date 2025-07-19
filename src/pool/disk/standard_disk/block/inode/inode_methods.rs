@@ -4,6 +4,9 @@
 
 // Implementations
 
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
+
 use super::inode_struct::Inode;
 use super::inode_struct::InodeBlock;
 use super::inode_struct::InodeBlockError;
@@ -386,6 +389,12 @@ impl InodeDirectory {
             pointer: DiskPointer::from_bytes(bytes),
         }
     }
+    // Converts a disk pointer into a directory
+    pub fn from_disk_pointer(pointer: DiskPointer) -> Self {
+        Self {
+            pointer,
+        }
+    }
 }
 
 impl InodeTimestamp {
@@ -399,6 +408,16 @@ impl InodeTimestamp {
         Self {
             seconds: u64::from_le_bytes(bytes[..8].try_into().expect("8 = 8")),
             nanos: u32::from_le_bytes(bytes[8..].try_into().expect("4 = 4")),
+        }
+    }
+    // Create a timestamp that refers to the current moment in time.
+    pub fn now() -> Self {
+        // Get the time
+        let now = SystemTime::now();
+        let duration_since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
+        Self {
+            seconds: duration_since_epoch.as_secs(),
+            nanos: duration_since_epoch.subsec_nanos(),
         }
     }
 }

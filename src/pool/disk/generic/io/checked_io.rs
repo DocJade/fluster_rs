@@ -16,11 +16,19 @@ pub trait CheckedIO: BlockAllocation + GenericDiskMethods {
     }
 
     /// Write a block to the disk, ensuring it has not already been allocated, as to not overwrite data.
-    /// Panics if block was not allocated.
+    /// 
+    /// Sets the block as used after writing.
+    /// 
+    /// Panics if block was not free.
     fn checked_write(&mut self, block: &RawBlock) -> Result<(), BlockError> {
         // Make sure block is free
         assert!(!self.is_block_allocated(block.block_index));
-        self.write_block(&block)
+        self.write_block(&block)?;
+        // Now mark the block as allocated.
+        let blocks_allocated = self.allocate_blocks(&[block.block_index].to_vec());
+        // Make sure it was actually allocated.
+        assert_eq!(blocks_allocated, 1);
+        Ok(())
     }
 
     /// Updates an underlying block with new information.

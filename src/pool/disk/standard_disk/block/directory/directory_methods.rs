@@ -5,7 +5,7 @@
 // Implementations
 
 use crate::pool::disk::{
-    generic::block::{block_structs::RawBlock, crc::add_crc_to_block},
+    generic::{block::{block_structs::RawBlock, crc::add_crc_to_block}, generic_structs::pointer_struct::DiskPointer},
     standard_disk::block::{directory::directory_struct::{
         DirectoryBlock, DirectoryBlockError, DirectoryBlockFlags, DirectoryFlags, DirectoryItem,
     }, inode::inode_struct::InodeLocation},
@@ -42,13 +42,23 @@ impl DirectoryBlock {
     ) -> Result<(), DirectoryBlockError> {
         directory_block_try_remove_item(self, item)
     }
-    /// Create a new inode block
+    /// Create a new directory block.
     ///
     /// New directory blocks are the new final block on the disk.
     /// New directory blocks do not point to the next block (as none exists).
-    /// Caller is responsible with updating previous block to point to this new block.
+    /// Caller is responsible with updating previous block to point to this new block if needed.
     pub fn new() -> Self {
         new_directory_block()
+    }
+    /// Check if this directory contains an item with given name.
+    /// May swap disks.
+    pub fn contains_item(&self, name: String) -> bool {
+        todo!()
+    }
+    /// Returns an alphabetically ordered Vec of all items in this directory.
+    /// May swap disks.
+    pub fn list(&self) -> Vec<DirectoryItem> {
+        todo!()
     }
 }
 
@@ -114,12 +124,12 @@ fn new_directory_block() -> DirectoryBlock {
     let flags: DirectoryBlockFlags = DirectoryBlockFlags::FinalDirectoryBlockOnThisDisk;
 
     // Bytes free
-    // An empty block has 503 bytes free.
-    let bytes_free: u16 = 503;
+    // An empty block has 501 bytes free.
+    let bytes_free: u16 = 501;
 
     // Next block
     // New blocks assume we are the final block in the chain.
-    let next_block: u16 = u16::MAX;
+    let next_block: DiskPointer = DiskPointer::new_final_pointer();
 
     // Items
     // New blocks have no items. duh.
@@ -154,10 +164,10 @@ fn directory_block_to_bytes(block: &DirectoryBlock, block_number: u16) -> RawBlo
     buffer[1..1 + 2].copy_from_slice(&bytes_free.to_le_bytes());
 
     // next block
-    buffer[3..3 + 2].copy_from_slice(&next_block.to_le_bytes());
+    buffer[3..3 + 4].copy_from_slice(&next_block.to_bytes());
 
     // Directory items
-    buffer[5..5 + 503].copy_from_slice(&block.item_bytes_from_vec());
+    buffer[7..7 + 501].copy_from_slice(&block.item_bytes_from_vec());
 
     // add the CRC
     add_crc_to_block(&mut buffer);
@@ -177,11 +187,11 @@ fn directory_block_from_bytes(block: &RawBlock) -> DirectoryBlock {
     let bytes_free: u16 = u16::from_le_bytes(block.data[1..1 + 2].try_into().expect("2 = 2"));
 
     // Next block
-    let next_block: u16 = u16::from_le_bytes(block.data[3..3 + 2].try_into().expect("2 = 2"));
+    let next_block: DiskPointer = DiskPointer::from_bytes(block.data[3..3 + 4].try_into().expect("2 = 2"));
 
     // The directory items
     let directory_items: Vec<DirectoryItem> =
-        DirectoryBlock::item_vec_from_bytes(&block.data[5..5 + 503]);
+        DirectoryBlock::item_vec_from_bytes(&block.data[7..7 + 501]);
 
     // All done
     DirectoryBlock {
@@ -194,9 +204,9 @@ fn directory_block_from_bytes(block: &RawBlock) -> DirectoryBlock {
 
 // Conversions for the Vec of items
 impl DirectoryBlock {
-    fn item_bytes_from_vec(&self) -> [u8; 503] {
+    fn item_bytes_from_vec(&self) -> [u8; 501] {
         let mut index: usize = 0;
-        let mut buffer: [u8; 503] = [0u8; 503];
+        let mut buffer: [u8; 501] = [0u8; 501];
 
         for i in &self.directory_items {
             for byte in i.to_bytes() {

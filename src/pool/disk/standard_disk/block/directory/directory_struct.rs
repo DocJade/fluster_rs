@@ -5,15 +5,15 @@
 use bitflags::bitflags;
 use thiserror::Error;
 
-use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
+use crate::pool::disk::{generic::generic_structs::pointer_struct::DiskPointer, standard_disk::block::inode::inode_struct::InodeLocation};
 
 // Structs / Enums / Flags
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub(super) struct DirectoryItem {
+pub struct DirectoryItem {
     pub(super) flags: DirectoryFlags,
     pub(super) name_length: u8,
-    pub(super) name: String,
+    pub name: String,
     pub(super) location: InodeLocation,
 }
 
@@ -21,9 +21,13 @@ pub(super) struct DirectoryItem {
 pub struct DirectoryBlock {
     pub(super) flags: DirectoryBlockFlags,
     pub(super) bytes_free: u16,
-    // The disk pointer will automatically deduced from the flags
-    pub(super) next_block: u16,
-    pub(super) directory_items: Vec<DirectoryItem>,
+    // Points to the next directory block.
+    // Unlike inodes, when we go to a new disk, we need to know what block its on, because the only
+    // static directory block is on block 2 of the origin disk.
+    // Directories are separate from each other, you cannot get from one directory to another by just following
+    // the next block pointer.
+    pub(super) next_block: DiskPointer,
+    pub directory_items: Vec<DirectoryItem>,
 }
 
 bitflags! {

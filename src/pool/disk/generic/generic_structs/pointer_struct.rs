@@ -29,6 +29,17 @@ impl DiskPointer {
             block: random.random(),
         }
     }
+    /// Creates a new disk pointer with no destination.
+    pub(crate) fn new_final_pointer() -> Self {
+        Self {
+            disk: u16::MAX,
+            block: u16::MAX,
+        }
+    }
+    /// Check if this pointer actually goes somewhere
+    pub(crate) fn has_destination(&self) -> bool {
+        self.disk == u16::MAX || self.block == u16::MAX
+    }
 }
 
 // Quick function to turn a u16 and flags into a DiskPointer

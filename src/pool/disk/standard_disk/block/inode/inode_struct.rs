@@ -25,13 +25,13 @@ pub(super) struct InodeFile {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub(super) struct InodeDirectory {
+pub struct InodeDirectory {
     pub(super) pointer: DiskPointer, // Points to directory
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 /// Relative to Unix Epoch
-pub(super) struct InodeTimestamp {
+pub struct InodeTimestamp {
     pub(super) seconds: u64,
     pub(super) nanos: u32,
 }

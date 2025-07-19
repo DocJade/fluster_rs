@@ -42,11 +42,13 @@ impl DiskBootstrap for StandardDisk {
         disk.checked_write(&directory_writer)?;
 
         // if this is disk 1 then we need to add the root directory and inode
-        if disk_number == 1 {
-            // The special case!
-            todo!()
+        if disk_number != 1 {
+            // Dont need to do anything.
+            return Ok(disk)
         }
-        todo!()
+        
+        // We need to create the root directory, and the inode that points to it.
+        
     }
 
     fn from_header(block: RawBlock, file: File) -> Self {
