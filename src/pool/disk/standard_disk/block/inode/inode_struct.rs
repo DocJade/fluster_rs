@@ -41,7 +41,7 @@ pub(super) struct InodeTimestamp {
 pub struct InodeLocation {
     pub disk: Option<u16>,
     pub block: u16,
-    pub index: u8,
+    pub offset: u16,
 }
 
 bitflags! {

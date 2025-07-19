@@ -24,7 +24,7 @@ fn add_inode(inode: Inode) -> Result<InodeLocation, FloppyDriveError> {
     let mut current_block: InodeBlock = InodeBlock::from_block(&current_disk.checked_read(1)?);
     let mut current_block_number: u16 = 1;
     // For when we eventually find a spot.
-    let mut inode_index: u8;
+    let mut inode_offset: u16;
 
     // Now we loop, looking for room.
     loop {
@@ -32,7 +32,7 @@ fn add_inode(inode: Inode) -> Result<InodeLocation, FloppyDriveError> {
         match current_block.try_add_inode(inode) {
             Ok(ok) => {
                 // We've got a spot!
-                inode_index = ok;
+                inode_offset = ok;
                 break
             }
             Err(error) => match error {
@@ -70,7 +70,7 @@ fn add_inode(inode: Inode) -> Result<InodeLocation, FloppyDriveError> {
         InodeLocation {
             disk: Some(current_disk.number),
             block: current_block_number,
-            index: inode_index,
+            offset: inode_offset,
         }
     )
 }

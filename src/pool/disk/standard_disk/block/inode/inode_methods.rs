@@ -56,11 +56,11 @@ impl InodeBlock {
     /// Try to add an Inode to this block.
     /// Updates the byte usage counter.
     ///
-    /// Returns the index of the added inode. (the first inode is 0)
-    pub fn try_add_inode(&mut self, inode: Inode) -> Result<u8, InodeBlockError> {
+    /// Returns the offset of the added inode
+    pub fn try_add_inode(&mut self, inode: Inode) -> Result<u16, InodeBlockError> {
         inode_block_try_add_inode(self, inode)
     }
-    /// Removes inodes based off of the offset into the block. (NOT index!)
+    /// Removes inodes based off of the offset into the block.
     /// Updates the byte usage counter.
     /// This does not remove the data the inode points to. The caller is responsible for propagation.
     ///
@@ -71,7 +71,7 @@ impl InodeBlock {
     /// Try and read an inode from the block.
     ///
     /// Returns Inode.
-    pub fn try_read_inode(&self, inode_offset: u8) -> Result<Inode, InodeReadError> {
+    pub fn try_read_inode(&self, inode_offset: u16) -> Result<Inode, InodeReadError> {
         inode_block_try_read_inode(self, inode_offset)
     }
 }
@@ -80,12 +80,9 @@ impl InodeBlock {
 // Functions
 //
 
-fn inode_block_try_read_inode(block: &InodeBlock, offset: u8) -> Result<Inode, InodeReadError> {
+fn inode_block_try_read_inode(block: &InodeBlock, offset: u16) -> Result<Inode, InodeReadError> {
     // Attempt to read in the inode at this location
     // extract function at bottom of file
-
-    // We read inodes as an index into the block, not an offset
-    todo!();
 
     // Bounds checking
     if offset as usize > block.inodes_data.len() {
@@ -98,12 +95,9 @@ fn inode_block_try_read_inode(block: &InodeBlock, offset: u8) -> Result<Inode, I
 
 fn inode_block_try_remove_inode(
     block: &mut InodeBlock,
-    inode_offset: u8,
+    inode_offset: u16,
 ) -> Result<(), InodeBlockError> {
     // Attempt to remove an inode from the block
-
-    // We read inodes as an index into the block, not an offset
-    todo!();
 
     // Assumption:
     // Caller gave us a valid offset.
@@ -155,7 +149,7 @@ fn inode_block_try_remove_inode(
 fn inode_block_try_add_inode(
     inode_block: &mut InodeBlock,
     new_inode: Inode,
-) -> Result<u8, InodeBlockError> {
+) -> Result<u16, InodeBlockError> {
     // Attempt to add an inode to the block.
 
     // Check if we have room for the new inode.
@@ -183,10 +177,6 @@ fn inode_block_try_add_inode(
     // Cast from usize to u16 should be fine in all cases,
     // how would an inode be more than 2^16 bytes? lol.
     inode_block.bytes_free -= new_inode_length as u16;
-
-    // Now we need to figure out where into the inode block we ended up.
-    // We arent using byte offsets, we are using an index into all of the inodes in the block.
-    todo!();
 
     // Return that offset, we're done.
     Ok(offset.try_into().expect("max of 503 is < u16"))
@@ -422,7 +412,7 @@ impl InodeFlags {
 
 impl InodeLocation {
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut vec: Vec<u8> = Vec::with_capacity(5); // Max size of this type
+        let mut vec: Vec<u8> = Vec::with_capacity(6); // Max size of this type
 
         // Disk number
         if self.disk.is_some() {
@@ -433,16 +423,15 @@ impl InodeLocation {
         vec.extend_from_slice(&self.block.to_le_bytes());
 
         // index into the block
-        vec.push(self.index);
+        vec.extend_from_slice(&self.offset.to_le_bytes());
 
         vec
     }
-    /// Do not feed more than 5 bytes.
     pub fn from_bytes(bytes: &[u8]) -> Self {
         // Disk number
         let mut index: usize = 0;
-        // we need to extract the disk number if length is 5
-        let disk: Option<u16> = if bytes.len() == 5 {
+        // we need to extract the disk number if length is 6
+        let disk: Option<u16> = if bytes.len() == 6 {
             index += 2; // Offset by 2 bytes, since the next items are relative to this
             Some(u16::from_le_bytes(bytes[..2].try_into().expect("2 = 2")))
         } else {
@@ -454,9 +443,9 @@ impl InodeLocation {
         index += 2;
 
         // Index into Inode block
-        let index: u8 = bytes[index];
+        let offset: u16 = u16::from_le_bytes(bytes[index..index + 2].try_into().expect("2 = 2"));
 
-        Self { disk, block, index }
+        Self { disk, block, offset }
     }
 }
 

@@ -11,9 +11,14 @@ use crate::pool::disk::pool_disk::block::header::header_struct::PoolDiskHeader;
 use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
 use crate::pool::pool_struct::Pool;
 use crate::pool::pool_struct::PoolStatistics;
+use crate::pool::pool_struct::GLOBAL_POOL;
 use log::debug;
 use log::error;
+use std::cell::RefCell;
 use std::process::exit;
+use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 // Implementations
 
@@ -23,7 +28,8 @@ impl Pool {
         sync(self)
     }
     /// Read in pool information from disk
-    pub fn load() -> Self {
+    /// Returns a handle/pointer/whatever
+    pub fn load() -> Arc<Mutex<Pool>> {
         load()
     }
     /// Brand new pools need to run some setup functions to get everything in a ready to use state.
@@ -52,7 +58,8 @@ pub(super) fn sync(pool: &Pool) -> Result<(), ()> {
 
 /// Read in pool information from disk.
 /// Will prompt to make new pools if needed.
-pub(super) fn load() -> Pool {
+/// Returns a pointer thingy to to the global.
+pub(super) fn load() -> Arc<Mutex<Pool>> {
     // Read in the header. If this fails, we cannot start the filesystem.
     let header = match PoolDiskHeader::read() {
         Ok(ok) => ok,
@@ -71,10 +78,25 @@ pub(super) fn load() -> Pool {
         statistics: PoolStatistics::new(),
     };
 
+    // Wrap it for sharing.
+    let shared_pool = Arc::new(Mutex::new(pool));
+    
+    // Set the global static. This will only work the first time.
+    GLOBAL_POOL.set(shared_pool.clone()).expect("Pool already loaded");
+
+    // All operations after this point use the global pool.
+
+    let mut neighbors_pool =
+        GLOBAL_POOL
+            .get()
+            .expect("Fluster is single threaded.")
+            .lock()
+            .expect("Fluster is single threaded.");
+
     // Check if this is a brand new pool
-    if pool.header.highest_known_disk == 0 {
+    if neighbors_pool.header.highest_known_disk == 0 {
         // This is a brand new pool, we need to initialize it.
-        match pool.initalize() {
+        match neighbors_pool.initalize() {
             Ok(ok) => ok,
             Err(error) => {
                 // Initializing the pool failed. This cannot continue.
@@ -85,10 +107,12 @@ pub(super) fn load() -> Pool {
                 exit(-1);
             }
         };
-    }
+    };
 
-    pool
+    drop(neighbors_pool);
 
+    // All done
+    return shared_pool;
 }
 
 /// Set up stuff for a brand new pool

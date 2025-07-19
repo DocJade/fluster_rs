@@ -14,6 +14,7 @@ use std::{fs::File, os::unix::fs::FileExt};
 // Implementations
 
 /// Read a block on the currently inserted disk in the floppy drive
+/// ONLY FOR LOWER LEVEL USE, USE CHECKED_READ()!
 pub(crate) fn read_block_direct(
     disk_file: &File,
     block_index: u16,

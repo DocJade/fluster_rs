@@ -25,7 +25,7 @@ impl FlusterFS {
         let unused = options;
         FlusterFS {
             inner: Box::new(DefaultFuseHandler::new()),
-            pool_info: Pool::load(),
+            pool: Pool::load(),
         }
     }
 }

@@ -250,7 +250,7 @@ impl InodeLocation {
         Self {
             disk,
             block: random.random(),
-            index: random.random(),
+            offset: random.random(),
         }
     }
 }

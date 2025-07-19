@@ -4,12 +4,12 @@
 
 use crate::pool::pool_struct::Pool;
 use easy_fuser::templates::DefaultFuseHandler;
-use std::{path::PathBuf, sync::Mutex};
+use std::{path::PathBuf, sync::{Arc, Mutex}};
 // Structs, Enums, Flags
 
 pub struct FlusterFS {
     pub(super) inner: Box<DefaultFuseHandler>,
-    pub(super) pool_info: Pool,
+    pub(super) pool: Arc<Mutex<Pool>>,
 }
 
 use lazy_static::lazy_static;
