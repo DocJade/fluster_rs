@@ -11,6 +11,7 @@ use log::warn;
 use crate::filesystem::filesystem_struct::USE_VIRTUAL_DISKS;
 use crate::pool::disk::blank_disk::blank_disk_struct::BlankDisk;
 use crate::pool::disk::drive_methods::check_for_magic;
+use crate::pool::disk::drive_methods::display_info_and_ask_wipe;
 use crate::pool::disk::drive_struct::DiskType;
 use crate::pool::disk::drive_struct::FloppyDrive;
 use crate::pool::disk::drive_struct::FloppyDriveError;
@@ -305,32 +306,5 @@ fn new_pool_header() -> PoolDiskHeader {
         highest_known_disk,
         disk_with_next_free_block,
         pool_blocks_free,
-    }
-}
-
-/// Takes in a non-blank disk and displays info about it, then asks the user if they would like to wipe the disk.
-/// Wipes the disk if the user asks, returns nothing.
-/// Will also return nothing if the user does not wipe the disk.
-fn display_info_and_ask_wipe(disk: DiskType) -> Result<(), FloppyDriveError> {
-    // This isn't a very friendly interface, but it'll do for now.
-
-    // Display the disk type
-    println!("The disk inserted is not a pool disk. It is of type {disk:?}.");
-    print!("Would you like to wipe this disk?");
-    loop {
-        let answer = rprompt::prompt_reply("y/n")?
-            .to_ascii_lowercase()
-            .contains('y');
-        if answer {
-            // Wipe time!
-            todo!()
-        } else {
-            // No wipe.
-            print!("Okay this disk will not be wiped.");
-            let _ = rprompt::prompt_reply(
-                "Please insert another disk (That you think the pool is on), then hit return.",
-            )?;
-            return Ok(());
-        }
     }
 }

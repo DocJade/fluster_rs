@@ -69,10 +69,13 @@ pub enum FloppyDriveError {
 
 /// All disk types need to be able to create themselves from a raw block.
 /// Or, be able to create themselves from a blank disk.
+/// We also need to create fake disks to allow creating disks (confusing eh?)
 pub trait DiskBootstrap {
     // TODO: Let disk bootstraps fail.
     /// Create brand new disk.
-    fn bootstrap(file: std::fs::File, disk_number: u16) -> Result<Self, FloppyDriveError>
+    /// This takes in a blank floppy disk, and does all the needed setup on the disk,
+    /// such as writing the header, and other block setup.
+    fn bootstrap(file: File, disk_number: u16) -> Result<Self, FloppyDriveError>
     where
         Self: std::marker::Sized;
     /// Create self from incoming header block and file.

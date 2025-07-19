@@ -23,12 +23,21 @@ pub trait GenericDiskMethods {
     /// Cannot bypass CRC.
     fn read_block(self, block_number: u16) -> Result<RawBlock, BlockError>;
 
-    /// Write a block
+    /// Write a block.
     fn write_block(&mut self, block: &RawBlock) -> Result<(), BlockError>;
 
-    /// Get the inner file used for IO operations
-    fn disk_file(&mut self) -> &mut File;
+    /// Get the inner file.
+    fn disk_file(self) -> File;
+
+    /// Get the inner file for write operations.
+    fn disk_file_mut(&mut self) -> &mut File;
 
     /// Get the number of the floppy disk.
     fn get_disk_number(&self) -> u16;
+
+    /// Set the number of this disk.
+    fn set_disk_number(&mut self, disk_number: u16);
+
+    /// Sync all in-memory information to disk
+    fn flush(&mut self) -> Result<(), BlockError>;
 }

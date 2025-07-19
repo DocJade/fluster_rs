@@ -29,7 +29,7 @@ impl PoolDisk {
 
 // Bootstrapping
 impl DiskBootstrap for PoolDisk {
-    fn bootstrap(file: std::fs::File, disk_number: u16) -> Result<Self, FloppyDriveError> {
+    fn bootstrap(file: File, disk_number: u16) -> Result<Self, FloppyDriveError> {
         todo!()
     }
 
@@ -64,12 +64,27 @@ impl GenericDiskMethods for PoolDisk {
     }
 
     #[doc = " Get the inner file used for IO operations"]
-    fn disk_file(&mut self) -> &mut File {
-        &mut self.disk_file
+    fn disk_file(self) -> File {
+        self.disk_file
     }
 
     #[doc = " Get the number of the floppy disk."]
     fn get_disk_number(&self) -> u16 {
         self.number
+    }
+    
+    #[doc = " Set the number of this disk."]
+    fn set_disk_number(&mut self, disk_number: u16) {
+        self.number = disk_number
+    }
+    
+    #[doc = " Get the inner file used for write operations"]
+    fn disk_file_mut(&mut self) ->  &mut File {
+        &mut self.disk_file
+    }
+    
+    #[doc = " Sync all in-memory information to disk"]
+    fn flush(&mut self) -> Result<(), BlockError> {
+        self.write_block(&self.header.to_block())
     }
 }

@@ -10,13 +10,13 @@ use thiserror::Error;
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct PoolDiskHeader {
     /// Flags about the pool.
-    pub(super) flags: PoolHeaderFlags,
+    pub flags: PoolHeaderFlags,
     /// The highest disk number that we have created
-    pub(super) highest_known_disk: u16,
+    pub highest_known_disk: u16,
     /// The next disk with a free block on it, or u16::MAX
-    pub(super) disk_with_next_free_block: u16,
+    pub disk_with_next_free_block: u16,
     /// The number of free blocks across all disks
-    pub(super) pool_blocks_free: u16,
+    pub pool_blocks_free: u16,
 }
 
 bitflags! {

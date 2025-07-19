@@ -38,20 +38,26 @@ impl FloppyDrive {
     /// Open the disk currently in the drive, regardless of disk type.
     /// This should only be used when initializing the pool. Use open() instead.
     pub fn open_direct(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
-        open_and_deduce_disk(disk_number)
+        // This function does not create disks.
+        open_and_deduce_disk(disk_number, false)
     }
 
     /// Opens a specific disk, or waits until the user inserts that disk.
     pub fn open(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
         prompt_for_disk(disk_number)
     }
+
+    /// Prompts the user for a blank floppy disk.
+    pub fn get_blank_disk(disk_number: u16) -> Result<BlankDisk, FloppyDriveError> {
+        prompt_for_blank_disk(disk_number)
+    }
 }
 
 // Functions for implementations
 
-fn open_and_deduce_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
+fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, FloppyDriveError> {
     // First, we need the file to read from
-    let disk_file: File = get_floppy_drive_file(disk_number)?;
+    let disk_file: File = get_floppy_drive_file(disk_number, new_disk)?;
 
     // Now we must get the 0th block
     // We need to read a block before we have an actual disk, so we need
@@ -104,7 +110,7 @@ fn open_and_deduce_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> 
 }
 
 /// Get the path of the floppy drive
-fn get_floppy_drive_file(disk_number: u16) -> Result<File, FloppyDriveError> {
+fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, FloppyDriveError> {
     // If someone wants to port this to another operating system, this function will need appropriate changes
     // to remove its dependency on getting the raw floppy device from Windows.
 
@@ -131,12 +137,12 @@ fn get_floppy_drive_file(disk_number: u16) -> Result<File, FloppyDriveError> {
             .open(path.join("disk0.fsr"))?;
 
         // If the tempfile does not exist, that means `create` was never called, which is an issue.
-        // This should never be allowed, so an unwrap is okay in this case.
+        // This will create the disk if the correct argument is passed.
 
         let temp_disk_file = OpenOptions::new()
             .read(true)
             .write(true)
-            .create(false) // We will panic if the disk does not exist.
+            .create(new_disk) // We will panic if the disk does not exist, unless told to create it.
             .truncate(false)
             .open(path.join(format!("disk{disk_number}.fsr")))
             .expect("Disks should be created before read.");
@@ -176,8 +182,9 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
     let mut is_user_an_idiot: bool = false; // Did the user put in the wrong disk when asked?
     let mut disk: Result<DiskType, FloppyDriveError>;
     loop {
-        // Try opening the current disk
-        disk = open_and_deduce_disk(disk_number);
+        // Try opening the current disk.
+        // We do not create disks here.
+        disk = open_and_deduce_disk(disk_number, false);
         // Is this the correct disk?
 
         if let Ok(ok) = disk {
@@ -201,6 +208,65 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
         ));
     }
 }
+
+// get a blank disk
+fn prompt_for_blank_disk(disk_number: u16) -> Result<BlankDisk, FloppyDriveError> {
+    // Pester user for a blank disk
+    let mut try_again: bool = false;
+
+    // If we are on virtual disks, skip the initial prompt
+    if !USE_VIRTUAL_DISKS.lock().expect("Fluster is single threaded.").is_some() {
+        let _ = rprompt::prompt_reply("That disk is not blank. Please insert a blank disk, then hit enter.")?;
+    }
+
+    loop {
+        if try_again {
+            let _ = rprompt::prompt_reply("That disk is not blank. Please insert a blank disk, then hit enter.")?;
+        }
+        // we are making a new disk, so we must specify as such.
+        let disk = open_and_deduce_disk(disk_number, true)?;
+        match disk {
+            // if its blank, all done
+            DiskType::Blank(blank_disk) => return Ok(blank_disk),
+            DiskType::Unknown(unknown_disk) => {
+                // But if its an unknown disk, we can ask if the user would like to wipe their ass.
+                display_info_and_ask_wipe(unknown_disk.into())?;
+                // try again
+                continue;
+            },
+            _ => {
+                // This is not a blank disk.
+                try_again = true;
+            },
+        }
+    }
+}
+
+/// Takes in a non-blank disk and displays info about it, then asks the user if they would like to wipe the disk.
+/// Wipes the disk if the user asks, returns nothing.
+/// Will also return nothing if the user does not wipe the disk.
+pub fn display_info_and_ask_wipe(disk: DiskType) -> Result<(), FloppyDriveError> {
+    // This isn't a very friendly interface, but it'll do for now.
+
+    // Display the disk type
+    println!("The disk inserted is not blank. It is of type {disk:?}.");
+    println!("Would you like to wipe this disk?");
+    loop {
+        let answer = rprompt::prompt_reply("y/n: ")?
+            .to_ascii_lowercase()
+            .contains('y');
+        if answer {
+            // Wipe time!
+            todo!()
+        } else {
+            // No wipe.
+            print!("Okay, this disk will not be wiped.");
+            let _ = rprompt::prompt_reply("Please insert a different disk, then hit return.")?;
+            return Ok(());
+        }
+    }
+}
+
 
 // Error conversion
 impl From<std::io::Error> for FloppyDriveError {
