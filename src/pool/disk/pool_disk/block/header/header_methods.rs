@@ -53,7 +53,7 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, FloppyDriveError> {
 
     // if we are running with virtual disks, we skip the prompt.
     if !USE_VIRTUAL_DISKS
-        .lock()
+        .try_lock()
         .expect("Fluster is single threaded.")
         .is_some()
     {
@@ -122,8 +122,9 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, FloppyDriveError> {
 /// If so, we blank out the disk
 fn prompt_for_new_pool(disk: BlankDisk) -> Result<(), FloppyDriveError> {
     // if we are running with virtual disks, we skip the prompt.
+    debug!("Locking USE_VIRTUAL_DISKS...");
     if USE_VIRTUAL_DISKS
-        .lock()
+        .try_lock()
         .expect("Fluster is single threaded.")
         .is_some()
     {
@@ -196,7 +197,7 @@ fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolDiskHeader, PoolHe
         u16::from_le_bytes(block.data[11..11 + 2].try_into().expect("Impossible"));
 
     // Blocks free in pool
-    let pool_blocks_free: u16 =
+    let pool_standard_blocks_free: u16 =
         u16::from_le_bytes(block.data[13..13 + 2].try_into().expect("Impossible"));
 
     // Block allocation map
@@ -206,7 +207,8 @@ fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolDiskHeader, PoolHe
         flags,
         highest_known_disk,
         disk_with_next_free_block,
-        pool_blocks_free,
+        pool_standard_blocks_free,
+        disk_with_latest_inode_write: 1, // This is not persisted between launches.
         block_usage_map,
     })
 }
@@ -218,9 +220,9 @@ fn pool_header_to_raw_block(header: &PoolDiskHeader) -> RawBlock {
         flags,
         highest_known_disk,
         disk_with_next_free_block,
-        pool_blocks_free,
-        block_usage_map
-    } = header;
+        pool_standard_blocks_free,
+        disk_with_latest_inode_write ,
+        block_usage_map,} = header;
 
     // Create buffer for the header
     let mut buffer: [u8; 512] = [0u8; 512];
@@ -238,7 +240,10 @@ fn pool_header_to_raw_block(header: &PoolDiskHeader) -> RawBlock {
     buffer[11..11 + 2].copy_from_slice(&disk_with_next_free_block.to_le_bytes());
 
     // Free blocks
-    buffer[13..13 + 2].copy_from_slice(&pool_blocks_free.to_le_bytes());
+    buffer[13..13 + 2].copy_from_slice(&pool_standard_blocks_free.to_le_bytes());
+
+    // We do not save the inode write disk information.
+    let _ = disk_with_latest_inode_write;
 
     // Block usage map
     buffer[148..148 + 360].copy_from_slice(block_usage_map);
@@ -307,7 +312,7 @@ fn new_pool_header() -> PoolDiskHeader {
     let disk_with_next_free_block: u16 = u16::MAX;
 
     // How many pool blocks are free? None! We only have the root disk!
-    let pool_blocks_free: u16 = 0;
+    let pool_standard_blocks_free: u16 = 0;
 
     // What blocks are free on the pool disk? Not the first one!
     let mut block_usage_map: [u8; 360] = [0u8; 360];
@@ -318,7 +323,8 @@ fn new_pool_header() -> PoolDiskHeader {
         flags,
         highest_known_disk,
         disk_with_next_free_block,
-        pool_blocks_free,
+        pool_standard_blocks_free,
+        disk_with_latest_inode_write: 1, // This is not persisted on disk.
         block_usage_map
     }
 }

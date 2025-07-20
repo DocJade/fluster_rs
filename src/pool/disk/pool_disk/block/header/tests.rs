@@ -10,6 +10,8 @@ use crate::pool::disk::generic::block::block_structs::RawBlock;
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolDiskHeader;
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolHeaderFlags;
 
+use test_log::test; // We want to see logs while testing.
+
 // Tests
 
 // Ensure we can encode and decode a block
@@ -34,8 +36,9 @@ impl PoolDiskHeader {
             flags: PoolHeaderFlags::random(),
             highest_known_disk: random.random(),
             disk_with_next_free_block: random.random(),
-            pool_blocks_free: random.random(),
+            pool_standard_blocks_free: random.random(),
             block_usage_map: random_allocations(),
+            disk_with_latest_inode_write: 1, // This does not get saved to disk.
         }
     }
 }

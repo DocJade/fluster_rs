@@ -272,7 +272,6 @@ impl FileExtent {
     pub(super) fn from_bytes(bytes: &[u8]) -> FileExtent {
         let flags: ExtentFlags =
             ExtentFlags::from_bits(bytes[0]).expect("Unused bits should not be set.");
-        println!("{}", bytes.len());
         // 3 distinct disk types as of writing.
         // cleaner implementation is probably possible, but for just 3 types? this is fine
 

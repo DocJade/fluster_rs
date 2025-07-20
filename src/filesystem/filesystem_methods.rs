@@ -10,6 +10,7 @@ use super::filesystem_struct::FlusterFS;
 use super::filesystem_struct::USE_VIRTUAL_DISKS;
 use crate::pool::pool_struct::Pool;
 use easy_fuser::{FuseHandler, templates::DefaultFuseHandler};
+use log::debug;
 use std::path::PathBuf;
 use std::process::exit;
 
@@ -19,26 +20,34 @@ impl FlusterFS {
     /// Create new filesystem handle, this will kick off the whole process of loading in information about the pool.
     /// Takes in options to configure the new pool.
     pub fn start(options: &FilesystemOptions) -> Self {
+        debug!("Starting file system...");
         // Right now we dont use the options for anything, but they do initialize the globals we need, so we still need to pass it in.
         #[allow(dead_code)]
         #[allow(unused_variables)]
         let unused = options;
-        FlusterFS {
+        let fs = FlusterFS {
             inner: Box::new(DefaultFuseHandler::new()),
             pool: Pool::load(),
-        }
+        };
+        debug!("Done starting filesystem.");
+        fs
     }
 }
 
 impl FilesystemOptions {
     /// Initializes options for the filesystem, also configures the virtual disks if needed.
     pub fn new(use_virtual_disks: Option<PathBuf>, floppy_drive: PathBuf) -> Self {
+        debug!("Configuring file system options...");
         // Set the globals
         // set the floppy disk path
-        *FLOPPY_PATH.lock().expect("Fluster! Is single threaded.") = floppy_drive.clone();
-
+        debug!("Setting the floppy path...");
+        debug!("Locking FLOPPY_PATH...");
+        *FLOPPY_PATH.try_lock().expect("Fluster! Is single threaded.") = floppy_drive.clone();
+        debug!("Done.");
+        
         // Set the virtual disk flag if needed
         if let Some(ref path) = use_virtual_disks {
+            debug!("Setting up virtual disks...");
             // Sanity checks
             // Make sure this is a directory, and that the directory already exists
             if !path.is_dir() || !path.exists() {
@@ -46,12 +55,15 @@ impl FilesystemOptions {
                 println!("Virtual disk argument must be a valid path to a pre-existing directory.");
                 exit(-1);
             }
-
+            
+            debug!("Locking USE_VIRTUAL_DISKS...");
             *USE_VIRTUAL_DISKS
-                .lock()
-                .expect("Fluster! Is single threaded.") = Some(path.to_path_buf());
+            .try_lock()
+            .expect("Fluster! Is single threaded.") = Some(path.to_path_buf());
+            debug!("Done.");
         };
-
+    
+        debug!("Done configuring.");
         Self {
             use_virtual_disks,
             floppy_drive,

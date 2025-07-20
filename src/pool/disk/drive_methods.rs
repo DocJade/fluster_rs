@@ -119,11 +119,13 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Flopp
     // If we are running with virtual disks enabled, we are going to use a temp folder instead of the actual disk to speed up
     // development, waiting for disk seeks is slow and loud lol.
 
+    debug!("Locking USE_VIRTUAL_DISKS...");
     if let Some(ref path) = *USE_VIRTUAL_DISKS
-        .lock()
+        .try_lock()
         .expect("Fluster is single threaded.")
     {
         debug!("Attempting to access virtual disk {disk_number}...");
+        debug!("Are we creating this disk? : {new_disk}");
         // Get the tempfile.
         // These files do not delete themselves.
 
@@ -139,6 +141,7 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Flopp
         // If the tempfile does not exist, that means `create` was never called, which is an issue.
         // This will create the disk if the correct argument is passed.
 
+        debug!("Opening the temp disk with read/write privileges...");
         let temp_disk_file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -149,14 +152,17 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Flopp
 
         // Make sure the file is one floppy big, should have no effect on pre-existing files, since
         // they will already be this size.
+        debug!("Attempting to resize the temporary file to floppy size...");
         temp_disk_file.set_len(512 * 2880)?;
-
+        
+        debug!("Returning virtual disk.");
         return Ok(temp_disk_file);
     }
 
     // Get the global path to the floppy disk drive
+    debug!("Locking FLOPPY_PATH...");
     let disk_path = FLOPPY_PATH
-        .lock()
+        .try_lock()
         .expect("Fluster is single threaded.")
         .clone();
 
@@ -179,6 +185,7 @@ pub fn check_for_magic(block_bytes: &[u8]) -> bool {
 /// Will error out for non-wrong disk related issues.
 /// This function does not disable the CRC check, you must use open() if you are ignoring CRC.
 fn prompt_for_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
+    debug!("Prompting for disk {disk_number}...");
     let mut is_user_an_idiot: bool = false; // Did the user put in the wrong disk when asked?
     let mut disk: Result<DiskType, FloppyDriveError>;
     loop {
@@ -187,15 +194,32 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
         disk = open_and_deduce_disk(disk_number, false);
         // Is this the correct disk?
 
-        if let Ok(ok) = disk {
-            // Check if this is the right disk number
-            if disk_number == ok.get_disk_number() {
-                // Thats the right disk!
-                return Ok(ok);
-            }
+        match disk {
+            Ok(ok) => {
+                // Check if this is the right disk number
+                if disk_number == ok.get_disk_number() {
+                    // Thats the right disk!
+                    debug!("Got the correct disk.");
+                    return Ok(ok);
+                }
+            },
+            Err(error) => match error {
+                // If the error isn't about it being the wrong disk, we need to throw the error up.
+                FloppyDriveError::WrongDisk => {},
+                _ => {
+                    debug!("Got an error while prompting for disk: {error}");
+                    return Err(error);
+                }
+            },
         }
 
         // This was not the right disk.
+        // We should ALWAYS get the correct disk when testing.
+        #[cfg(test)]
+        if cfg!(test) {
+            panic!("Test received an invalid disk!");
+        }
+        
         // Prompt user to swap disks.
 
         if is_user_an_idiot {
@@ -215,7 +239,7 @@ fn prompt_for_blank_disk(disk_number: u16) -> Result<BlankDisk, FloppyDriveError
     let mut try_again: bool = false;
 
     // If we are on virtual disks, skip the initial prompt
-    if !USE_VIRTUAL_DISKS.lock().expect("Fluster is single threaded.").is_some() {
+    if !USE_VIRTUAL_DISKS.try_lock().expect("Fluster is single threaded.").is_some() {
         let _ = rprompt::prompt_reply("That disk is not blank. Please insert a blank disk, then hit enter.")?;
     }
 

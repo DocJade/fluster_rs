@@ -4,15 +4,15 @@
 
 use std::path::PathBuf;
 
+use fluster_fs::filesystem::filesystem_struct::FilesystemOptions;
+use fluster_fs::filesystem::filesystem_struct::FlusterFS;
 use tempfile::{TempDir, tempdir};
-
-use super::filesystem_struct::*;
 
 use test_log::test; // We want to see logs while testing.
 
 #[test]
 // Try starting up the filesystem
-fn initialize_pool() {
+fn initialize_filesystem() {
     let temp_dir = get_new_temp_dir();
     let floppy_drive: PathBuf = PathBuf::new(); // This is never read since we are using temporary disks.
     let fs_options = FilesystemOptions::new(Some(temp_dir.path().to_path_buf()), floppy_drive);

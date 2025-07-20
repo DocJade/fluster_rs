@@ -11,10 +11,10 @@ use crate::pool::disk::{generic::generic_structs::pointer_struct::DiskPointer, s
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct DirectoryItem {
-    pub(super) flags: DirectoryFlags,
-    pub(super) name_length: u8,
+    pub flags: DirectoryFlags,
+    pub name_length: u8,
     pub name: String,
-    pub(super) location: InodeLocation,
+    pub location: InodeLocation,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -26,8 +26,8 @@ pub struct DirectoryBlock {
     // static directory block is on block 2 of the origin disk.
     // Directories are separate from each other, you cannot get from one directory to another by just following
     // the next block pointer.
-    pub(super) next_block: DiskPointer,
-    pub directory_items: Vec<DirectoryItem>,
+    pub next_block: DiskPointer,
+    pub(super) directory_items: Vec<DirectoryItem>,
 }
 
 bitflags! {

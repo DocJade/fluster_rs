@@ -1,4 +1,5 @@
 // I allocate development time to testing.
+use test_log::test; // We want to see logs while testing.
 
 use rand::{rngs::ThreadRng, Rng};
 

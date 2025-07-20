@@ -33,8 +33,8 @@ impl Pool {
         load()
     }
     /// Brand new pools need to run some setup functions to get everything in a ready to use state.
-    fn initalize(&mut self) -> Result<(), FloppyDriveError> {
-        initalize_pool(self)
+    fn initalize() -> Result<(), FloppyDriveError> {
+        initalize_pool()
     }
 }
 
@@ -60,6 +60,7 @@ pub(super) fn sync(pool: &Pool) -> Result<(), ()> {
 /// Will prompt to make new pools if needed.
 /// Returns a pointer thingy to to the global.
 pub(super) fn load() -> Arc<Mutex<Pool>> {
+    debug!("Loading in pool information...");
     // Read in the header. If this fails, we cannot start the filesystem.
     let header = match PoolDiskHeader::read() {
         Ok(ok) => ok,
@@ -86,17 +87,13 @@ pub(super) fn load() -> Arc<Mutex<Pool>> {
 
     // All operations after this point use the global pool.
 
-    let mut neighbors_pool =
-        GLOBAL_POOL
-            .get()
-            .expect("Fluster is single threaded.")
-            .lock()
-            .expect("Fluster is single threaded.");
+    debug!("Locking GLOBAL_POOL...");
+    let highest_known: u16 = GLOBAL_POOL.get().expect("single threaded").try_lock().expect("single threaded").header.highest_known_disk;
 
     // Check if this is a brand new pool
-    if neighbors_pool.header.highest_known_disk == 0 {
+    if highest_known == 0 {
         // This is a brand new pool, we need to initialize it.
-        match neighbors_pool.initalize() {
+        match Pool::initalize() {
             Ok(ok) => ok,
             Err(error) => {
                 // Initializing the pool failed. This cannot continue.
@@ -109,14 +106,12 @@ pub(super) fn load() -> Arc<Mutex<Pool>> {
         };
     };
 
-    drop(neighbors_pool);
-
     // All done
     return shared_pool;
 }
 
 /// Set up stuff for a brand new pool
-fn initalize_pool(pool: &mut Pool) -> Result<(), FloppyDriveError> {
+fn initalize_pool() -> Result<(), FloppyDriveError> {
     debug!("Doing first time pool setup...");
     // Things a pool needs:
     // A second disk to start storing inodes on.
@@ -124,34 +119,40 @@ fn initalize_pool(pool: &mut Pool) -> Result<(), FloppyDriveError> {
     
     // Lets get that second disk going
     // First we need to make a standard disk
-    let mut standard_disk = add_disk::<StandardDisk>(pool)?;
-
+    debug!("Creating the standard disk (disk 1)...");
+    let standard_disk = add_disk::<StandardDisk>()?;
+    
     // Make sure that disk is disk 1, otherwise we are cooked.
     assert_eq!(standard_disk.number, 1);
-
-    // Time for that root directory inode.
-    // Since its the first inode we're adding, there should be enough space.
-    // TODO:
     
-    // Now we need to add that root directory inode.
-    todo!()
+    // The root directory is set up on the disk side, so we're done.
+    debug!("Finished first time pool setup.");
+    return Ok(());
 }
 
 /// Add a new disk of Type to the pool.
 /// Takes the next available disk number.
 /// Returns the newly created disk of type T.
-fn add_disk<T: DiskBootstrap>(pool: &mut Pool) -> Result<T, FloppyDriveError> {
+fn add_disk<T: DiskBootstrap>() -> Result<T, FloppyDriveError> {
     debug!("Attempting to add new disk to the pool of type: {}", std::any::type_name::<T>());
-    let next_open_disk = pool.header.highest_known_disk + 1;
-    // First, we need a blank disk.
+    debug!("Locking GLOBAL_POOL...");
+    let highest_known: u16 = GLOBAL_POOL.get().expect("single threaded").try_lock().expect("single threaded").header.highest_known_disk;
+    let next_open_disk = highest_known + 1;
+    
+    // First, we need a blank disk in the drive.
     // For virtual disk reasons, we still need to pass in the disk number that
     // we wish to create.
+    debug!("Getting a new blank disk...");
     let blank_disk = FloppyDrive::get_blank_disk(next_open_disk)?;
     
     // Now we need to create a disk to put in there from the supplied generic
+    debug!("Bootstrapping the new disk...");
     let bootstrapped = T::bootstrap(blank_disk.disk_file(), next_open_disk)?;
-
+    
     // The disk has now bootstrapped itself, we are done here.
-    pool.header.highest_known_disk = next_open_disk;
+    debug!("Locking GLOBAL_POOL...");
+    GLOBAL_POOL.get().expect("single threaded").try_lock().expect("single threaded").header.highest_known_disk += 1;
+
+    debug!("Done adding new disk.");
     Ok(bootstrapped)
 }

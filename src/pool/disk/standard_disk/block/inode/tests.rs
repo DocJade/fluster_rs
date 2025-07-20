@@ -9,8 +9,6 @@
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 use rand::Rng;
 use rand::rngs::ThreadRng;
-
-#[cfg(test)]
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::Inode;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeBlock;
@@ -19,6 +17,8 @@ use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeDirectory
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeFile;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeFlags;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeTimestamp;
+
+use test_log::test; // We want to see logs while testing.
 
 #[test]
 fn blank_inode_block_serialization() {
@@ -187,7 +187,7 @@ fn timestamp_consistent_serialization() {
 
 #[cfg(test)]
 impl Inode {
-    pub(super) fn get_random() -> Self {
+    pub(crate) fn get_random() -> Self {
         use rand::random_bool;
         if random_bool(0.5) {
             // A file
@@ -216,7 +216,7 @@ impl Inode {
 
 #[cfg(test)]
 impl InodeFile {
-    fn get_random() -> Self {
+    pub(crate) fn get_random() -> Self {
         let mut random = rand::rng();
         InodeFile {
             size: random.random(),
@@ -227,7 +227,7 @@ impl InodeFile {
 
 #[cfg(test)]
 impl InodeTimestamp {
-    fn get_random() -> Self {
+    pub(crate) fn get_random() -> Self {
         let mut random = rand::rng();
         InodeTimestamp {
             seconds: random.random(),
@@ -257,7 +257,7 @@ impl InodeLocation {
 
 #[cfg(test)]
 impl InodeDirectory {
-    fn get_random() -> Self {
+    pub(crate) fn get_random() -> Self {
         InodeDirectory {
             pointer: DiskPointer::get_random(),
         }

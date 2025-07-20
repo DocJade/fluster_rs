@@ -6,6 +6,8 @@ use rand::{RngCore, random_range, rngs::ThreadRng};
 
 use super::data_struct::DataBlock;
 
+use test_log::test; // We want to see logs while testing.
+
 // Tests
 
 #[test]

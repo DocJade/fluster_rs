@@ -12,6 +12,8 @@ use crate::pool::disk::standard_disk::block::directory::directory_struct::Direct
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryItem;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
 
+use test_log::test; // We want to see logs while testing.
+
 // Tests
 
 #[test]
@@ -38,7 +40,7 @@ fn filled_directory_block_serialization() {
         let mut test_block: DirectoryBlock = DirectoryBlock::new();
         // Fill with random inodes until we run out of room.
         loop {
-            match test_block.try_add_item(DirectoryItem::get_random()) {
+            match test_block.try_add_item(&DirectoryItem::get_random()) {
                 Ok(_) => break,
                 Err(err) => match err {
                     DirectoryBlockError::NotEnoughSpace => todo!(),
@@ -60,7 +62,7 @@ fn add_and_remove_to_directory_block() {
         let mut test_block: DirectoryBlock = DirectoryBlock::new();
         // Fill with random inodes until we run out of room.
         let random_item: DirectoryItem = DirectoryItem::get_random();
-        test_block.try_add_item(random_item.clone()).unwrap();
+        test_block.try_add_item(&random_item.clone()).unwrap();
         // Make sure that went in
         assert!(!test_block.directory_items.is_empty());
         test_block.try_remove_item(random_item).unwrap();
@@ -76,7 +78,7 @@ fn adding_and_removing_updates_size() {
         let random_item: DirectoryItem = DirectoryItem::get_random();
         let new_free = test_block.bytes_free;
 
-        test_block.try_add_item(random_item.clone()).unwrap();
+        test_block.try_add_item(&random_item).unwrap();
         let added_free = test_block.bytes_free;
 
         test_block.try_remove_item(random_item).unwrap();

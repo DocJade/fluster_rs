@@ -23,15 +23,17 @@ impl Pool {
     /// and create new disks if needed.
     ///
     /// Returns where the inode ended up.
-    fn fast_add_inode(inode: Inode) -> Result<InodeLocation, FloppyDriveError> {
+    pub fn fast_add_inode(inode: Inode) -> Result<InodeLocation, FloppyDriveError> {
         debug!("Fast adding inode...");
         // Get the pool's latest inode disk
-        let start_disk: u16 = GLOBAL_POOL.get().expect("Single thread").lock().expect("Single thread").header.disk_with_latest_inode_write.clone();
+        debug!("Locking GLOBAL_POOL...");
+        let start_disk: u16 = GLOBAL_POOL.get().expect("Single thread").try_lock().expect("Single thread").header.disk_with_latest_inode_write;
 
         let result = go_add_inode(inode, start_disk)?;
 
         // Update the pool with new successful write.
-        GLOBAL_POOL.get().expect("Single thread").lock().expect("Single thread").header.disk_with_latest_inode_write = result.disk.expect("Should always return a disk number");
+        debug!("Locking GLOBAL_POOL...");
+        GLOBAL_POOL.get().expect("Single thread").try_lock().expect("Single thread").header.disk_with_latest_inode_write = result.disk.expect("Should always return a disk number");
         
         // all done
         Ok(result)
@@ -47,7 +49,7 @@ impl Pool {
     /// and create new disks if needed.
     ///
     /// Returns where the inode ended up.
-    fn add_inode(inode: Inode) -> Result<InodeLocation, FloppyDriveError> {
+    pub fn add_inode(inode: Inode) -> Result<InodeLocation, FloppyDriveError> {
         debug!("Adding inode, starting from disk 1...");
         debug!("Adding inode, starting from disk 1...");
         // Start from the origin.
@@ -56,7 +58,8 @@ impl Pool {
         let result = go_add_inode(inode, start_disk)?;
         
         // Update the pool with new successful write.
-        GLOBAL_POOL.get().expect("Single thread").lock().expect("Single thread").header.disk_with_latest_inode_write = result.disk.expect("Should always return a disk number");
+        debug!("Locking GLOBAL_POOL...");
+        GLOBAL_POOL.get().expect("Single thread").try_lock().expect("Single thread").header.disk_with_latest_inode_write = result.disk.expect("Should always return a disk number");
         
         // all done
         Ok(result)
@@ -75,7 +78,7 @@ impl Pool {
     /// and create new disks if needed.
     ///
     /// Returns where the inode ended up.
-    fn greedy_add_inode(inode: Inode, current_disk: u16) -> Result<InodeLocation, FloppyDriveError> {
+    pub fn greedy_add_inode(inode: Inode, current_disk: u16) -> Result<InodeLocation, FloppyDriveError> {
         // Just go for it, yolo
         debug!("Greedily adding inode...");
         go_add_inode(inode, current_disk)

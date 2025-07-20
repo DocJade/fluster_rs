@@ -8,6 +8,8 @@ use super::file_extents_struct::FileExtentBlock;
 use rand::Rng;
 use rand::rngs::ThreadRng;
 
+use test_log::test; // We want to see logs while testing.
+
 // Tests
 
 #[test]

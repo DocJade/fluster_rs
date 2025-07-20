@@ -29,7 +29,7 @@ impl DirectoryBlock {
     /// Try to add an DirectoryItem to this block.
     ///
     /// Returns nothing.
-    pub(super) fn try_add_item(&mut self, item: DirectoryItem) -> Result<(), DirectoryBlockError> {
+    pub fn try_add_item(&mut self, item: &DirectoryItem) -> Result<(), DirectoryBlockError> {
         directory_block_try_add_item(self, item)
     }
     /// Try to remove a item from a directory.
@@ -52,7 +52,7 @@ impl DirectoryBlock {
     }
     /// Check if this directory contains an item with given name.
     /// May swap disks.
-    pub fn contains_item(&self, name: String) -> bool {
+    pub fn contains_item(&self, name: &String) -> bool {
         todo!()
     }
     /// Returns an alphabetically ordered Vec of all items in this directory.
@@ -90,7 +90,7 @@ fn directory_block_try_remove_item(
 
 fn directory_block_try_add_item(
     block: &mut DirectoryBlock,
-    item: DirectoryItem,
+    item: &DirectoryItem,
 ) -> Result<(), DirectoryBlockError> {
     // Attempt to add a new item to the directory
 
@@ -106,7 +106,7 @@ fn directory_block_try_add_item(
     // luckily since directory blocks dont require any ordering, we can just append it to the vec and update
     // the amount of free space remaining, since writing the actual data will just happen at the deserialization stage.
 
-    block.directory_items.push(item);
+    block.directory_items.push(item.clone());
 
     // Update free space
     // This cast is fine, item lengths could never hit > 2^16

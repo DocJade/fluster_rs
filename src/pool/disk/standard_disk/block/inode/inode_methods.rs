@@ -414,7 +414,7 @@ impl InodeTimestamp {
     pub fn now() -> Self {
         // Get the time
         let now = SystemTime::now();
-        let duration_since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
+        let duration_since_epoch = now.duration_since(UNIX_EPOCH).expect("You shouldn't be using fluster in the 1960s.");
         Self {
             seconds: duration_since_epoch.as_secs(),
             nanos: duration_since_epoch.subsec_nanos(),

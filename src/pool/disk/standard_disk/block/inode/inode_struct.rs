@@ -19,7 +19,7 @@ pub struct Inode {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub(super) struct InodeFile {
+pub struct InodeFile {
     pub(super) size: u64,
     pub(super) pointer: DiskPointer, // Points to extents
 }

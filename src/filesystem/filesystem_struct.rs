@@ -8,8 +8,8 @@ use std::{path::PathBuf, sync::{Arc, Mutex}};
 // Structs, Enums, Flags
 
 pub struct FlusterFS {
-    pub(super) inner: Box<DefaultFuseHandler>,
-    pub(super) pool: Arc<Mutex<Pool>>,
+    pub(crate) inner: Box<DefaultFuseHandler>,
+    pub(crate) pool: Arc<Mutex<Pool>>,
 }
 
 use lazy_static::lazy_static;
