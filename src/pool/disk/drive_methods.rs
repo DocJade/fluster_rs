@@ -6,7 +6,10 @@
 // Imports
 
 use log::debug;
+use log::error;
+use log::warn;
 
+use crate::helpers::hex_view::hex_view;
 use crate::pool::disk::blank_disk::blank_disk_struct::BlankDisk;
 use crate::pool::disk::drive_struct::DiskBootstrap;
 use crate::pool::disk::generic::block::block_structs::BlockError;
@@ -56,56 +59,70 @@ impl FloppyDrive {
 // Functions for implementations
 
 fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, FloppyDriveError> {
+    debug!("Opening and deducing disk disk {disk_number}...");
+    debug!("Is it a new disk? : {new_disk}");
     // First, we need the file to read from
     let disk_file: File = get_floppy_drive_file(disk_number, new_disk)?;
-
+    
     // Now we must get the 0th block
     // We need to read a block before we have an actual disk, so we need
     // to call this function directly as a workaround.
     // We must ignore the CRC here, since we know nothing about the disk.
+    debug!("Reading in the header at block 0...");
     let header_block = read_block_direct(&disk_file, 0, true)?;
-
+    
     // Now we check for the magic
+    debug!("Checking for magic...");
     if !check_for_magic(&header_block.data) {
+        debug!("No magic, checking if its blank...");
         // The magic is missing, check if the block is empty
         if header_block.data.iter().all(|byte| *byte == 0) {
             // Block is completely blank.
+            debug!("Disk is blank, returning.");
             return Ok(DiskType::Blank(BlankDisk::new(disk_file)));
         }
         // Otherwise, we dont know what kind of disk this is.
         // Its probably not a fluster disk.
+        debug!("Disk was not blank, returning unknown disk...");
         return Ok(DiskType::Unknown(UnknownDisk::new(disk_file)));
     }
-
+    
     // Magic exists, time to figure out what kind of disk this is.
+    debug!("Disk has magic, deducing type...");
     // Bitflags will tell us.
-
+    
     // Pool disk.
     // The header reads should check the CRC of the block.
     if header_block.data[8] & 0b10000000 != 0 {
+        debug!("Head is for a pool disk, returning.");
         return Ok(DiskType::Pool(PoolDisk::from_header(
             header_block,
             disk_file,
         )));
     }
-
+    
     // Dense disk.
     if header_block.data[8] & 0b01000000 != 0 {
+        debug!("Head is for a dense disk, returning.");
         return Ok(DiskType::Dense(DenseDisk::from_header(
             header_block,
             disk_file,
         )));
     }
-
+    
     // Standard disk.
     if header_block.data[8] & 0b00100000 != 0 {
+        debug!("Head is for a standard disk, returning.");
         return Ok(DiskType::Standard(StandardDisk::from_header(
             header_block,
             disk_file,
         )));
     }
-
+    
     // it should be impossible to get here
+    error!("Header of disk did not match any known disk type!");
+    error!("Hexdump:\n{}",hex_view(header_block.data.to_vec()));
+    error!("We cannot continue with an un-deducible disk!");
     unreachable!();
 }
 
@@ -193,7 +210,7 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
         // We do not create disks here.
         disk = open_and_deduce_disk(disk_number, false);
         // Is this the correct disk?
-
+        
         match disk {
             Ok(ok) => {
                 // Check if this is the right disk number
@@ -202,12 +219,13 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
                     debug!("Got the correct disk.");
                     return Ok(ok);
                 }
+                warn!("Wrong disk received. Got disk {}", ok.get_disk_number());
             },
             Err(error) => match error {
                 // If the error isn't about it being the wrong disk, we need to throw the error up.
                 FloppyDriveError::WrongDisk => {},
                 _ => {
-                    debug!("Got an error while prompting for disk: {error}");
+                    warn!("Got an error while prompting for disk: {error}");
                     return Err(error);
                 }
             },
@@ -217,6 +235,7 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
         // We should ALWAYS get the correct disk when testing.
         #[cfg(test)]
         if cfg!(test) {
+            error!("Got an invalid disk during a test!");
             panic!("Test received an invalid disk!");
         }
         

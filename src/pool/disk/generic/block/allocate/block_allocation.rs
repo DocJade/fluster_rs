@@ -6,13 +6,17 @@
 // allocate bytes that are already allocated
 // allocate past the end of the table
 
+use log::debug;
+
+use crate::pool::disk::generic::block::block_structs::BlockError;
+
 // To be able to allocate blocks, we need a couple things
 pub trait BlockAllocation {
     /// Get the block allocation table
     fn get_allocation_table(&self) -> &[u8];
 
-    /// Update the allocation table
-    fn set_allocation_table(&mut self, new_table: &[u8]);
+    /// Update and flush the allocation table to disk.
+    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), BlockError>;
 
     /// Attempts to find free blocks on the disk.
     /// Returns indexes for the found blocks, or returns the number of blocks free if there is not enough space.
@@ -22,13 +26,13 @@ pub trait BlockAllocation {
 
     /// Allocates the requested blocks.
     /// Will panic if fed invalid data.
-    fn allocate_blocks(&mut self, blocks: &Vec<u16>) -> u16 {
+    fn allocate_blocks(&mut self, blocks: &Vec<u16>) -> Result<u16, BlockError> {
         go_allocate_or_free_blocks(self, blocks, true)
     }
 
     /// Frees the requested blocks.
     /// Will panic if fed invalid data.
-    fn free_blocks(&mut self, blocks: &Vec<u16>) -> u16 {
+    fn free_blocks(&mut self, blocks: &Vec<u16>) -> Result<u16, BlockError> {
         go_allocate_or_free_blocks(self, blocks, false)
     }
 
@@ -55,7 +59,7 @@ fn go_find_free_blocks<T: BlockAllocation + ?Sized>(caller: &T, blocks_requested
             // Since we know the bit on one side of the AND is always set, the result will be 0 if the bit is unset.
             // Thus, the result of the if statement will be `0` if the block is free.
             // Could this be done cleaner? Maybe, I'm not very experienced with bitwise operations.
-            if byte << sub_bit & 0b10000000 == 0 {
+            if (byte << sub_bit) & 0b10000000 == 0 {
                 // bit isn't set, the block is free!
                 free.push((byte_index as u16 * 8) + sub_bit);
 
@@ -72,7 +76,13 @@ fn go_find_free_blocks<T: BlockAllocation + ?Sized>(caller: &T, blocks_requested
 }
 
 /// allocate false frees the provided bytes.
-fn go_allocate_or_free_blocks<T: BlockAllocation + ?Sized>(caller: &mut T, blocks: &Vec<u16>, allocate: bool) -> u16 {
+fn go_allocate_or_free_blocks<T: BlockAllocation + ?Sized>(caller: &mut T, blocks: &Vec<u16>, allocate: bool) -> Result<u16, BlockError> {
+    debug!(
+        "Attempting to {} {} blocks on the current disk...",
+        if allocate { "Allocate" } else { "free" },
+        blocks.len()
+    );
+
     // If the user provides a vec with a duplicate item, we will panic from double free / double allocate
     // Vec ordering does not matter, as we calculate the offset from each item
     // The user must allocate/free at least one block, and that block cannot be past the end of the table.
@@ -83,6 +93,7 @@ fn go_allocate_or_free_blocks<T: BlockAllocation + ?Sized>(caller: &mut T, block
     let mut new_allocation_table: [u8; 360] = [0u8; 360];
     new_allocation_table.copy_from_slice(caller.get_allocation_table());
 
+    debug!("Updating blocks...");
     for block in blocks {
         // Get the bit
         // Integer division rounds towards zero, so this is fine.
@@ -111,10 +122,13 @@ fn go_allocate_or_free_blocks<T: BlockAllocation + ?Sized>(caller: &mut T, block
             }
         }
     }
-
+    debug!("Done updating blocks.");
+    
     // All operations are done, write back the new table
-    caller.set_allocation_table(&new_allocation_table);
-    blocks.len() as u16
+    debug!("Writing back new allocation table...");
+    caller.set_allocation_table(&new_allocation_table)?;
+    debug!("Done.");
+    Ok(blocks.len() as u16)
 }
 
 #[inline] // This function should happen inline, since it's such a small operation.

@@ -4,7 +4,7 @@ use bitflags::bitflags;
 // Structs, Enums, Flags
 
 /// The header of a disk
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct StandardDiskHeader {
     pub flags: StandardHeaderFlags,
     pub disk_number: u16,

@@ -8,7 +8,7 @@ use super::filesystem_struct::FLOPPY_PATH;
 use super::filesystem_struct::FilesystemOptions;
 use super::filesystem_struct::FlusterFS;
 use super::filesystem_struct::USE_VIRTUAL_DISKS;
-use crate::pool::pool_struct::Pool;
+use crate::pool::pool_actions::pool_struct::Pool;
 use easy_fuser::{FuseHandler, templates::DefaultFuseHandler};
 use log::debug;
 use std::path::PathBuf;
@@ -46,7 +46,7 @@ impl FilesystemOptions {
         debug!("Done.");
         
         // Set the virtual disk flag if needed
-        if let Some(ref path) = use_virtual_disks {
+        if let Some(path) = use_virtual_disks.clone() {
             debug!("Setting up virtual disks...");
             // Sanity checks
             // Make sure this is a directory, and that the directory already exists

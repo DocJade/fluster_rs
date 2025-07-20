@@ -32,11 +32,12 @@ impl DiskBootstrap for DenseDisk {
 // This disk has block level allocations
 impl BlockAllocation for DenseDisk {
     fn get_allocation_table(&self) -> &[u8] {
-        &self.block_usage_map
+        &self.header.block_usage_map
     }
 
-    fn set_allocation_table(&mut self, new_table: &[u8]) {
-        self.block_usage_map = new_table.try_into().expect("Incoming table should be the same as outgoing.");
+    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), BlockError> {
+        self.header.block_usage_map = new_table.try_into().expect("Incoming table should be the same as outgoing.");
+        self.flush()
     }
 }
 

@@ -8,8 +8,6 @@ pub struct DenseDisk {
     pub(super) number: u16,
     /// The header for this disk
     pub(super) header: DenseDiskHeader,
-    /// Map of used blocks on this disk
-    pub(super) block_usage_map: [u8; 360],
     /// The disk file
     pub(super) disk_file: std::fs::File,
 }

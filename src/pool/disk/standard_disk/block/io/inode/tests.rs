@@ -4,9 +4,10 @@
 
 use std::path::PathBuf;
 
+use log::debug;
 use tempfile::{tempdir, TempDir};
 
-use crate::{filesystem::filesystem_struct::{FilesystemOptions, FlusterFS}, pool::{disk::standard_disk::block::inode::inode_struct::Inode, pool_struct::Pool}};
+use crate::{filesystem::filesystem_struct::{FilesystemOptions, FlusterFS}, pool::{disk::standard_disk::block::inode::inode_struct::Inode, pool_actions::pool_struct::Pool}};
 
 use test_log::test; // We want to see logs while testing.
 
@@ -46,5 +47,8 @@ fn get_filesystem() -> FlusterFS {
 
 // Temporary directories for virtual disks
 fn get_new_temp_dir() -> TempDir {
-    tempdir().unwrap()
+    let mut dir = tempdir().unwrap();
+    dir.disable_cleanup(true);
+    debug!("Created a temp directory at {}, it will not be deleted on exit.", dir.path().to_string_lossy());
+    dir
 }

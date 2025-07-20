@@ -3,7 +3,7 @@
 
 use log::debug;
 
-use crate::pool::{disk::generic::{block::{allocate::block_allocation::BlockAllocation, block_structs::{BlockError, RawBlock}}, disk_trait::GenericDiskMethods}, pool_struct::GLOBAL_POOL};
+use crate::pool::{disk::generic::{block::{allocate::block_allocation::BlockAllocation, block_structs::{BlockError, RawBlock}}, disk_trait::GenericDiskMethods}, pool_actions::pool_struct::GLOBAL_POOL};
 
 // A fancy new trait thats built out of other traits!
 // Automatically add it to all types that implement the subtypes we need.
@@ -29,9 +29,11 @@ pub trait CheckedIO: BlockAllocation + GenericDiskMethods {
         debug!("Performing checked write on block {}...", block.block_index);
         // Make sure block is free
         assert!(!self.is_block_allocated(block.block_index));
+        debug!("Block was not already allocated, writing...");
         self.write_block(block)?;
         // Now mark the block as allocated.
-        let blocks_allocated = self.allocate_blocks(&[block.block_index].to_vec());
+        debug!("Marking block as allocated...");
+        let blocks_allocated = self.allocate_blocks(&[block.block_index].to_vec())?;
         // Make sure it was actually allocated.
         assert_eq!(blocks_allocated, 1);
         // Now decrement the pool header

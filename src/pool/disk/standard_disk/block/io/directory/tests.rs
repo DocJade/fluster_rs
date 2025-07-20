@@ -4,9 +4,10 @@
 
 use std::path::PathBuf;
 
+use log::debug;
 use tempfile::{tempdir, TempDir};
 
-use crate::{filesystem::filesystem_struct::{FilesystemOptions, FlusterFS}, pool::{disk::{drive_struct::FloppyDrive, generic::{generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::block::directory::directory_struct::DirectoryBlock}, pool_struct::Pool}};
+use crate::{filesystem::filesystem_struct::{FilesystemOptions, FlusterFS}, pool::{disk::{drive_struct::FloppyDrive, generic::{generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::block::directory::directory_struct::DirectoryBlock}, pool_actions::pool_struct::Pool}};
 
 use test_log::test; // We want to see logs while testing.
 
@@ -53,6 +54,9 @@ fn get_directory_block() -> DirectoryBlock {
 
 // Temporary directories for virtual disks
 fn get_new_temp_dir() -> TempDir {
-    tempdir().unwrap()
+    let mut dir = tempdir().unwrap();
+    dir.disable_cleanup(true);
+    debug!("Created a temp directory at {}, it will not be deleted on exit.", dir.path().to_string_lossy());
+    dir
 }
 // TODO: This is getting dropped which removes the temporary disks, how do we keep it in scope?

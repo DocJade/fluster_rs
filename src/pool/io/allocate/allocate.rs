@@ -1,6 +1,6 @@
 // Pool level block allocations
 
-use crate::pool::{disk::{drive_struct::FloppyDriveError, generic::generic_structs::pointer_struct::DiskPointer}, pool_struct::Pool};
+use crate::pool::{disk::{drive_struct::FloppyDriveError, generic::generic_structs::pointer_struct::DiskPointer}, pool_actions::pool_struct::Pool};
 
 impl Pool {
     /// Finds blocks across the entire pool.

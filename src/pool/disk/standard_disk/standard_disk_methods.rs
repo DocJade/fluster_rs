@@ -17,7 +17,7 @@ use crate::pool::{disk::{
         block::{directory::directory_struct::DirectoryBlock, header::header_struct::{StandardDiskHeader, StandardHeaderFlags}, inode::inode_struct::{Inode, InodeBlock, InodeDirectory, InodeFlags, InodeTimestamp}},
         standard_disk_struct::StandardDisk,
     },
-}, pool_struct::GLOBAL_POOL};
+}, pool_actions::pool_struct::{Pool, GLOBAL_POOL}};
 
 // Implementations
 
@@ -26,20 +26,29 @@ use crate::pool::{disk::{
 impl DiskBootstrap for StandardDisk {
     fn bootstrap(file: File, disk_number: u16) -> Result<StandardDisk, FloppyDriveError> {
         debug!("Boostrapping a standard disk...");
-        // Make the disk
-        let mut disk = create(file, disk_number)?;
-        // Now that we have a disk, we can use the safe IO.
         
         // Update how many blocks are free in the pool
         // New standard disks have only the header allocated.
         // 2880 - 1 = 2879
+        // But, the disk setup process will automatically decrement this count for us.
         debug!("Locking GLOBAL_POOL...");
-        GLOBAL_POOL.get().expect("single threaded").try_lock().expect("single threaded").header.pool_standard_blocks_free += 2879;
+        GLOBAL_POOL.get().expect("single threaded").try_lock().expect("single threaded").header.pool_standard_blocks_free += 2880;
+        
+        // Make the disk
+        debug!("Running create...");
+        let mut disk = create(file, disk_number)?;
+        // Now that we have a disk, we can use the safe IO.
+        
+        
         
         // Write the inode block
+        debug!("Writing inode block...");
         let inode_block = InodeBlock::new();
         let inode_writer = inode_block.to_block(1);
         disk.checked_write(&inode_writer)?;
+
+        //TODO:Testing
+        assert!(disk.is_block_allocated(1));
         
         // if this is disk 1 then we need to add:
         // Directory block
@@ -55,13 +64,11 @@ impl DiskBootstrap for StandardDisk {
         let directory_block: DirectoryBlock = DirectoryBlock::new();
         
         // Write that to the disk. It goes in block 2.
+        debug!("Writing root directory block...");
         disk.checked_write(&directory_block.to_block(2))?;
         
         // Now we need to manually add the inode that points to it. Because the inode at the 0 index
         // of block 1 is the inode that points to the root directory
-        
-        // We'll just make a new block instead of reading it back, since the current one is blank anyways.
-        let mut new_inode_block = InodeBlock::new();
         
         // Add the root inode
         let pointer_to_dat_mf: DiskPointer = DiskPointer {
@@ -79,9 +86,12 @@ impl DiskBootstrap for StandardDisk {
             modified: right_now,
         };
         
-        let inode_result = new_inode_block.try_add_inode(the_actual_inode).expect("There should be room.");
-        // Make sure that actually ended up at position 0
-        assert_eq!(inode_result, 0);
+        debug!("Writing root directory inode...");
+        let inode_result = Pool::add_inode(the_actual_inode).expect("We should have room.");
+        // Make sure that actually ended up at the right spot.
+        assert_eq!(inode_result.disk, Some(1));
+        assert_eq!(inode_result.block, 1);
+        assert_eq!(inode_result.offset, 0);
         
         // All done!
         debug!("Done bootstrapping standard disk.");
@@ -89,19 +99,25 @@ impl DiskBootstrap for StandardDisk {
     }
 
     fn from_header(block: RawBlock, file: File) -> Self {
-        // TODO: Check CRC.
-        todo!()
+        // load in the header
+        let header: StandardDiskHeader = StandardDiskHeader::from_block(&block).expect("Already checked type.");
+        StandardDisk {
+            number: header.disk_number,
+            disk_file: file,
+            header,
+        }
     }
 }
 
 // This disk has block level allocations
 impl BlockAllocation for StandardDisk {
     fn get_allocation_table(&self) -> &[u8] {
-        &self.block_usage_map
+        &self.header.block_usage_map
     }
 
-    fn set_allocation_table(&mut self, new_table: &[u8]) {
-        self.block_usage_map = new_table.try_into().expect("Incoming table should be the same as outgoing.");
+    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), BlockError> {
+        self.header.block_usage_map = new_table.try_into().expect("Incoming table should be the same as outgoing.");
+        self.flush()
     }
 }
 
@@ -128,16 +144,17 @@ impl StandardDiskHeader {
 /// duplicate disks are not created, and to track the creation of this new disk.
 fn create(file: File, disk_number: u16) -> Result<StandardDisk, FloppyDriveError> {
     debug!("Creating new standard disk {disk_number}");
+    debug!("Creating spoofed disk...");
     // Spoof the header, since we're about to give it a new one.
     let mut disk: StandardDisk = StandardDisk {
         number: disk_number,
         header: StandardDiskHeader::spoof(),
-        block_usage_map: [0u8; 360],
         disk_file: file,
     };
     
     // Now give it some head    er
     // This function checks if the disk is blank for us.
+    debug!("Initializing the disk from spoof...");
     initialize_numbered(&mut disk, disk_number)?;
     
     // done
@@ -162,30 +179,36 @@ fn initialize_numbered(disk: &mut StandardDisk, disk_number: u16) -> Result<(), 
     // Time to write in all of the header data.
     // Construct the new header
     
-    // New disks have no flags set.
-    let flags: StandardHeaderFlags = StandardHeaderFlags::empty();
+    // New disks have no flags set, besides the required marker bit
+    let mut flags: StandardHeaderFlags = StandardHeaderFlags::empty();
+    flags.insert(StandardHeaderFlags::Marker);
     
     // New disks do have a few pre-allocated blocks, namely the header and the first inode block
-    // So construct a map accordingly
-    let mut block_usage_map: [u8; 360] = [0u8; 360];
-    block_usage_map[0] = 0b10000000; // We will set up the other 2 blocks later
+    // But they will be allocated during the creation process.
+    let block_usage_map: [u8; 360] = [0u8; 360];
     
     let header = StandardDiskHeader {
         flags,
         disk_number,
         block_usage_map,
     };
+
+    
     
     // Now serialize that, and write it
-    debug!("Writing header...");
-    let header_block = &header.to_disk_block();
+    let header_block = &header.to_block();
+
+    // Update the header on the provided disk, since it's currently spoofed.
+    disk.header = header;
     
     // Use the disk interface to write it safely
-    // This does not update the pool block count.
-    disk.write_block(header_block)?;
+    // This will allocate the header block
+    debug!("Writing header...");
+    disk.checked_write(header_block)?;
+    debug!("Header written.");
     
     // All done!
-    debug!("Done initializing...");
+    debug!("Done initializing.");
     Ok(())
 }
 
@@ -221,9 +244,19 @@ impl GenericDiskMethods for StandardDisk {
     fn disk_file_mut(&mut self) ->  &mut File {
         &mut self.disk_file
     }
-    
+
     #[doc = " Sync all in-memory information to disk"]
-    fn flush(&mut self) -> Result<(), BlockError> {
-        self.write_block(&self.header.to_disk_block())
+    #[doc = " Headers and such."]
+    fn flush(&mut self) -> Result<(),BlockError> {
+        // We need to write the header back to disk, since that is the only
+        // information we can edit in memory without immediately writing.
+        debug!("Flushing disk...");
+        // TESTING TODO:
+        let header_copy = self.header.clone();
+        let test = &self.header.to_block();
+        let test2 = self.header.to_block();
+        self.checked_update(&self.header.to_block())?;
+        debug!("Disk flushed.");
+        Ok(())
     }
 }

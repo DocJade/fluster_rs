@@ -58,6 +58,8 @@ impl InodeBlock {
     }
     /// Try to add an Inode to this block.
     /// Updates the byte usage counter.
+    /// 
+    /// This does NOT automatically flush information to the disk.
     ///
     /// Returns the offset of the added inode
     pub fn try_add_inode(&mut self, inode: Inode) -> Result<u16, InodeBlockError> {

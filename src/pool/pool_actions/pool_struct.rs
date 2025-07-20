@@ -24,9 +24,9 @@ lazy_static! {
 // All of the information we need about a pool to do our job.
 #[derive(Debug)]
 pub struct Pool {
-    pub(super) header: PoolDiskHeader,
+    pub(crate) header: PoolDiskHeader,
     /// Pool statistics are not saved to disk, they exist only at runtime.
-    pub(super) statistics: PoolStatistics,
+    pub(crate) statistics: PoolStatistics,
 }
 
 #[derive(Debug)]

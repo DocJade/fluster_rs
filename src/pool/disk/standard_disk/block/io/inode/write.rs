@@ -8,7 +8,7 @@
 
 use log::debug;
 
-use crate::pool::{disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::{generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::{block::inode::inode_struct::{Inode, InodeBlock, InodeBlockError, InodeLocation}, standard_disk_struct::StandardDisk}}, pool_struct::{Pool, GLOBAL_POOL}};
+use crate::pool::{disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::{generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::{block::inode::inode_struct::{Inode, InodeBlock, InodeBlockError, InodeLocation}, standard_disk_struct::StandardDisk}}, pool_actions::pool_struct::{Pool, GLOBAL_POOL}};
 
 // For the pool implementations, we do not use Self, as we might try to double mut it if the inode
 // addition routine adds a new disk.
@@ -50,7 +50,6 @@ impl Pool {
     ///
     /// Returns where the inode ended up.
     pub fn add_inode(inode: Inode) -> Result<InodeLocation, FloppyDriveError> {
-        debug!("Adding inode, starting from disk 1...");
         debug!("Adding inode, starting from disk 1...");
         // Start from the origin.
         let start_disk: u16 = 1;

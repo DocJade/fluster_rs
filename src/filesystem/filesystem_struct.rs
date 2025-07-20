@@ -2,7 +2,7 @@
 
 // Imports
 
-use crate::pool::pool_struct::Pool;
+use crate::pool::pool_actions::pool_struct::Pool;
 use easy_fuser::templates::DefaultFuseHandler;
 use std::{path::PathBuf, sync::{Arc, Mutex}};
 // Structs, Enums, Flags

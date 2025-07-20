@@ -9,10 +9,10 @@ use crate::pool::disk::{
 // Implementations
 
 impl StandardDiskHeader {
-    pub fn extract_header(raw_block: &RawBlock) -> Result<StandardDiskHeader, FloppyDriveError> {
+    pub fn from_block(raw_block: &RawBlock) -> Result<StandardDiskHeader, FloppyDriveError> {
         extract_header(raw_block)
     }
-    pub fn to_disk_block(&self) -> RawBlock {
+    pub fn to_block(&self) -> RawBlock {
         to_disk_block(self)
     }
 }

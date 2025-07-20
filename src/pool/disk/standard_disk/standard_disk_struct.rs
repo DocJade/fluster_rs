@@ -11,8 +11,6 @@ pub struct StandardDisk {
     pub number: u16,
     /// The disk header
     pub header: StandardDiskHeader,
-    /// Map of used blocks on this disk
-    pub(super) block_usage_map: [u8; 360],
     /// The file that refers to this disk
     pub(super) disk_file: std::fs::File,
 }

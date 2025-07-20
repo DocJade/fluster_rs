@@ -39,5 +39,6 @@ pub trait GenericDiskMethods {
     fn set_disk_number(&mut self, disk_number: u16);
 
     /// Sync all in-memory information to disk
+    /// Headers and such.
     fn flush(&mut self) -> Result<(), BlockError>;
 }

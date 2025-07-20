@@ -31,7 +31,7 @@ impl PoolDiskHeader {
         read_pool_header_from_disk()
     }
     /// Convert the pool header into a RawBlock
-    pub fn to_block(&self) -> RawBlock {
+    pub fn to_block(self) -> RawBlock {
         pool_header_to_raw_block(self)
     }
     /// Try and convert a raw block into a pool header
@@ -213,7 +213,7 @@ fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolDiskHeader, PoolHe
     })
 }
 
-fn pool_header_to_raw_block(header: &PoolDiskHeader) -> RawBlock {
+fn pool_header_to_raw_block(header: PoolDiskHeader) -> RawBlock {
     // Deconstruct / discombobulate
     #[deny(unused_variables)] // You need to write ALL of them.
     let PoolDiskHeader {
@@ -246,7 +246,7 @@ fn pool_header_to_raw_block(header: &PoolDiskHeader) -> RawBlock {
     let _ = disk_with_latest_inode_write;
 
     // Block usage map
-    buffer[148..148 + 360].copy_from_slice(block_usage_map);
+    buffer[148..148 + 360].copy_from_slice(&block_usage_map);
 
     // Add the CRC
     // TODO: Make sure there is a test for valid crcs on this header type
