@@ -25,6 +25,7 @@ use crate::pool::disk::pool_disk::pool_disk_struct::PoolDisk;
 use crate::filesystem::filesystem_struct::FLOPPY_PATH;
 use crate::filesystem::filesystem_struct::USE_VIRTUAL_DISKS;
 use crate::pool::disk::unknown_disk::unknown_disk_struct::UnknownDisk;
+use crate::pool::pool_actions::pool_struct::GLOBAL_POOL;
 
 use super::drive_struct::DiskType;
 use super::drive_struct::FloppyDrive;
@@ -32,6 +33,14 @@ use super::drive_struct::FloppyDriveError;
 
 use std::fs::File;
 use std::fs::OpenOptions;
+use std::sync::atomic::AtomicU16;
+use std::sync::atomic::Ordering;
+
+
+// Disk tracking global.
+
+// To better count disk swaps, we need to know what the most recently opened disk was
+static CURRENT_DISK_IN_DRIVE: AtomicU16 = AtomicU16::new(0);
 
 // Implementations
 
@@ -213,8 +222,19 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
         
         match disk {
             Ok(ok) => {
+                let new_disk_number = ok.get_disk_number();
+                // Update the current disk if needed
+                let previous_disk = CURRENT_DISK_IN_DRIVE.load(Ordering::SeqCst);
+                if new_disk_number != previous_disk {
+                    // We have swapped disks.
+                    CURRENT_DISK_IN_DRIVE.store(new_disk_number, Ordering::SeqCst);
+                    // Update the swap count
+                    debug!("Locking GLOBAL_POOL, updating disk swap count.");
+                    GLOBAL_POOL.get().expect("single threaded").try_lock().expect("single threaded").statistics.swaps += 1;
+                }
+
                 // Check if this is the right disk number
-                if disk_number == ok.get_disk_number() {
+                if disk_number == new_disk_number {
                     // Thats the right disk!
                     debug!("Got the correct disk.");
                     return Ok(ok);

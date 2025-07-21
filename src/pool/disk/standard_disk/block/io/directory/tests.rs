@@ -48,15 +48,11 @@ fn get_directory_block() -> DirectoryBlock {
     block
 }
 
-//
-// Helper functions
-//
 
 // Temporary directories for virtual disks
-fn get_new_temp_dir() -> TempDir {
+pub fn get_new_temp_dir() -> TempDir {
     let mut dir = tempdir().unwrap();
     dir.disable_cleanup(true);
     debug!("Created a temp directory at {}, it will not be deleted on exit.", dir.path().to_string_lossy());
     dir
 }
-// TODO: This is getting dropped which removes the temporary disks, how do we keep it in scope?

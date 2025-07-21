@@ -1,8 +1,6 @@
 // Imports
 use std::{
-    fs::{File, OpenOptions},
-    io::Read,
-    u16,
+    fs::{File, OpenOptions}, io::Read, u16
 };
 
 use log::{debug, error};
@@ -18,6 +16,7 @@ use crate::pool::{disk::{
         standard_disk_struct::StandardDisk,
     },
 }, pool_actions::pool_struct::{Pool, GLOBAL_POOL}};
+
 
 // Implementations
 

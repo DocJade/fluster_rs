@@ -32,17 +32,17 @@ pub struct Pool {
 #[derive(Debug)]
 pub struct PoolStatistics {
     /// How many times we've swapped disks.
-    pub(super) swaps: u64,
+    pub(crate) swaps: u64,
     /// How many bytes we've read. (Requested by the OS)
-    pub(super) data_bytes_read: u64,
+    pub(crate) data_bytes_read: u64,
     /// Bytes we've read from the disk, including file overhead and such
-    pub(super) total_bytes_read: u64,
+    pub(crate) total_bytes_read: u64,
     /// How many bytes we've written. (Requested by the OS)
-    pub(super) data_bytes_written: u64,
+    pub(crate) data_bytes_written: u64,
     /// Bytes we've read from the disk, including file overhead and such
-    pub(super) total_bytes_written: u64,
+    pub(crate) total_bytes_written: u64,
     /// Rolling cache hit rate.
-    pub(super) cache_hit_rate: f32,
+    pub(crate) cache_hit_rate: f32,
 }
 
 /// Somebody peed in the pool.
