@@ -86,6 +86,7 @@ fn to_disk_block(header: &StandardDiskHeader) -> RawBlock {
     let finished_block: RawBlock = RawBlock {
         block_index: 0,
         data: buffer,
+        originating_disk: None, // Headers are for writing.
     };
 
     // All done!

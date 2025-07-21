@@ -27,6 +27,9 @@ pub struct DirectoryBlock {
     // Directories are separate from each other, you cannot get from one directory to another by just following
     // the next block pointer.
     pub next_block: DiskPointer,
+    // At runtime its useful to know where this block came from.
+    // This doesn't need to get written to disk.
+    pub block_origin: DiskPointer, // This MUST be set. it cannot point nowhere.
     pub(crate) directory_items: Vec<DirectoryItem>,
 }
 

@@ -67,6 +67,7 @@ fn to_disk_block(header: &DenseDiskHeader) -> RawBlock {
     let finished_block: RawBlock = RawBlock {
         block_index: 0,
         data: buffer,
+        originating_disk: None, // This is on the way to be written.
     };
 
     // All done!

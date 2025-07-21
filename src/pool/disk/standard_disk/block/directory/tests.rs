@@ -6,6 +6,7 @@
 
 use rand::{self, Rng};
 
+use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryBlock;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryBlockError;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryFlags;
@@ -18,8 +19,15 @@ use test_log::test; // We want to see logs while testing.
 
 #[test]
 fn blank_directory_block_serialization() {
-    let test_block: DirectoryBlock = DirectoryBlock::new();
-    let serialized = test_block.to_block(69);
+    let mut test_block: DirectoryBlock = DirectoryBlock::new();
+    // For our equal check to work, we need to set the block to come from the same
+    // disk that we're pretending to read it from.
+    test_block.block_origin = DiskPointer { disk: 420, block: 69 };
+    let mut serialized = test_block.to_block(69);
+    // Directory blocks assume they are written to disk before being
+    // deserialized, because they must know where they came from.
+    // We'll pretend this came from disk 420...
+    serialized.originating_disk = Some(420);
     let deserialized = DirectoryBlock::from_block(&serialized);
     assert_eq!(test_block, deserialized)
 }
@@ -38,6 +46,9 @@ fn directory_item_serialization() {
 fn filled_directory_block_serialization() {
     for _ in 0..1000 {
         let mut test_block: DirectoryBlock = DirectoryBlock::new();
+        // For our equal check to work, we need to set the block to come from the same
+        // disk that we're pretending to read it from.
+        test_block.block_origin = DiskPointer { disk: 420, block: 69 };
         // Fill with random inodes until we run out of room.
         loop {
             match test_block.try_add_item(&DirectoryItem::get_random()) {
@@ -50,7 +61,11 @@ fn filled_directory_block_serialization() {
         }
 
         // Check serialization
-        let serialized = test_block.to_block(69);
+        let mut serialized = test_block.to_block(69);
+        // Directory blocks assume they are written to disk before being
+        // deserialized, because they must know where they came from.
+        // We'll pretend this came from disk 420...
+        serialized.originating_disk = Some(420);
         let deserialized = DirectoryBlock::from_block(&serialized);
         assert_eq!(test_block, deserialized)
     }

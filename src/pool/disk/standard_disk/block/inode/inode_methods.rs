@@ -266,6 +266,7 @@ fn to_raw_bytes(block: &InodeBlock, block_number: u16) -> RawBlock {
     let final_block: RawBlock = RawBlock {
         block_index: block_number,
         data: buffer,
+        originating_disk: None, // On its way to be written.
     };
 
     final_block

@@ -8,9 +8,14 @@ use thiserror::Error;
 /// A raw data block
 /// This should only be used internally, interfacing into this should
 /// be abstracted away into other types (For example DiskHeader)
+#[derive(Debug)]
 pub struct RawBlock {
     /// Which block on the disk this is
     pub block_index: u16,
+    /// Which disk this block is from.
+    /// Does not need to be set when writing blocks,
+    /// but must be set when reading them.
+    pub originating_disk: Option<u16>,
     /// The block in its entirety.
     pub data: [u8; 512],
 }

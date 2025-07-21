@@ -256,6 +256,7 @@ fn pool_header_to_raw_block(header: PoolDiskHeader) -> RawBlock {
     RawBlock {
         block_index: 0,
         data: buffer,
+        originating_disk: None, // This is on its way to be written.
     }
 }
 

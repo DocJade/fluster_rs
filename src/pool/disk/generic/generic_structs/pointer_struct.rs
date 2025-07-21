@@ -1,3 +1,7 @@
+use log::error;
+
+use crate::pool::disk::generic::block::block_structs::RawBlock;
+
 /// Points to a specific block on a disk
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -39,6 +43,27 @@ impl DiskPointer {
     /// Check if this pointer doesn't go anywhere
     pub(crate) fn no_destination(&self) -> bool {
         self.disk == u16::MAX || self.block == u16::MAX
+    }
+}
+
+// Attempt to get a pointer from a raw block.
+// The block must contain the disk origin.
+impl From<&RawBlock> for DiskPointer {
+    fn from(value: &RawBlock) -> Self {
+        if value.originating_disk.is_none() {
+            // We cannot get a disk pointer from a block without
+            // disk information. The information MUST be present on
+            // read blocks, and this call should not be made on blocks
+            // that are intended to be written.
+            error!("Attempted to get a disk pointer from a RawBlock that had no origin disk, we cannot continue.");
+            error!("The block in question: \n{value:#?}");
+            unreachable!("");
+        }
+        // Block is good
+        Self {
+            disk: value.originating_disk.expect("Guard condition."),
+            block: value.block_index,
+        }
     }
 }
 

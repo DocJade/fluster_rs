@@ -17,6 +17,7 @@ use std::{fs::File, os::unix::fs::FileExt};
 /// ONLY FOR LOWER LEVEL USE, USE CHECKED_READ()!
 pub(crate) fn read_block_direct(
     disk_file: &File,
+    originating_disk: u16,
     block_index: u16,
     ignore_crc: bool,
 ) -> Result<RawBlock, BlockError> {
@@ -47,5 +48,6 @@ pub(crate) fn read_block_direct(
     Ok(RawBlock {
         block_index,
         data: read_buffer,
+        originating_disk: Some(originating_disk),
     })
 }

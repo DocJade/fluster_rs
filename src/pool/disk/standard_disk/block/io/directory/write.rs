@@ -8,16 +8,14 @@ impl DirectoryBlock {
     /// Add a new item to this block, extending this block if needed.
     /// Updated blocks are written to disk.
     /// 
-    /// Requires a disk pointer back to the origin of Directory Block
-    /// this was called on.
     /// 
     /// Consumes the DirectoryBlock, since the data may have been updated.
     /// 
-    /// May swap disks, but will return to where it started.
+    /// May swap disks, will optionally return to a provided disk.
     /// 
     /// Returns nothing.
-    pub fn add_item(self, item: DirectoryItem, block_origin: DiskPointer) -> Result<(), FloppyDriveError> {
-        go_add_item(self, item, block_origin)
+    pub fn add_item(self, item: DirectoryItem, return_to: Option<u16>) -> Result<(), FloppyDriveError> {
+        go_add_item(self, item, return_to)
     }
     /// Creates a new directory block, and adds its location to the input block.
     /// Blocks are created and updated as needed.
@@ -30,21 +28,21 @@ impl DirectoryBlock {
     /// The name of the new directory must be less than 256 characters long.
     /// Attempting to recreate an already existing directory will panic.
     /// 
-    /// May swap disks, but will return to where it started.
+    /// May swap disks, will optionally return to a provided disk.
     /// 
     /// Returns nothing.
-    pub fn make_directory(self, name: String, block_origin: DiskPointer) -> Result<(), FloppyDriveError> {
-        go_make_directory(self, name, block_origin)
+    pub fn make_directory(self, name: String, return_to: Option<u16>) -> Result<(), FloppyDriveError> {
+        go_make_directory(self, name, return_to)
     }
 }
 
-fn go_make_directory(directory: DirectoryBlock, name: String, block_origin: DiskPointer) -> Result<(), FloppyDriveError> {
+fn go_make_directory(directory: DirectoryBlock, name: String, return_to: Option<u16>) -> Result<(), FloppyDriveError> {
     debug!("Attempting to create a new directory with name `{name}`...");
     // Check to make sure this block does not already contain the directory we are trying to add.
     // We dont care if listing the directory puts us somewhere else, because we're immediately going to
     // go get a new directory block, which would possibly just swap disks again, and our final update
     // to the original directory block has its origin already specified with block_origin.
-    if directory.contains_item(&NamedItem::Directory(name.clone()), block_origin.disk)?.is_some() {
+    if directory.contains_item(&NamedItem::Directory(name.clone()), None)?.is_some() {
         // We are attempting to create a duplicate item.
         panic!("Attempted to create duplicate directory!")
     }
@@ -71,7 +69,7 @@ fn go_make_directory(directory: DirectoryBlock, name: String, block_origin: Disk
     // Go put it somewhere.
     // We would prefer to put it on the current disk if possible, since that makes the inodes smaller.
     // So we will call the greedy approach.
-    let mut inode_result = Pool::greedy_add_inode(inode, block_origin.disk)?;
+    let mut inode_result = Pool::greedy_add_inode(inode, new_directory_location.disk)?;
 
     // Now we add this newly created directory to the calling directory.
     // Flags change depending on wether the new directory ended up on this disk.
@@ -80,7 +78,7 @@ fn go_make_directory(directory: DirectoryBlock, name: String, block_origin: Disk
     // We also must mark it as a directory, not a normal file.
     flags.insert(DirectoryFlags::IsDirectory);
 
-    if inode_result.disk.expect("Writing an inode always returns what disk it was put on.") == block_origin.disk {
+    if inode_result.disk.expect("Writing an inode always returns what disk it was put on.") == directory.block_origin.disk {
         // New inode is on the same disk as we started on.
         flags.insert(DirectoryFlags::OnThisDisk);
         // Remove the disk information from the inode location
@@ -96,10 +94,13 @@ fn go_make_directory(directory: DirectoryBlock, name: String, block_origin: Disk
     };
 
     // Put it into the caller directory!
-    directory.add_item(final_directory_item, block_origin)?;
+    // We dont need to pass in a return disk, since we will return ourselves next if needed.
+    directory.add_item(final_directory_item, None)?;
 
-    // With all that done, put the original disk back in the drive, as a courtesy to the caller.
-    FloppyDrive::open(block_origin.disk)?;
+    // Go back to the return disk if needed
+    if let Some(number) = return_to {
+        let _ = FloppyDrive::open(number)?;
+    };
 
     // All done!
     Ok(())
@@ -130,12 +131,13 @@ fn go_make_new_directory_block() -> Result<DiskPointer, FloppyDriveError> {
 
 
 // Add an item to a directory
-fn go_add_item(directory: DirectoryBlock, item: DirectoryItem, original_location: DiskPointer) -> Result<(), FloppyDriveError> {
+fn go_add_item(directory: DirectoryBlock, item: DirectoryItem, return_to: Option<u16>) -> Result<(), FloppyDriveError> {
     debug!("Adding new item to directory...");
     // Persistent vars
     // We may load in other blocks, so these may change
-    let mut current_directory: DirectoryBlock = directory;
-    let mut block_origin: DiskPointer = original_location;
+    let mut current_directory: DirectoryBlock = directory.clone();
+    let mut block_origin: DiskPointer = directory.block_origin;
+    let original_location: DiskPointer = directory.block_origin;
     // If we swap disks, we need to update the item to not be on the local disk anymore.
     let mut item_to_add: DirectoryItem = item;
     
@@ -178,8 +180,10 @@ fn go_add_item(directory: DirectoryBlock, item: DirectoryItem, original_location
     let to_write: RawBlock = current_directory.to_block(block_origin.block);
     disk.checked_update(&to_write)?;
     
-    // Go back to the disk we started on
-    let _ = FloppyDrive::open(original_location.disk)?;
+    // Go to a disk if the caller wants.
+    if let Some(number) = return_to {
+        let _ = FloppyDrive::open(number)?;
+    }
     
     debug!("Item added.");
     // Done!

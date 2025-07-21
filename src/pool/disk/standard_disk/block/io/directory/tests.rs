@@ -20,7 +20,8 @@ fn add_directory() {
     // Now try adding a directory to the pool
     let block = get_directory_block();
     let origin: DiskPointer = DiskPointer { disk: 1, block: 2 };
-    block.make_directory("test".to_string(), origin).unwrap();
+    block.make_directory("test".to_string(), None).unwrap();
+    // We dont even check if its there, we just want to know if writing it failed.
 }
 
 #[test]
@@ -30,11 +31,11 @@ fn add_directory_and_list() {
     // Now try adding a directory to the pool
     let block = get_directory_block();
     let origin: DiskPointer = DiskPointer { disk: 1, block: 2 };
-    block.make_directory("test".to_string(), origin).unwrap();
+    block.make_directory("test".to_string(), None).unwrap();
     
     // try to find it again
     let new_block = get_directory_block();
-    assert!(new_block.contains_item(&NamedItem::Directory("test".to_string()), 1).unwrap().is_some());
+    assert!(new_block.contains_item(&NamedItem::Directory("test".to_string()), None).unwrap().is_some());
 }
 
 #[test]
@@ -44,11 +45,11 @@ fn nested_directory_hell() {
     // Now try adding a directory to the pool
     let block = get_directory_block();
     let origin: DiskPointer = DiskPointer { disk: 1, block: 2 };
-    block.make_directory("test".to_string(), origin).unwrap();
+    block.make_directory("test".to_string(), None).unwrap();
     
     // try to find it again
     let new_block = get_directory_block();
-    assert!(new_block.contains_item(&NamedItem::Directory("test".to_string()), 1).unwrap().is_some());
+    assert!(new_block.contains_item(&NamedItem::Directory("test".to_string()), None).unwrap().is_some());
 
     todo!("Make nested directories randomly");
 }

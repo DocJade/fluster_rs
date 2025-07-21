@@ -147,6 +147,7 @@ fn to_bytes(extent_block: &FileExtentBlock, block_number: u16) -> RawBlock {
     let finished_block: RawBlock = RawBlock {
         block_index: block_number,
         data: buffer,
+        originating_disk: None, // We only write this.
     };
 
     // make sure this matches

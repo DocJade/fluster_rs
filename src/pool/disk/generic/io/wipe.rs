@@ -19,6 +19,7 @@ pub(crate) fn wipe_block(disk: &mut File, block_number: u16) -> Result<(), Block
     let blanker: RawBlock = RawBlock {
         block_index: block_number,
         data: [0u8; 512],
+        originating_disk: None, // This is about to be written.
     };
     super::write::write_block_direct(disk, &blanker)
 }

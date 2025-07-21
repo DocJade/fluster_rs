@@ -45,7 +45,7 @@ impl GenericDiskMethods for DenseDisk {
     #[doc = " Read a block"]
     #[doc = " Cannot bypass CRC."]
     fn read_block(&self, block_number: u16) -> Result<RawBlock, BlockError> {
-        read_block_direct(&self.disk_file, block_number, false)
+        read_block_direct(&self.disk_file, self.number, block_number, false)
     }
 
     #[doc = " Write a block"]

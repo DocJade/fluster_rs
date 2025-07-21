@@ -78,7 +78,7 @@ fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, Fl
     // to call this function directly as a workaround.
     // We must ignore the CRC here, since we know nothing about the disk.
     debug!("Reading in the header at block 0...");
-    let header_block = read_block_direct(&disk_file, 0, true)?;
+    let header_block = read_block_direct(&disk_file, disk_number, 0, true)?;
     
     // Now we check for the magic
     debug!("Checking for magic...");
