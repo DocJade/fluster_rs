@@ -36,8 +36,8 @@ impl DiskPointer {
             block: u16::MAX,
         }
     }
-    /// Check if this pointer actually goes somewhere
-    pub(crate) fn has_destination(&self) -> bool {
+    /// Check if this pointer doesn't go anywhere
+    pub(crate) fn no_destination(&self) -> bool {
         self.disk == u16::MAX || self.block == u16::MAX
     }
 }

@@ -27,7 +27,7 @@ pub struct DirectoryBlock {
     // Directories are separate from each other, you cannot get from one directory to another by just following
     // the next block pointer.
     pub next_block: DiskPointer,
-    pub(super) directory_items: Vec<DirectoryItem>,
+    pub(crate) directory_items: Vec<DirectoryItem>,
 }
 
 bitflags! {

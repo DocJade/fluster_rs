@@ -5,10 +5,9 @@
 // Implementations
 
 use crate::pool::disk::{
-    generic::{block::{block_structs::RawBlock, crc::add_crc_to_block}, generic_structs::pointer_struct::DiskPointer},
-    standard_disk::block::{directory::directory_struct::{
+    drive_struct::FloppyDriveError, generic::{block::{block_structs::RawBlock, crc::add_crc_to_block}, generic_structs::pointer_struct::DiskPointer}, standard_disk::block::{directory::directory_struct::{
         DirectoryBlock, DirectoryBlockError, DirectoryBlockFlags, DirectoryFlags, DirectoryItem,
-    }, inode::inode_struct::InodeLocation},
+    }, inode::inode_struct::InodeLocation}
 };
 
 // We can convert from a raw block to a directory bock, but not the other way around.
@@ -50,15 +49,11 @@ impl DirectoryBlock {
     pub fn new() -> Self {
         new_directory_block()
     }
-    /// Check if this directory contains an item with given name.
-    /// May swap disks.
-    pub fn contains_item(&self, name: &String) -> bool {
-        todo!()
-    }
-    /// Returns an alphabetically ordered Vec of all items in this directory.
-    /// May swap disks.
-    pub fn list(&self) -> Vec<DirectoryItem> {
-        todo!()
+    /// Get the items located within this block.
+    /// This function is just to obscure the items by default, so higher up callers
+    /// use higher abstractions
+    pub fn get_items(&self) -> Vec<DirectoryItem> {
+        self.directory_items.clone()
     }
 }
 

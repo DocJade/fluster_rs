@@ -93,21 +93,21 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, FloppyDriveError> {
             }
             crate::pool::disk::drive_struct::DiskType::Standard(standard_disk) => {
                 // For any disk type other than Blank, we will ask if user wants to wipe it.
-                display_info_and_ask_wipe(DiskType::Standard(standard_disk));
+                display_info_and_ask_wipe(DiskType::Standard(standard_disk))?;
                 // Start the loop over, if they wiped the disk, the outcome will change.
                 continue;
             }
             crate::pool::disk::drive_struct::DiskType::Dense(dense_disk) => {
-                display_info_and_ask_wipe(DiskType::Dense(dense_disk));
+                display_info_and_ask_wipe(DiskType::Dense(dense_disk))?;
                 continue;
             }
             crate::pool::disk::drive_struct::DiskType::Unknown(file) => {
-                display_info_and_ask_wipe(DiskType::Unknown(file));
+                display_info_and_ask_wipe(DiskType::Unknown(file))?;
                 continue;
             }
             crate::pool::disk::drive_struct::DiskType::Blank(disk) => {
                 // The disk is blank, we will ask if the user wants to create a new pool.
-                prompt_for_new_pool(disk);
+                prompt_for_new_pool(disk)?;
                 // The user either created a new pool, or didnt, so we just continue and run through this again.
                 continue;
             }
@@ -308,8 +308,10 @@ fn new_pool_header() -> PoolDiskHeader {
     // The highest known disk for a brand new pool is the root disk itself, zero.
     let highest_known_disk: u16 = 0;
 
-    // The disk with the next free block is, no disk!
-    let disk_with_next_free_block: u16 = u16::MAX;
+    // The disk with the next free block set to the pool disk itself.
+    // The pool block allocator will skip any disks that are not Standard,
+    // So it will just skip over this the first time we use it.
+    let disk_with_next_free_block: u16 = 0;
 
     // How many pool blocks are free? None! We only have the root disk!
     let pool_standard_blocks_free: u16 = 0;

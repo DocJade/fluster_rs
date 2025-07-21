@@ -95,7 +95,7 @@ impl DiskBootstrap for StandardDisk {
         
         // All done!
         debug!("Done bootstrapping standard disk.");
-        return Ok(disk)
+        Ok(disk)
     }
 
     fn from_header(block: RawBlock, file: File) -> Self {
@@ -250,13 +250,6 @@ impl GenericDiskMethods for StandardDisk {
     fn flush(&mut self) -> Result<(),BlockError> {
         // We need to write the header back to disk, since that is the only
         // information we can edit in memory without immediately writing.
-        debug!("Flushing disk...");
-        // TESTING TODO:
-        let header_copy = self.header.clone();
-        let test = &self.header.to_block();
-        let test2 = self.header.to_block();
-        self.checked_update(&self.header.to_block())?;
-        debug!("Disk flushed.");
-        Ok(())
+        self.checked_update(&self.header.to_block())
     }
 }

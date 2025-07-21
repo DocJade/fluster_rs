@@ -32,6 +32,11 @@ impl Pool {
     pub fn load() -> Arc<Mutex<Pool>> {
         load()
     }
+    /// Create a new disk of type and add it to the pool
+    /// Returns that new disk.
+    pub fn new_disk<T: DiskBootstrap>() -> Result<T, FloppyDriveError> {
+        add_disk::<T>()
+    }
     /// Brand new pools need to run some setup functions to get everything in a ready to use state.
     fn initalize() -> Result<(), FloppyDriveError> {
         initalize_pool()
