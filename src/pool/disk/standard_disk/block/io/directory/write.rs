@@ -2,7 +2,7 @@
 
 use log::debug;
 
-use crate::pool::{self, disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::{block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::{block::{directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem}, inode::{self, inode_struct::{Inode, InodeDirectory, InodeFlags, InodeTimestamp}}, io::directory::read::NamedItem}, standard_disk_struct::StandardDisk}}, pool_actions::pool_struct::{Pool, GLOBAL_POOL}};
+use crate::pool::{self, disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::{block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::{block::{directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem}, inode::{self, inode_struct::{Inode, InodeDirectory, InodeFlags, InodeTimestamp}}, io::directory::types::NamedItem}, standard_disk_struct::StandardDisk}}, pool_actions::pool_struct::{Pool, GLOBAL_POOL}};
 
 impl DirectoryBlock {
     /// Add a new item to this block, extending this block if needed.
@@ -44,7 +44,7 @@ fn go_make_directory(directory: DirectoryBlock, name: String, block_origin: Disk
     // We dont care if listing the directory puts us somewhere else, because we're immediately going to
     // go get a new directory block, which would possibly just swap disks again, and our final update
     // to the original directory block has its origin already specified with block_origin.
-    if directory.contains_item(&NamedItem::Directory(name.clone()), None)?.is_some() {
+    if directory.contains_item(&NamedItem::Directory(name.clone()), block_origin.disk)?.is_some() {
         // We are attempting to create a duplicate item.
         panic!("Attempted to create duplicate directory!")
     }

@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use log::debug;
 use tempfile::{tempdir, TempDir};
 
-use crate::{filesystem::filesystem_struct::{FilesystemOptions, FlusterFS}, pool::{disk::{drive_struct::FloppyDrive, generic::{generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::block::{directory::directory_struct::DirectoryBlock, io::directory::read::NamedItem}}, pool_actions::pool_struct::Pool}};
+use crate::{filesystem::filesystem_struct::{FilesystemOptions, FlusterFS}, pool::{disk::{drive_struct::FloppyDrive, generic::{generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::block::{directory::directory_struct::DirectoryBlock, io::directory::types::NamedItem}}, pool_actions::pool_struct::Pool}};
 
 use test_log::test; // We want to see logs while testing.
 
@@ -34,7 +34,23 @@ fn add_directory_and_list() {
     
     // try to find it again
     let new_block = get_directory_block();
-    assert!(new_block.contains_item(&NamedItem::Directory("test".to_string()), None).unwrap().is_some());
+    assert!(new_block.contains_item(&NamedItem::Directory("test".to_string()), 1).unwrap().is_some());
+}
+
+#[test]
+fn nested_directory_hell() {
+    // Use the filesystem starter to get everything in the right spots
+    let _fs = get_filesystem();
+    // Now try adding a directory to the pool
+    let block = get_directory_block();
+    let origin: DiskPointer = DiskPointer { disk: 1, block: 2 };
+    block.make_directory("test".to_string(), origin).unwrap();
+    
+    // try to find it again
+    let new_block = get_directory_block();
+    assert!(new_block.contains_item(&NamedItem::Directory("test".to_string()), 1).unwrap().is_some());
+
+    todo!("Make nested directories randomly");
 }
 
 
