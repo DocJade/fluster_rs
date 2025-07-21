@@ -4,24 +4,56 @@ use log::debug;
 
 use crate::pool::disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::io::checked_io::CheckedIO, standard_disk::block::directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem}};
 
+// Need a way to search for either a file or a directory
+#[derive(Ord, PartialEq, Eq, PartialOrd)]
+pub enum NamedItem {
+    File(String),
+    Directory(String)
+}
+
+impl NamedItem {
+    /// Extracts the type's name, and the name of that type. (ie "file", "test.txt")
+    pub fn debug_strings(&self) -> (&'static str, &String) {
+        match self {
+            NamedItem::File(name) => ("file", name),
+            NamedItem::Directory(name) => ("directory", name),
+        }
+    }
+}
 
 impl DirectoryBlock {
-    /// Check if this directory contains an item with given name.
-    /// This does not check the contents of the item, nor the timestamps, just
-    /// the name of the item. If you are searching for a directory, you need to include the trailing slash.
-    /// E.g, `directory/``. Same with files, you need to include their extension, if present.
+    /// Check if this directory contains an item with the provided name and type.
+    /// Returns Option<DirectoryItem> if it exists.
     /// 
     /// May swap disks.
     /// 
     /// Optionally returns to a specified disk after checking.
-    pub fn contains_item(&self, name: &String, disk_to_return_to: Option<u16>) -> Result<bool, FloppyDriveError> {
-        debug!("Checking if a directory contains `{name}`...");
+    pub fn contains_item(&self, item_to_find: &NamedItem, disk_to_return_to: Option<u16>) -> Result<Option<DirectoryItem>, FloppyDriveError> {
+        let extracted_debug = item_to_find.debug_strings();
+        debug!("Checking if a directory contains the {} `{}`...", extracted_debug.0, extracted_debug.1);
         // Get items
         let items = self.list(disk_to_return_to)?;
-        // Extract just the names
-        let names: Vec<&String> = items.iter().map(|item| &item.name).collect();
-        // Since the returned items are sorted, we can binary search
-        Ok(names.binary_search(&name).is_ok())
+
+        // Look for the provided type
+        let named_items: Vec<NamedItem> = items
+            .iter()
+            .map(|item| {
+                if item.flags.contains(DirectoryFlags::IsDirectory) {
+                    NamedItem::Directory(item.name.clone()) // TODO: Possibly change file calls to return &str
+                } else {
+                    NamedItem::File(item.name.clone())
+                }
+            }).collect();
+
+        // Look for the requested item in the new vec, the index into this vec will be the same
+        // as the index into the og items vec
+        if let Ok(index) = named_items.binary_search(item_to_find) {
+            // It's in there!
+            return Ok(Some(items[index].clone()));
+        } else {
+            // The item wasn't in there.
+            return Ok(None);
+        }
     }
     /// Returns an Vec of all items in this directory ordered by their String's sort order.
     /// 

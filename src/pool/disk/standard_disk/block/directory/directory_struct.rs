@@ -34,6 +34,7 @@ bitflags! {
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct DirectoryFlags: u8 {
         const OnThisDisk = 0b00000001;
+        const IsDirectory = 0b00000010; // Set if directory
         const MarkerBit = 0b10000000;
     }
 }

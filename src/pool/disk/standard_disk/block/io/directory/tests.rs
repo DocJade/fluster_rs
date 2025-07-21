@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use log::debug;
 use tempfile::{tempdir, TempDir};
 
-use crate::{filesystem::filesystem_struct::{FilesystemOptions, FlusterFS}, pool::{disk::{drive_struct::FloppyDrive, generic::{generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::block::directory::directory_struct::DirectoryBlock}, pool_actions::pool_struct::Pool}};
+use crate::{filesystem::filesystem_struct::{FilesystemOptions, FlusterFS}, pool::{disk::{drive_struct::FloppyDrive, generic::{generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::block::{directory::directory_struct::DirectoryBlock, io::directory::read::NamedItem}}, pool_actions::pool_struct::Pool}};
 
 use test_log::test; // We want to see logs while testing.
 
@@ -21,7 +21,20 @@ fn add_directory() {
     let block = get_directory_block();
     let origin: DiskPointer = DiskPointer { disk: 1, block: 2 };
     block.make_directory("test".to_string(), origin).unwrap();
-    // TODO: Add cleanup/shutdown method to the filesystem that wipes the globals.
+}
+
+#[test]
+fn add_directory_and_list() {
+    // Use the filesystem starter to get everything in the right spots
+    let _fs = get_filesystem();
+    // Now try adding a directory to the pool
+    let block = get_directory_block();
+    let origin: DiskPointer = DiskPointer { disk: 1, block: 2 };
+    block.make_directory("test".to_string(), origin).unwrap();
+    
+    // try to find it again
+    let new_block = get_directory_block();
+    assert!(new_block.contains_item(&NamedItem::Directory("test".to_string()), None).unwrap().is_some());
 }
 
 
@@ -31,6 +44,7 @@ fn get_filesystem() -> FlusterFS {
     let floppy_drive: PathBuf = PathBuf::new(); // This is never read since we are using temporary disks.
     let fs_options = FilesystemOptions::new(Some(temp_dir.path().to_path_buf()), floppy_drive);
     FlusterFS::start(&fs_options)
+    // We don't actually have to mount it for non-integration testing.
 }
 
 // Get the directory block from the fresh file system
