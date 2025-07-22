@@ -40,6 +40,7 @@ fn add_directory_and_list() {
 }
 
 #[test]
+#[ignore = "Takes way too long to run with debug logging, must run standalone with a level of INFO if you ever want to see your family again."]
 fn nested_directory_hell() {
     // Use the filesystem starter to get everything in the right spots
     let _fs = get_filesystem();
@@ -47,7 +48,7 @@ fn nested_directory_hell() {
     let mut name_number: usize = 0;
     
     // Create random directories at random places.
-    for _ in 0..10000 {
+    for _ in 0..10_000 {
         // Load in the root
         let mut where_are_we = Pool::root_directory(None).unwrap();
         // We will open random directories a few times, if they exist.
@@ -59,13 +60,12 @@ fn nested_directory_hell() {
                 break
             }
             // Random chance to not go any deeper.
-            if random.random_bool(0.5) {
+            if random.random_bool(0.2) { // Incentivize deep nesting.
                 // not going any further.
                 break
             }
             // Looks like we're entering a new directory.
             let destination = square_holes.choose(&mut random).expect("Already checked if it was empty.").name.clone();
-            println!("{destination}");
             // Go forth!
             where_are_we = where_are_we.change_directory(destination, None).unwrap().unwrap();
             continue;
@@ -75,6 +75,29 @@ fn nested_directory_hell() {
         where_are_we.make_directory(name_number.to_string(), None).unwrap();
         name_number += 1;
     }
+}
+
+#[test]
+/// Ensure that directories eventually start reporting other disks besides disk 1 by
+/// writing way too many directories.
+fn directories_switch_disks() -> Result<(), ()> {
+    // Use the filesystem starter to get everything in the right spots
+    let _fs = get_filesystem();
+    for i in 0..3000 { // There's only 2880 blocks on the first disk, assuming no overhead.
+        let root_dir = Pool::root_directory(None).unwrap();
+        root_dir.make_directory(i.to_string(), None).unwrap();
+    }
+    // Now make sure we actually have directories that claim to live on another disk
+    let root_dir_done = Pool::root_directory(None).unwrap();
+    for dir in root_dir_done.list(None).unwrap() {
+        if dir.location.disk.unwrap() != 1 {
+            // Made it to another disk.
+            debug!("Made it onto another disk! Disk: {}", dir.location.disk.unwrap());
+            return Ok(());
+        }
+    }
+    // They were all disk 1!
+    panic!("All directories are on disk 1!");
 }
 
 

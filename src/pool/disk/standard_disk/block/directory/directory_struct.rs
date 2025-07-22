@@ -22,10 +22,8 @@ pub struct DirectoryBlock {
     pub(super) flags: DirectoryBlockFlags,
     pub(super) bytes_free: u16,
     // Points to the next directory block.
-    // Unlike inodes, when we go to a new disk, we need to know what block its on, because the only
-    // static directory block is on block 2 of the origin disk.
     // Directories are separate from each other, you cannot get from one directory to another by just following
-    // the next block pointer.
+    // the next block pointer. This pointer represents a _continuation_ of the current directory.
     pub next_block: DiskPointer,
     // At runtime its useful to know where this block came from.
     // This doesn't need to get written to disk.

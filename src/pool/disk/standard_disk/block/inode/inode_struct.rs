@@ -20,13 +20,16 @@ pub struct Inode {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct InodeFile {
+    /// The size of the pointed to file in bytes.
     pub(super) size: u64,
-    pub(super) pointer: DiskPointer, // Points to extents
+    /// Points to extents
+    pub(super) pointer: DiskPointer, 
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) struct InodeDirectory {
-    pub(crate) pointer: DiskPointer, // Points to directory
+    /// Points to a DirectoryBlock.
+    pub(crate) pointer: DiskPointer,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

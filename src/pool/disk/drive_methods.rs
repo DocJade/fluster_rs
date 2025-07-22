@@ -7,6 +7,7 @@
 
 use log::debug;
 use log::error;
+use log::trace;
 use log::warn;
 
 use crate::helpers::hex_view::hex_view;
@@ -68,8 +69,8 @@ impl FloppyDrive {
 // Functions for implementations
 
 fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, FloppyDriveError> {
-    debug!("Opening and deducing disk disk {disk_number}...");
-    debug!("Is it a new disk? : {new_disk}");
+    trace!("Opening and deducing disk disk {disk_number}...");
+    trace!("Is it a new disk? : {new_disk}");
     // First, we need the file to read from
     let disk_file: File = get_floppy_drive_file(disk_number, new_disk)?;
     
@@ -77,33 +78,33 @@ fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, Fl
     // We need to read a block before we have an actual disk, so we need
     // to call this function directly as a workaround.
     // We must ignore the CRC here, since we know nothing about the disk.
-    debug!("Reading in the header at block 0...");
+    trace!("Reading in the header at block 0...");
     let header_block = read_block_direct(&disk_file, disk_number, 0, true)?;
     
     // Now we check for the magic
-    debug!("Checking for magic...");
+    trace!("Checking for magic...");
     if !check_for_magic(&header_block.data) {
-        debug!("No magic, checking if its blank...");
+        trace!("No magic, checking if its blank...");
         // The magic is missing, check if the block is empty
         if header_block.data.iter().all(|byte| *byte == 0) {
             // Block is completely blank.
-            debug!("Disk is blank, returning.");
+            trace!("Disk is blank, returning.");
             return Ok(DiskType::Blank(BlankDisk::new(disk_file)));
         }
         // Otherwise, we dont know what kind of disk this is.
         // Its probably not a fluster disk.
-        debug!("Disk was not blank, returning unknown disk...");
+        trace!("Disk was not blank, returning unknown disk...");
         return Ok(DiskType::Unknown(UnknownDisk::new(disk_file)));
     }
     
     // Magic exists, time to figure out what kind of disk this is.
-    debug!("Disk has magic, deducing type...");
+    trace!("Disk has magic, deducing type...");
     // Bitflags will tell us.
     
     // Pool disk.
     // The header reads should check the CRC of the block.
     if header_block.data[8] & 0b10000000 != 0 {
-        debug!("Head is for a pool disk, returning.");
+        trace!("Head is for a pool disk, returning.");
         return Ok(DiskType::Pool(PoolDisk::from_header(
             header_block,
             disk_file,
@@ -112,7 +113,7 @@ fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, Fl
     
     // Dense disk.
     if header_block.data[8] & 0b01000000 != 0 {
-        debug!("Head is for a dense disk, returning.");
+        trace!("Head is for a dense disk, returning.");
         return Ok(DiskType::Dense(DenseDisk::from_header(
             header_block,
             disk_file,
@@ -121,7 +122,7 @@ fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, Fl
     
     // Standard disk.
     if header_block.data[8] & 0b00100000 != 0 {
-        debug!("Head is for a standard disk, returning.");
+        trace!("Head is for a standard disk, returning.");
         return Ok(DiskType::Standard(StandardDisk::from_header(
             header_block,
             disk_file,
@@ -145,13 +146,13 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Flopp
     // If we are running with virtual disks enabled, we are going to use a temp folder instead of the actual disk to speed up
     // development, waiting for disk seeks is slow and loud lol.
 
-    debug!("Locking USE_VIRTUAL_DISKS...");
+    trace!("Locking USE_VIRTUAL_DISKS...");
     if let Some(ref path) = *USE_VIRTUAL_DISKS
         .try_lock()
         .expect("Fluster is single threaded.")
     {
-        debug!("Attempting to access virtual disk {disk_number}...");
-        debug!("Are we creating this disk? : {new_disk}");
+        trace!("Attempting to access virtual disk {disk_number}...");
+        trace!("Are we creating this disk? : {new_disk}");
         // Get the tempfile.
         // These files do not delete themselves.
 
@@ -167,7 +168,7 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Flopp
         // If the tempfile does not exist, that means `create` was never called, which is an issue.
         // This will create the disk if the correct argument is passed.
 
-        debug!("Opening the temp disk with read/write privileges...");
+        trace!("Opening the temp disk with read/write privileges...");
         let temp_disk_file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -178,15 +179,15 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Flopp
 
         // Make sure the file is one floppy big, should have no effect on pre-existing files, since
         // they will already be this size.
-        debug!("Attempting to resize the temporary file to floppy size...");
+        trace!("Attempting to resize the temporary file to floppy size...");
         temp_disk_file.set_len(512 * 2880)?;
         
-        debug!("Returning virtual disk.");
+        trace!("Returning virtual disk.");
         return Ok(temp_disk_file);
     }
 
     // Get the global path to the floppy disk drive
-    debug!("Locking FLOPPY_PATH...");
+    trace!("Locking FLOPPY_PATH...");
     let disk_path = FLOPPY_PATH
         .try_lock()
         .expect("Fluster is single threaded.")
@@ -211,7 +212,7 @@ pub fn check_for_magic(block_bytes: &[u8]) -> bool {
 /// Will error out for non-wrong disk related issues.
 /// This function does not disable the CRC check, you must use open() if you are ignoring CRC.
 fn prompt_for_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
-    debug!("Prompting for disk {disk_number}...");
+    trace!("Prompting for disk {disk_number}...");
     let mut is_user_an_idiot: bool = false; // Did the user put in the wrong disk when asked?
     let mut disk: Result<DiskType, FloppyDriveError>;
     loop {
@@ -229,14 +230,14 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
                     // We have swapped disks.
                     CURRENT_DISK_IN_DRIVE.store(new_disk_number, Ordering::SeqCst);
                     // Update the swap count
-                    debug!("Locking GLOBAL_POOL, updating disk swap count.");
+                    trace!("Locking GLOBAL_POOL, updating disk swap count.");
                     GLOBAL_POOL.get().expect("single threaded").try_lock().expect("single threaded").statistics.swaps += 1;
                 }
 
                 // Check if this is the right disk number
                 if disk_number == new_disk_number {
                     // Thats the right disk!
-                    debug!("Got the correct disk.");
+                    trace!("Got the correct disk.");
                     return Ok(ok);
                 }
                 warn!("Wrong disk received. Got disk {}", ok.get_disk_number());

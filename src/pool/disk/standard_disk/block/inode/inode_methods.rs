@@ -105,7 +105,7 @@ fn inode_block_try_read_inode(block: &InodeBlock, offset: u16) -> Result<Inode, 
         return Err(InodeReadError::ImpossibleOffset);
     }
     // get a slice with that inode and deserialize it
-    return Ok(Inode::from_bytes(&block.inodes_data[offset as usize..]));
+    Ok(Inode::from_bytes(&block.inodes_data[offset as usize..]))
 }
 
 fn inode_block_try_remove_inode(

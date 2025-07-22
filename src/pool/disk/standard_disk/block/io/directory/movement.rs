@@ -1,5 +1,7 @@
 // Helpers to move between directories
 
+use log::{debug, info};
+
 use crate::pool::disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::io::checked_io::CheckedIO, standard_disk::block::{directory::directory_struct::DirectoryBlock, inode::inode_struct::InodeBlock, io::directory::types::NamedItem}};
 
 impl DirectoryBlock {
@@ -13,19 +15,31 @@ impl DirectoryBlock {
     /// If there is no new directory, this will end up wherever the end of the input directory was, unless
     /// you set the return disk.
     pub fn change_directory(self, directory_name: String, return_to: Option<u16>) -> Result<Option<DirectoryBlock>, FloppyDriveError> {
+        info!("Attempting to CD to `{directory_name}`");
         // Get all items in this directory
         let items = self.list(return_to)?;
         // Is it in there?
-        let index = match NamedItem::Directory(directory_name).find_in(&items) {
-            Ok(ok) => ok,
-            Err(_) => {
-                // Directory does not exist.
-                return Ok(None);
-            },
+        let wanted = if let Some(item) = NamedItem::Directory(directory_name.clone()).find_in(items.as_slice()) {
+            // there it is!
+            info!("Directory exists.");
+            item
+        } else {
+            // Directory does not exist.
+            info!("Directory did not exist.");
+            // Temporary TODO:
+            let copy_bc_vscode = directory_name.as_str();
+            panic!();
+            return Ok(None);
         };
+        
         // Directory exists, time to open that bad boy
         // Extract the location
-        let final_destination = &items[index].location;
+        let final_destination = &wanted.location;
+        info!("Directory claims to live at: disk {} block {} offset {}",
+            final_destination.disk.expect("Listing sets disk."),
+            final_destination.block,
+            final_destination.offset
+        );
         // Since we got these items from self.list, all of these inode locations MUST have a disk destination
         // already set for us. So we dont have to check.
 
@@ -34,6 +48,7 @@ impl DirectoryBlock {
             DiskType::Standard(standard_disk) => standard_disk,
             _ => unreachable!("Directory inode locations should NEVER point to a non-standard disk."),
         };
+
         // Now this doesn't point to the next directory block, it points to the next _Inode_ block
         // that points to it.
         let inode_block = InodeBlock::from_block(&disk.checked_read(final_destination.block)?);

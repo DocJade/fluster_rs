@@ -52,9 +52,12 @@ fn filled_directory_block_serialization() {
         // Fill with random inodes until we run out of room.
         loop {
             match test_block.try_add_item(&DirectoryItem::get_random()) {
-                Ok(_) => break,
+                Ok(_) => continue,
                 Err(err) => match err {
-                    DirectoryBlockError::NotEnoughSpace => todo!(),
+                    DirectoryBlockError::NotEnoughSpace => {
+                        // Done filling it up
+                        break
+                    },
                     _ => panic!("Got an error while adding item!"),
                 },
             }

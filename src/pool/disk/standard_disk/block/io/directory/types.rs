@@ -18,16 +18,16 @@ impl NamedItem {
         }
     }
     /// Search a Vec<DirectoryItem> for a NamedItem
-    /// Returns in the same format as .binary_search(), ie
-    /// Ok(index) or an Err(index) where it could be inserted.
-    pub fn find_in(&self, to_search: &Vec<DirectoryItem>) -> Result<usize, usize>{
-        todo!(); // TODO: The incoming directory item vec is sorted differently...
+    /// Returns the item if it exists.
+    pub fn find_in(&self, to_search: &[DirectoryItem]) -> Option<DirectoryItem> {
         // Searching with this function only does the minimum amount of clones
         // to deduce if the item is present or not, instead of needing to clone the
         // entire Vec to construct the new type.
-        to_search.binary_search_by(|item| {
-            NamedItem::from(item.clone()).cmp(self)
-        })
+        let item_found = to_search.iter().find(|item| {
+            let convert = NamedItem::from(item.clone().clone()); //TODO: This is stupid.
+            convert == *self
+        });
+        item_found.cloned()
     }
 }
 

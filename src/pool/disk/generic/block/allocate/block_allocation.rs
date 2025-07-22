@@ -6,7 +6,7 @@
 // allocate bytes that are already allocated
 // allocate past the end of the table
 
-use log::debug;
+use log::{debug, trace};
 
 use crate::pool::disk::generic::block::block_structs::BlockError;
 
@@ -93,7 +93,7 @@ fn go_allocate_or_free_blocks<T: BlockAllocation + ?Sized>(caller: &mut T, block
     let mut new_allocation_table: [u8; 360] = [0u8; 360];
     new_allocation_table.copy_from_slice(caller.get_allocation_table());
 
-    debug!("Updating blocks...");
+    trace!("Updating blocks...");
     for block in blocks {
         // Get the bit
         // Integer division rounds towards zero, so this is fine.
@@ -122,10 +122,10 @@ fn go_allocate_or_free_blocks<T: BlockAllocation + ?Sized>(caller: &mut T, block
             }
         }
     }
-    debug!("Done updating blocks.");
+    trace!("Done updating blocks.");
     
     // All operations are done, write back the new table
-    debug!("Writing back new allocation table...");
+    trace!("Writing back new allocation table...");
     caller.set_allocation_table(&new_allocation_table)?;
     debug!("Done.");
     Ok(blocks.len() as u16)

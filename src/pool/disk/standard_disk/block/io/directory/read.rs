@@ -1,6 +1,6 @@
 // Higher level abstractions for reading directories.
 
-use log::debug;
+use log::{debug, trace};
 
 use crate::pool::disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::io::checked_io::CheckedIO, standard_disk::block::{directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem}, io::directory::types::NamedItem}};
 
@@ -21,15 +21,17 @@ impl DirectoryBlock {
 
         // Look for the requested item in the new vec, the index into this vec will be the same
         // as the index into the og items vec
-        if let Ok(index) = item_to_find.find_in(&items) {
+        if let Some(item) = item_to_find.find_in(&items) {
             // It's in there!
-            return Ok(Some(items[index].clone()));
+            debug!("Yes it did.");
+            return Ok(Some(item));
         } else {
             // The item wasn't in there.
+            debug!("No it didn't.");
             return Ok(None);
         }
     }
-    /// Returns an Vec of all items in this directory ordered by their String's sort order.
+    /// Returns an Vec of all items in this directory ordered alphabetically descending.
     /// 
     /// Returned DirectoryItem(s) will have their InodeLocation's disk set.
     /// 
@@ -61,7 +63,13 @@ fn go_list_directory(block: &DirectoryBlock, return_to: Option<u16>) -> Result<V
         // to know where a local pointer goes.
         let mut new_items = current_dir_block.get_items();
         for item in &mut new_items {
-            item.location.disk = Some(current_disk)
+            // If the disk location is already there, we wont do anything.
+            if item.location.disk.is_none() {
+                // There was no disk information, it must be local.
+                item.location.disk = Some(current_disk)
+            }
+            // Otherwise there was already a disk being pointed to.
+            // Overwriting it here would corrupt it.
         };
 
         items_found.extend_from_slice(&new_items);
@@ -69,9 +77,11 @@ fn go_list_directory(block: &DirectoryBlock, return_to: Option<u16>) -> Result<V
         // I want to get off Mr. Bone's wild ride
         if current_dir_block.next_block.no_destination() {
             // We're done!
+            trace!("Done getting DirectoryItem(s).");
             break
         }
 
+        trace!("Need to continue on the next block.");
         // Time to load in the next block.
         let next_block = current_dir_block.next_block;
 
@@ -91,7 +101,7 @@ fn go_list_directory(block: &DirectoryBlock, return_to: Option<u16>) -> Result<V
     
     // Sort all of the items by name, not sure what internal order it is, but it will be
     // sorted by whatever comparison function String uses.
-    items_found.sort_unstable_by(|a,b| a.name.cmp(&b.name));
+    items_found.sort_by_key(|item| item.name.to_lowercase());
 
     // Return to a specified block if the caller requested it
     if let Some(number) = return_to {

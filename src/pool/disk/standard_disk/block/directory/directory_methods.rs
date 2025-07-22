@@ -283,6 +283,9 @@ impl DirectoryItem {
             DirectoryFlags::from_bits(bytes[index]).expect("Flags should only have used bits set.");
         index += 1;
 
+        // Make sure the flag is set
+        assert!(flags.contains(DirectoryFlags::MarkerBit));
+
         // Item name length
         let name_length: u8 = bytes[index];
         index += 1;

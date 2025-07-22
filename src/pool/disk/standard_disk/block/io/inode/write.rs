@@ -6,7 +6,7 @@
 
 // Functions
 
-use log::debug;
+use log::{debug, trace};
 
 use crate::pool::{disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::{block::block_structs::RawBlock, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::{block::inode::inode_struct::{Inode, InodeBlock, InodeBlockError, InodeLocation}, standard_disk_struct::StandardDisk}}, pool_actions::pool_struct::{Pool, GLOBAL_POOL}};
 
@@ -24,9 +24,9 @@ impl Pool {
     ///
     /// Returns where the inode ended up.
     pub fn fast_add_inode(inode: Inode) -> Result<InodeLocation, FloppyDriveError> {
-        debug!("Fast adding inode...");
+        trace!("Fast adding inode...");
         // Get the pool's latest inode disk
-        debug!("Locking GLOBAL_POOL...");
+        trace!("Locking GLOBAL_POOL...");
         let start_pointer: DiskPointer = GLOBAL_POOL.get().expect("Single thread").try_lock().expect("Single thread").header.latest_inode_write;
 
         // load in that block
@@ -45,7 +45,7 @@ impl Pool {
         };
 
         // Update the pool with new successful write.
-        debug!("Locking GLOBAL_POOL...");
+        trace!("Locking GLOBAL_POOL...");
         GLOBAL_POOL.get().expect("Single thread").try_lock().expect("Single thread").header.latest_inode_write = success_write_pointer;
         
         // all done
@@ -63,7 +63,7 @@ impl Pool {
     ///
     /// Returns where the inode ended up.
     pub fn add_inode(inode: Inode) -> Result<InodeLocation, FloppyDriveError> {
-        debug!("Adding inode, starting from disk 1...");
+        trace!("Adding inode, starting from disk 1...");
         // Start from the origin.
         let start_pointer: DiskPointer = DiskPointer { disk: 1, block: 1 };
 
@@ -83,7 +83,7 @@ impl Pool {
         };
 
         // Update the pool with new successful write.
-        debug!("Locking GLOBAL_POOL...");
+        trace!("Locking GLOBAL_POOL...");
         GLOBAL_POOL.get().expect("Single thread").try_lock().expect("Single thread").header.latest_inode_write = success_write_pointer;
         
         // all done
@@ -101,8 +101,8 @@ fn go_add_inode(inode: Inode, start_block: InodeBlock) -> Result<InodeLocation, 
         _ => panic!("New inode block must be on a standard disk!"),
     };
 
+    let mut current_block_number: u16 = start_block.block_origin.block;
     let mut current_block: InodeBlock = start_block;
-    let mut current_block_number: u16 = 1;
     // For when we eventually find a spot.
     let inode_offset: u16;
 
@@ -165,21 +165,24 @@ fn get_next_block(current_block: InodeBlock) -> Result<DiskPointer, FloppyDriveE
 
     // Time to make a new inode block
     // Why is there a second function for that? idk i felt like it
+    // This writes the new block.
     let new_block_location: DiskPointer = make_new_inode_block()?;
 
-    // New block made, we must update the old one to point to it, then return the new one again
-    let mut disco = match FloppyDrive::open(new_block_location.disk)? {
-        DiskType::Standard(standard_disk) => standard_disk,
-        _ => unreachable!("The disk this block came from was non-standard?"),
-    };
-
-    // Make the new block to write
+    // Now we just need to update the block we were called on.
     let mut the_cooler_inode = current_block;
     the_cooler_inode.new_destination(new_block_location);
-    let please_let_me_hit = the_cooler_inode.to_block(the_cooler_inode.block_origin.disk);
+    let please_let_me_hit = the_cooler_inode.to_block(the_cooler_inode.block_origin.block);
 
     // Write the updated block
-    disco.checked_update(&please_let_me_hit)?;
+    // We may need to swap back to the disk the block we extended was on.
+
+    let mut original_disk = match FloppyDrive::open(the_cooler_inode.block_origin.disk)? {
+        DiskType::Standard(standard_disk) => standard_disk,
+        _ => unreachable!("The disk we started on was non-standard?"),
+    };
+
+    // Update that block G
+    original_disk.checked_update(&please_let_me_hit)?;
 
     // return the pointer to the next block.
     Ok(new_block_location)
