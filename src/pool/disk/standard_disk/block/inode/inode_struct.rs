@@ -25,8 +25,8 @@ pub struct InodeFile {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct InodeDirectory {
-    pub(super) pointer: DiskPointer, // Points to directory
+pub(crate) struct InodeDirectory {
+    pub(crate) pointer: DiskPointer, // Points to directory
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -54,19 +54,22 @@ bitflags! {
 
 // The block
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct InodeBlock {
     pub(super) flags: InodeBlockFlags,
     // Manipulating Inodes must be done through methods on the struct
     pub(super) bytes_free: u16,
-    pub(super) next_inode_block: u16,
-    pub(super) inodes_data: [u8; 503],
+    pub(super) next_inode_block: DiskPointer,
+    // At runtime its useful to know where this block came from.
+    // This doesn't need to get written to disk.
+    pub block_origin: DiskPointer, // This MUST be set. it cannot point nowhere.
+    pub(super) inodes_data: [u8; 501],
 }
 
 bitflags! {
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct InodeBlockFlags: u8 {
-        const FinalInodeBlockOnThisDisk = 0b00000001;
+        // Currently unused.
     }
 }
 

@@ -15,7 +15,8 @@ pub trait CheckedIO: BlockAllocation + GenericDiskMethods {
         debug!("Performing checked read on block {block_number}...",);
         // Block must be allocated
         assert!(self.is_block_allocated(block_number));
-        let result = self.read_block(block_number)?;
+        // This unchecked read is safe, because we've now checked it.
+        let result = self.unchecked_read_block(block_number)?;
         debug!("Block read successfully.");
         Ok(result)
     }
@@ -30,7 +31,7 @@ pub trait CheckedIO: BlockAllocation + GenericDiskMethods {
         // Make sure block is free
         assert!(!self.is_block_allocated(block.block_index));
         debug!("Block was not already allocated, writing...");
-        self.write_block(block)?;
+        self.unchecked_write_block(block)?;
         // Now mark the block as allocated.
         debug!("Marking block as allocated...");
         let blocks_allocated = self.allocate_blocks(&[block.block_index].to_vec())?;
@@ -51,7 +52,7 @@ pub trait CheckedIO: BlockAllocation + GenericDiskMethods {
         debug!("Performing checked update on block {}...", block.block_index);
         // Make sure block is allocated already
         assert!(self.is_block_allocated(block.block_index));
-        self.write_block(&block)?;
+        self.unchecked_write_block(&block)?;
         debug!("Block updated successfully.");
         Ok(())
     }

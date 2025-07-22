@@ -38,18 +38,8 @@ impl DiskBootstrap for StandardDisk {
         let mut disk = create(file, disk_number)?;
         // Now that we have a disk, we can use the safe IO.
         
-        
-        
-        // Write the inode block
-        debug!("Writing inode block...");
-        let inode_block = InodeBlock::new();
-        let inode_writer = inode_block.to_block(1);
-        disk.checked_write(&inode_writer)?;
-
-        //TODO:Testing
-        assert!(disk.is_block_allocated(1));
-        
         // if this is disk 1 then we need to add:
+        // Inode block
         // Directory block
         // the root directory to that block
         if disk_number != 1 {
@@ -58,6 +48,12 @@ impl DiskBootstrap for StandardDisk {
             return Ok(disk)
         }
         debug!("This is the origin standard disk, doing a bit more...");
+
+        // Write the inode block
+        debug!("Writing inode block...");
+        let inode_block = InodeBlock::new();
+        let inode_writer = inode_block.to_block(1);
+        disk.checked_write(&inode_writer)?;
         
         // Create the directory block
         let directory_block: DirectoryBlock = DirectoryBlock::new();
@@ -215,12 +211,12 @@ fn initialize_numbered(disk: &mut StandardDisk, disk_number: u16) -> Result<(), 
 impl GenericDiskMethods for StandardDisk {
     #[doc = " Read a block"]
     #[doc = " Cannot bypass CRC."]
-    fn read_block(&self, block_number: u16) -> Result<RawBlock, BlockError> {
+    fn unchecked_read_block(&self, block_number: u16) -> Result<RawBlock, BlockError> {
         read_block_direct(&self.disk_file, self.number, block_number, false)
     }
 
     #[doc = " Write a block"]
-    fn write_block(&mut self, block: &RawBlock) -> Result<(), BlockError> {
+    fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), BlockError> {
         write_block_direct(&self.disk_file, &block)
     }
 

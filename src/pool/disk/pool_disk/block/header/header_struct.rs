@@ -4,6 +4,8 @@
 use bitflags::bitflags;
 use thiserror::Error;
 
+use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+
 // Structs, Enums, Flags
 
 /// The header of the pool disk
@@ -19,7 +21,7 @@ pub struct PoolDiskHeader {
     pub pool_standard_blocks_free: u16,
     /// The disk with the most recent inode write.
     /// Used for speeding up inode additions.
-    pub disk_with_latest_inode_write: u16,
+    pub latest_inode_write: DiskPointer,
     /// Map of used blocks on this disk
     pub block_usage_map: [u8; 360],
 }

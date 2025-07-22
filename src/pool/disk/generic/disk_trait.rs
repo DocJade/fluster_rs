@@ -21,10 +21,10 @@ use crate::pool::disk::unknown_disk::unknown_disk_struct::UnknownDisk;
 pub trait GenericDiskMethods {
     /// Read a block
     /// Cannot bypass CRC.
-    fn read_block(&self, block_number: u16) -> Result<RawBlock, BlockError>;
+    fn unchecked_read_block(&self, block_number: u16) -> Result<RawBlock, BlockError>;
 
     /// Write a block.
-    fn write_block(&mut self, block: &RawBlock) -> Result<(), BlockError>;
+    fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), BlockError>;
 
     /// Get the inner file.
     fn disk_file(self) -> File;

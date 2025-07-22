@@ -31,14 +31,22 @@ fn block_ping_pong() {
 #[cfg(test)]
 impl PoolDiskHeader {
     fn random() -> Self {
+        use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+
         let mut random: ThreadRng = rand::rng();
+        // latest inode write isnt persisted to the pool on deserialization so we dont care here either
+        let latest_inode_write: DiskPointer = DiskPointer {
+            disk: 1,
+            block: 1,
+        };
+        
         Self {
             flags: PoolHeaderFlags::random(),
             highest_known_disk: random.random(),
             disk_with_next_free_block: random.random(),
             pool_standard_blocks_free: random.random(),
             block_usage_map: random_allocations(),
-            disk_with_latest_inode_write: 1, // This does not get saved to disk.
+            latest_inode_write, // This does not get saved to disk.
         }
     }
 }

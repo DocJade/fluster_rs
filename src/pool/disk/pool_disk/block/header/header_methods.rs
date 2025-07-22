@@ -18,6 +18,7 @@ use crate::pool::disk::drive_struct::FloppyDriveError;
 use crate::pool::disk::generic::block::block_structs::RawBlock;
 use crate::pool::disk::generic::block::crc::add_crc_to_block;
 use crate::pool::disk::generic::disk_trait::GenericDiskMethods;
+use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolHeaderFlags;
 
 use super::header_struct::PoolDiskHeader;
@@ -203,12 +204,18 @@ fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolDiskHeader, PoolHe
     // Block allocation map
     let block_usage_map: [u8; 360] = block.data[148..148 + 360].try_into().expect("Impossible");
 
+    // The latest inode write is not persisted between launches, so we point at the root inode.
+    let latest_inode_write: DiskPointer = DiskPointer {
+        disk: 1,
+        block: 1,
+    };
+
     Ok(PoolDiskHeader {
         flags,
         highest_known_disk,
         disk_with_next_free_block,
         pool_standard_blocks_free,
-        disk_with_latest_inode_write: 1, // This is not persisted between launches.
+        latest_inode_write, // This is not persisted between launches.
         block_usage_map,
     })
 }
@@ -221,7 +228,7 @@ fn pool_header_to_raw_block(header: PoolDiskHeader) -> RawBlock {
         highest_known_disk,
         disk_with_next_free_block,
         pool_standard_blocks_free,
-        disk_with_latest_inode_write ,
+        latest_inode_write ,
         block_usage_map,} = header;
 
     // Create buffer for the header
@@ -243,7 +250,7 @@ fn pool_header_to_raw_block(header: PoolDiskHeader) -> RawBlock {
     buffer[13..13 + 2].copy_from_slice(&pool_standard_blocks_free.to_le_bytes());
 
     // We do not save the inode write disk information.
-    let _ = disk_with_latest_inode_write;
+    let _ = latest_inode_write;
 
     // Block usage map
     buffer[148..148 + 360].copy_from_slice(&block_usage_map);
@@ -270,7 +277,9 @@ fn create_new_pool_disk(mut disk: BlankDisk) -> Result<(), FloppyDriveError> {
     let writeable_block: RawBlock = new_header.to_block();
 
     // Write it to the disk!
-    disk.write_block(&writeable_block)?;
+    // This is unchecked because the disk header does not exist yet, we cannot allocate space
+    // for the header without the header.
+    disk.unchecked_write_block(&writeable_block)?;
 
     // Done!
     Ok(())
@@ -320,6 +329,12 @@ fn new_pool_header() -> PoolDiskHeader {
     // What blocks are free on the pool disk? Not the first one!
     let mut block_usage_map: [u8; 360] = [0u8; 360];
     block_usage_map[0] = 0b10000000;
+
+    // Everything is empty, so the latest write is just gonna be the root inode.
+    let latest_inode_write: DiskPointer = DiskPointer {
+        disk: 1,
+        block: 1,
+    };
     
 
     PoolDiskHeader {
@@ -327,7 +342,7 @@ fn new_pool_header() -> PoolDiskHeader {
         highest_known_disk,
         disk_with_next_free_block,
         pool_standard_blocks_free,
-        disk_with_latest_inode_write: 1, // This is not persisted on disk.
+        latest_inode_write, // This is not persisted on disk.
         block_usage_map
     }
 }

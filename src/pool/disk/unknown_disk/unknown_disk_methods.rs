@@ -12,13 +12,13 @@ use crate::pool::disk::{
 impl GenericDiskMethods for UnknownDisk {
     #[doc = " Read a block"]
     #[doc = " Cannot bypass CRC."]
-    fn read_block(&self, _block_number: u16) -> Result<RawBlock, BlockError> {
+    fn unchecked_read_block(&self, _block_number: u16) -> Result<RawBlock, BlockError> {
         // We cant read from generic disks.
         unreachable!()
     }
 
     #[doc = " Write a block"]
-    fn write_block(&mut self, block: &RawBlock) -> Result<(), BlockError> {
+    fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), BlockError> {
         write_block_direct(&self.disk_file, &block)
     }
 

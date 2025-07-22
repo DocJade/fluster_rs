@@ -7,7 +7,10 @@ use crate::pool::disk::drive_struct::DiskType;
 use crate::pool::disk::drive_struct::FloppyDrive;
 use crate::pool::disk::drive_struct::FloppyDriveError;
 use crate::pool::disk::generic::disk_trait::GenericDiskMethods;
+use crate::pool::disk::generic::io::checked_io::CheckedIO;
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolDiskHeader;
+use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryBlock;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeBlock;
 use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
 use super::pool_struct::Pool;
 use super::pool_struct::PoolStatistics;
@@ -40,6 +43,12 @@ impl Pool {
     /// Brand new pools need to run some setup functions to get everything in a ready to use state.
     fn initalize() -> Result<(), FloppyDriveError> {
         initalize_pool()
+    }
+    /// Get the root inode block
+    /// 
+    /// Will swap disks, optionally returns to a specified disk.
+    pub fn root_directory(return_to: Option<u16>) -> Result<DirectoryBlock, FloppyDriveError> {
+        pool_get_root_directory(return_to)
     }
 }
 
@@ -160,4 +169,28 @@ fn add_disk<T: DiskBootstrap>() -> Result<T, FloppyDriveError> {
 
     debug!("Done adding new disk.");
     Ok(bootstrapped)
+}
+
+/// Grabs the root inode block
+fn pool_get_root_directory(return_to: Option<u16>) -> Result<DirectoryBlock, FloppyDriveError> {
+    // Root directory should always be at disk 1 block 2. We just assume that to be the case.
+    // Why do we have a root inode that points to the root directory when its always in a static location?
+    // Beats me, I forgot why I did that.
+    let disk: StandardDisk = match FloppyDrive::open(1)? {
+        DiskType::Standard(standard_disk) => standard_disk,
+        _ => {
+            // How is disk 1 not a standard disk?
+            error!("Disk 1 was not a standard disk. This should NEVER be possible.");
+            panic!();
+        }
+    };
+
+    let block = DirectoryBlock::from_block(&disk.checked_read(2)?);
+
+    // Swap disk if need be
+    if let Some(number) = return_to {
+        let _ = FloppyDrive::open(number)?;
+    }
+
+    Ok(block)
 }

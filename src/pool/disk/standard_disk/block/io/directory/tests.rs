@@ -5,6 +5,7 @@
 use std::path::PathBuf;
 
 use log::debug;
+use rand::{rngs::ThreadRng, seq::IndexedRandom, Rng};
 use tempfile::{tempdir, TempDir};
 
 use crate::{filesystem::filesystem_struct::{FilesystemOptions, FlusterFS}, pool::{disk::{drive_struct::FloppyDrive, generic::{generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::block::{directory::directory_struct::DirectoryBlock, io::directory::types::NamedItem}}, pool_actions::pool_struct::Pool}};
@@ -18,7 +19,7 @@ fn add_directory() {
     // Use the filesystem starter to get everything in the right spots
     let _fs = get_filesystem();
     // Now try adding a directory to the pool
-    let block = get_directory_block();
+    let block = Pool::root_directory(None).unwrap();
     let origin: DiskPointer = DiskPointer { disk: 1, block: 2 };
     block.make_directory("test".to_string(), None).unwrap();
     // We dont even check if its there, we just want to know if writing it failed.
@@ -29,12 +30,12 @@ fn add_directory_and_list() {
     // Use the filesystem starter to get everything in the right spots
     let _fs = get_filesystem();
     // Now try adding a directory to the pool
-    let block = get_directory_block();
+    let block = Pool::root_directory(None).unwrap();
     let origin: DiskPointer = DiskPointer { disk: 1, block: 2 };
     block.make_directory("test".to_string(), None).unwrap();
     
     // try to find it again
-    let new_block = get_directory_block();
+    let new_block = Pool::root_directory(None).unwrap();
     assert!(new_block.contains_item(&NamedItem::Directory("test".to_string()), None).unwrap().is_some());
 }
 
@@ -42,16 +43,38 @@ fn add_directory_and_list() {
 fn nested_directory_hell() {
     // Use the filesystem starter to get everything in the right spots
     let _fs = get_filesystem();
-    // Now try adding a directory to the pool
-    let block = get_directory_block();
-    let origin: DiskPointer = DiskPointer { disk: 1, block: 2 };
-    block.make_directory("test".to_string(), None).unwrap();
+    let mut random: ThreadRng = rand::rng();
+    let mut name_number: usize = 0;
     
-    // try to find it again
-    let new_block = get_directory_block();
-    assert!(new_block.contains_item(&NamedItem::Directory("test".to_string()), None).unwrap().is_some());
-
-    todo!("Make nested directories randomly");
+    // Create random directories at random places.
+    for _ in 0..10000 {
+        // Load in the root
+        let mut where_are_we = Pool::root_directory(None).unwrap();
+        // We will open random directories a few times, if they exist.
+        loop {
+            // List the current directory
+            let square_holes = where_are_we.list(None).unwrap();
+            // If there is no directories at this level, we're done.
+            if square_holes.is_empty() {
+                break
+            }
+            // Random chance to not go any deeper.
+            if random.random_bool(0.5) {
+                // not going any further.
+                break
+            }
+            // Looks like we're entering a new directory.
+            let destination = square_holes.choose(&mut random).expect("Already checked if it was empty.").name.clone();
+            println!("{destination}");
+            // Go forth!
+            where_are_we = where_are_we.change_directory(destination, None).unwrap().unwrap();
+            continue;
+        }
+        // Now that we've picked a directory, lets make a new one in here.
+        // To make sure we dont end up with duplicate directory names, we just use a counter.
+        where_are_we.make_directory(name_number.to_string(), None).unwrap();
+        name_number += 1;
+    }
 }
 
 
@@ -63,22 +86,6 @@ fn get_filesystem() -> FlusterFS {
     FlusterFS::start(&fs_options)
     // We don't actually have to mount it for non-integration testing.
 }
-
-// Get the directory block from the fresh file system
-fn get_directory_block() -> DirectoryBlock {
-    // This assumes you already started the filesystem
-
-    // Now grab the first DirectoryBlock
-    let block = match FloppyDrive::open(1).unwrap() {
-        crate::pool::disk::drive_struct::DiskType::Standard(standard_disk) => {
-            let raw = standard_disk.checked_read(2).unwrap();
-            DirectoryBlock::from_block(&raw)
-        },
-        _ => panic!("Non standard disk."),
-    };
-    block
-}
-
 
 // Temporary directories for virtual disks
 pub fn get_new_temp_dir() -> TempDir {

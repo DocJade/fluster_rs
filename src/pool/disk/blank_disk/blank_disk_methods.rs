@@ -14,13 +14,13 @@ use crate::pool::disk::{
 impl GenericDiskMethods for BlankDisk {
     #[doc = " Read a block"]
     #[doc = " Cannot bypass CRC."]
-    fn read_block(&self, _block_number: u16) -> Result<RawBlock, BlockError> {
+    fn unchecked_read_block(&self, _block_number: u16) -> Result<RawBlock, BlockError> {
         // We should NEVER read a block from a blank disk, why would we do that?
         unreachable!()
     }
 
     #[doc = " Write a block"]
-    fn write_block(&mut self, block: &RawBlock) -> Result<(), BlockError> {
+    fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), BlockError> {
         write_block_direct(&self.disk_file, block)
     }
 

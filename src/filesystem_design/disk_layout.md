@@ -1,7 +1,7 @@
 # Disk Layout
 Block 0: Disk header
-Block 1: Inode block
 // Only required on the origin disk
+Block 1: Inode block
 Block 2: Directory block
 
 Unless its a dense disk,
@@ -86,8 +86,8 @@ final 4 bytes: CRC
     6: Reserved for future use
     7: Reserved for future use
 2 bytes: number of free bytes
-2 bytes: next Inode block (Either a disk number, or a block number depending on flags.)
-    - If u16:MAX then this is the end of the inode chain
+4 bytes: next directory block (disk pointer, we have no idea where the next directory could be.)
+    - If u16:MAX then this is the end of the directory chain
 
 remaining bytes: inode data
 

@@ -31,6 +31,8 @@ impl DirectoryBlock {
     }
     /// Returns an Vec of all items in this directory ordered by their String's sort order.
     /// 
+    /// Returned DirectoryItem(s) will have their InodeLocation's disk set.
+    /// 
     /// May swap disks.
     /// 
     /// Optionally returns to a specified disk after gathering directory items.

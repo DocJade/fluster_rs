@@ -13,6 +13,7 @@ use super::inode_struct::InodeBlockError;
 use super::inode_struct::InodeBlockFlags;
 use super::inode_struct::InodeFlags;
 use super::inode_struct::InodeReadError;
+use crate::pool::disk::drive_struct::FloppyDriveError;
 use crate::pool::disk::generic::block::crc::add_crc_to_block;
 use crate::pool::disk::generic::generic_structs::find_space::find_free_space;
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
@@ -78,6 +79,15 @@ impl InodeBlock {
     /// Returns Inode.
     pub fn try_read_inode(&self, inode_offset: u16) -> Result<Inode, InodeReadError> {
         inode_block_try_read_inode(self, inode_offset)
+    }
+    /// Set a new destination on a block.
+    /// 
+    /// Does not flush the new destination to disk, only updates it.
+    /// 
+    /// May swap disks. Will not return to original disk.
+    pub fn new_destination(&mut self, pointer: DiskPointer) {
+        // dont feel like splitting this into a function rn, sue me.
+        self.next_inode_block = pointer;
     }
 }
 
@@ -184,26 +194,26 @@ fn inode_block_try_add_inode(
     inode_block.bytes_free -= new_inode_length as u16;
 
     // Return that offset, we're done.
-    Ok(offset.try_into().expect("max of 503 is < u16"))
+    Ok(offset.try_into().expect("max of 501 is < u16"))
 }
 
 fn new_inode_block() -> InodeBlock {
     // Create the flags
-    // By default, the bit for being the final block is set.
-    let flags: InodeBlockFlags = InodeBlockFlags::FinalInodeBlockOnThisDisk;
+    // No default flags are required.
+    let flags: InodeBlockFlags = InodeBlockFlags::empty();
 
-    // An inode block with no content has 503 bytes free.
-    let bytes_free: u16 = 503;
+    // An inode block with no content has 501 bytes free.
+    let bytes_free: u16 = 501;
 
     // Since this is the final block on the disk, and we obviously cant
     // point to the next disk, since we dont know if it even exists.
     // Thus, this is the end of the Inode chain.
-    let next_inode_block: u16 = u16::MAX;
+    let next_inode_block: DiskPointer = DiskPointer::new_final_pointer();
 
     // A new inode block has no inodes in it.
     // Special care must be taken by the caller to
     // ensure to put the root inode into the root disk.
-    let inodes_data: [u8; 503] = [0u8; 503];
+    let inodes_data: [u8; 501] = [0u8; 501];
 
     // all done
     InodeBlock {
@@ -211,6 +221,7 @@ fn new_inode_block() -> InodeBlock {
         bytes_free,
         next_inode_block,
         inodes_data,
+        block_origin: DiskPointer::new_final_pointer(), // This block is to be immediately written, not followed.
     }
 }
 
@@ -222,11 +233,16 @@ fn from_raw_block(block: &RawBlock) -> InodeBlock {
     let bytes_free: u16 = u16::from_le_bytes(block.data[1..1 + 2].try_into().expect("2 into 2"));
 
     // Next inode block
-    let next_inode_block: u16 =
-        u16::from_le_bytes(block.data[3..3 + 2].try_into().expect("2 into 2"));
+    let next_inode_block: DiskPointer = DiskPointer::from_bytes(block.data[3..3 + 4].try_into().expect("4 into 4"));
 
     // Inodes
-    let inodes_data: [u8; 503] = block.data[5..5 + 503].try_into().expect("503 into 503");
+    let inodes_data: [u8; 501] = block.data[7..7 + 501].try_into().expect("501 into 501");
+
+    // From dust we came
+    let block_origin: DiskPointer = DiskPointer {
+        disk: block.originating_disk.expect("Read blocks should have their origin."),
+        block: block.block_index,
+    };
 
     // All done
     InodeBlock {
@@ -234,6 +250,7 @@ fn from_raw_block(block: &RawBlock) -> InodeBlock {
         bytes_free,
         next_inode_block,
         inodes_data,
+        block_origin,
     }
 }
 
@@ -243,6 +260,7 @@ fn to_raw_bytes(block: &InodeBlock, block_number: u16) -> RawBlock {
         bytes_free,
         next_inode_block,
         inodes_data,
+        block_origin: _ // And to dust we shall return.
     } = block;
 
     let mut buffer: [u8; 512] = [0u8; 512];
@@ -254,10 +272,10 @@ fn to_raw_bytes(block: &InodeBlock, block_number: u16) -> RawBlock {
     buffer[1..1 + 2].copy_from_slice(&bytes_free.to_le_bytes());
 
     // next inode block
-    buffer[3..3 + 2].copy_from_slice(&next_inode_block.to_le_bytes());
+    buffer[3..3 + 4].copy_from_slice(&next_inode_block.to_bytes());
 
     // inodes
-    buffer[5..5 + 503].copy_from_slice(inodes_data);
+    buffer[7..7 + 501].copy_from_slice(inodes_data);
 
     // crc
     add_crc_to_block(&mut buffer);
@@ -474,24 +492,13 @@ impl InodeLocation {
 
 impl InodeBlock {
     /// Find the next block in the inode chain, if it exists.
-    pub fn next_block(&self, current_disk: u16) -> Option<DiskPointer> {
+    pub fn next_block(&self) -> Option<DiskPointer> {
         // First check if we have anywhere to go
-        if self.next_inode_block == u16::MAX {
-            // This is the end of the chain.
-            return None;
-        }
-        if self.flags.intersects(InodeBlockFlags::FinalInodeBlockOnThisDisk) {
-            // This is the last block on the disk. Go to the new disk
-            Some(DiskPointer {
-                disk: self.next_inode_block,
-                block: 1, // Block 1 on every standard disk is an inode block.
-            })
+        if self.next_inode_block.no_destination() {
+            // Nowhere to go.
+            None
         } else {
-            // Its on this disk.
-            Some(DiskPointer {
-                disk: current_disk,
-                block: self.next_inode_block,
-            })
+            Some(self.next_inode_block)
         }
     }
 }

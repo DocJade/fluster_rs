@@ -67,9 +67,7 @@ fn go_make_directory(directory: DirectoryBlock, name: String, return_to: Option<
     };
 
     // Go put it somewhere.
-    // We would prefer to put it on the current disk if possible, since that makes the inodes smaller.
-    // So we will call the greedy approach.
-    let mut inode_result = Pool::greedy_add_inode(inode, new_directory_location.disk)?;
+    let mut inode_result = Pool::fast_add_inode(inode)?;
 
     // Now we add this newly created directory to the calling directory.
     // Flags change depending on wether the new directory ended up on this disk.

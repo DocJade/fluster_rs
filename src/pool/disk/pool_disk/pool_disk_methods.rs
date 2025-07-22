@@ -13,7 +13,7 @@ use crate::pool::disk::{
             allocate::block_allocation::BlockAllocation, block_structs::{BlockError, RawBlock}, crc::check_crc
         },
         disk_trait::GenericDiskMethods,
-        io::{read::read_block_direct, write::write_block_direct},
+        io::{checked_io::CheckedIO, read::read_block_direct, write::write_block_direct},
     },
     pool_disk::block::header::header_struct::PoolDiskHeader,
 };
@@ -67,12 +67,12 @@ impl BlockAllocation for PoolDisk {
 impl GenericDiskMethods for PoolDisk {
     #[doc = " Read a block"]
     #[doc = " Cannot bypass CRC."]
-    fn read_block(&self, block_number: u16) -> Result<RawBlock, BlockError> {
+    fn unchecked_read_block(&self, block_number: u16) -> Result<RawBlock, BlockError> {
         read_block_direct(&self.disk_file, self.number, block_number, false)
     }
 
     #[doc = " Write a block"]
-    fn write_block(&mut self, block: &RawBlock) -> Result<(), BlockError> {
+    fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), BlockError> {
         write_block_direct(&self.disk_file, block)
     }
 
@@ -98,6 +98,6 @@ impl GenericDiskMethods for PoolDisk {
     
     #[doc = " Sync all in-memory information to disk"]
     fn flush(&mut self) -> Result<(), BlockError> {
-        self.write_block(&self.header.to_block())
+        self.checked_update(&self.header.to_block())
     }
 }
