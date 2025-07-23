@@ -1,7 +1,7 @@
 // Imports
 
 use crate::pool::disk::{
-    drive_struct::{FloppyDriveError, HeaderConversionError},
+    drive_struct::FloppyDriveError,
     generic::block::{block_structs::RawBlock, crc::add_crc_to_block},
     standard_disk::block::header::header_struct::{StandardDiskHeader, StandardHeaderFlags},
 };

@@ -7,16 +7,16 @@
 // Tests
 
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
-use rand::Rng;
-use rand::rngs::ThreadRng;
-use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::Inode;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeBlock;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeBlockError;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeDirectory;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeFile;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeFlags;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeTimestamp;
+use rand::Rng;
+use rand::rngs::ThreadRng;
 
 use test_log::test; // We want to see logs while testing.
 
@@ -24,7 +24,10 @@ use test_log::test; // We want to see logs while testing.
 fn blank_inode_block_serialization() {
     let mut test_block: InodeBlock = InodeBlock::new();
     // Just like the directory blocks, we must spoof the disk read.
-    test_block.block_origin = DiskPointer { disk: 420, block: 69 };
+    test_block.block_origin = DiskPointer {
+        disk: 420,
+        block: 69,
+    };
     let mut serialized = test_block.to_block(69);
     serialized.originating_disk = Some(420);
     let deserialized = InodeBlock::from_block(&serialized);
@@ -34,7 +37,10 @@ fn blank_inode_block_serialization() {
 #[test]
 fn fill_inode_block() {
     let mut test_block: InodeBlock = InodeBlock::new();
-    test_block.block_origin = DiskPointer { disk: 420, block: 69 };
+    test_block.block_origin = DiskPointer {
+        disk: 420,
+        block: 69,
+    };
     let mut added_inodes: Vec<Inode> = Vec::new();
     let mut inode_offsets: Vec<u16> = Vec::new();
     loop {
@@ -62,7 +68,10 @@ fn fill_inode_block() {
 fn filled_inode_block_serialization() {
     for _ in 0..1000 {
         let mut test_block: InodeBlock = InodeBlock::new();
-        test_block.block_origin = DiskPointer { disk: 420, block: 69 };
+        test_block.block_origin = DiskPointer {
+            disk: 420,
+            block: 69,
+        };
         // Fill with random inodes until we run out of room.
         loop {
             let add_result = test_block.try_add_inode(Inode::get_random());
@@ -72,7 +81,7 @@ fn filled_inode_block_serialization() {
                 break;
             }
         }
-        
+
         // Check serialization
         let mut serialized = test_block.to_block(69);
         serialized.originating_disk = Some(420);
@@ -86,7 +95,10 @@ fn filled_inode_block_serialization() {
 fn inode_block_fragmentation() {
     let mut random: ThreadRng = rand::rng();
     let mut test_block: InodeBlock = InodeBlock::new();
-    test_block.block_origin = DiskPointer { disk: 420, block: 69 };
+    test_block.block_origin = DiskPointer {
+        disk: 420,
+        block: 69,
+    };
     let mut inode_offsets: Vec<u16> = Vec::new();
     // now we will repeatedly add and remove blocks at random, at some point there should be enough fragmentation for
     // adding a new block to fail
@@ -105,29 +117,32 @@ fn inode_block_fragmentation() {
                         let to_remove: usize = random.random_range(0..inode_offsets.len());
                         // Remove inode
                         test_block
-                        .try_remove_inode(inode_offsets[to_remove])
-                        .unwrap();
-                    // Remove stored offset
-                    let _ = inode_offsets.swap_remove(to_remove);
-                    continue;
+                            .try_remove_inode(inode_offsets[to_remove])
+                            .unwrap();
+                        // Remove stored offset
+                        let _ = inode_offsets.swap_remove(to_remove);
+                        continue;
+                    }
+                    InodeBlockError::BlockIsFragmented => {
+                        // this is our desired outcome.
+                        return;
+                    }
+                    // Other errors should not happen
+                    _ => panic!(),
                 }
-                InodeBlockError::BlockIsFragmented => {
-                    // this is our desired outcome.
-                    return;
-                }
-                // Other errors should not happen
-                _ => panic!(),
             }
         }
     }
-}
 }
 
 #[test]
 fn add_and_read_inode() {
     for _ in 0..1000 {
         let mut test_block: InodeBlock = InodeBlock::new();
-        test_block.block_origin = DiskPointer { disk: 420, block: 69 };
+        test_block.block_origin = DiskPointer {
+            disk: 420,
+            block: 69,
+        };
         let inode: Inode = Inode::get_random();
         let offset = test_block.try_add_inode(inode).unwrap();
         let read_inode = test_block.try_read_inode(offset).unwrap();

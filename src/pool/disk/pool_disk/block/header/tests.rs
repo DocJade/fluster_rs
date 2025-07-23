@@ -35,11 +35,8 @@ impl PoolDiskHeader {
 
         let mut random: ThreadRng = rand::rng();
         // latest inode write isnt persisted to the pool on deserialization so we dont care here either
-        let latest_inode_write: DiskPointer = DiskPointer {
-            disk: 1,
-            block: 1,
-        };
-        
+        let latest_inode_write: DiskPointer = DiskPointer { disk: 1, block: 1 };
+
         Self {
             flags: PoolHeaderFlags::random(),
             highest_known_disk: random.random(),

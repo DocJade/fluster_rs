@@ -1,9 +1,18 @@
 // IO operations that ensure allocations are properly set.
 // We panic in here if we try to read/write in an invalid way, since that indicates a logic error elsewhere.
 
-use log::{debug, trace};
+use log::trace;
 
-use crate::pool::{disk::generic::{block::{allocate::block_allocation::BlockAllocation, block_structs::{BlockError, RawBlock}}, disk_trait::GenericDiskMethods}, pool_actions::pool_struct::GLOBAL_POOL};
+use crate::pool::{
+    disk::generic::{
+        block::{
+            allocate::block_allocation::BlockAllocation,
+            block_structs::{BlockError, RawBlock},
+        },
+        disk_trait::GenericDiskMethods,
+    },
+    pool_actions::pool_struct::GLOBAL_POOL,
+};
 
 // A fancy new trait thats built out of other traits!
 // Automatically add it to all types that implement the subtypes we need.
@@ -22,9 +31,9 @@ pub trait CheckedIO: BlockAllocation + GenericDiskMethods {
     }
 
     /// Write a block to the disk, ensuring it has not already been allocated, as to not overwrite data.
-    /// 
+    ///
     /// Sets the block as used after writing.
-    /// 
+    ///
     /// Panics if block was not free.
     fn checked_write(&mut self, block: &RawBlock) -> Result<(), BlockError> {
         trace!("Performing checked write on block {}...", block.block_index);
@@ -40,19 +49,28 @@ pub trait CheckedIO: BlockAllocation + GenericDiskMethods {
         // Now decrement the pool header
         trace!("Updating the pool's free block count...");
         trace!("Locking GLOBAL_POOL...");
-        GLOBAL_POOL.get().expect("single threaded").try_lock().expect("single threaded").header.pool_standard_blocks_free -= 1;
+        GLOBAL_POOL
+            .get()
+            .expect("single threaded")
+            .try_lock()
+            .expect("single threaded")
+            .header
+            .pool_standard_blocks_free -= 1;
         trace!("Block written successfully.");
         Ok(())
     }
-    
+
     /// Updates an underlying block with new information.
     /// This overwrites the data in the block. (Obviously)
     /// Panics if block was not previously allocated.
     fn checked_update(&mut self, block: &RawBlock) -> Result<(), BlockError> {
-        trace!("Performing checked update on block {}...", block.block_index);
+        trace!(
+            "Performing checked update on block {}...",
+            block.block_index
+        );
         // Make sure block is allocated already
         assert!(self.is_block_allocated(block.block_index));
-        self.unchecked_write_block(&block)?;
+        self.unchecked_write_block(block)?;
         trace!("Block updated successfully.");
         Ok(())
     }

@@ -6,7 +6,6 @@
 
 // Imports
 
-use log::debug;
 use log::trace;
 
 use super::super::block::block_structs::BlockError;
@@ -18,7 +17,10 @@ use std::{fs::File, io::Write, os::unix::fs::FileExt};
 /// Write a block to the currently inserted disk in the floppy drive
 /// ONLY FOR LOWER LEVEL USE, USE CHECKED_WRITE()!
 pub(crate) fn write_block_direct(mut disk_file: &File, block: &RawBlock) -> Result<(), BlockError> {
-    trace!("Directly writing block {} to currently inserted disk...", block.block_index);
+    trace!(
+        "Directly writing block {} to currently inserted disk...",
+        block.block_index
+    );
     // Bounds checking
     if block.block_index >= 2880 {
         // This block is impossible to access.
@@ -27,11 +29,11 @@ pub(crate) fn write_block_direct(mut disk_file: &File, block: &RawBlock) -> Resu
 
     // Calculate the offset into the disk
     let write_offset: u64 = block.block_index as u64 * 512;
-    
+
     // Write the data.
     disk_file.write_all_at(&block.data, write_offset)?;
     disk_file.flush()?;
-    
+
     trace!("Block written successfully.");
     Ok(())
 }

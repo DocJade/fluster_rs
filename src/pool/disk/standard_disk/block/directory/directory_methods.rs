@@ -5,9 +5,16 @@
 // Implementations
 
 use crate::pool::disk::{
-    drive_struct::FloppyDriveError, generic::{block::{block_structs::RawBlock, crc::add_crc_to_block}, generic_structs::pointer_struct::DiskPointer}, standard_disk::block::{directory::directory_struct::{
-        DirectoryBlock, DirectoryBlockError, DirectoryBlockFlags, DirectoryFlags, DirectoryItem,
-    }, inode::inode_struct::InodeLocation}
+    generic::{
+        block::{block_structs::RawBlock, crc::add_crc_to_block},
+        generic_structs::pointer_struct::DiskPointer,
+    },
+    standard_disk::block::{
+        directory::directory_struct::{
+            DirectoryBlock, DirectoryBlockError, DirectoryBlockFlags, DirectoryFlags, DirectoryItem,
+        },
+        inode::inode_struct::InodeLocation,
+    },
 };
 
 // We can convert from a raw block to a directory bock, but not the other way around.
@@ -190,7 +197,8 @@ fn directory_block_from_bytes(block: &RawBlock) -> DirectoryBlock {
     let bytes_free: u16 = u16::from_le_bytes(block.data[1..1 + 2].try_into().expect("2 = 2"));
 
     // Next block
-    let next_block: DiskPointer = DiskPointer::from_bytes(block.data[3..3 + 4].try_into().expect("2 = 2"));
+    let next_block: DiskPointer =
+        DiskPointer::from_bytes(block.data[3..3 + 4].try_into().expect("2 = 2"));
 
     // The directory items
     let directory_items: Vec<DirectoryItem> =

@@ -1,12 +1,14 @@
 // Helper types.
 
-use crate::pool::disk::standard_disk::block::directory::directory_struct::{DirectoryFlags, DirectoryItem};
+use crate::pool::disk::standard_disk::block::directory::directory_struct::{
+    DirectoryFlags, DirectoryItem,
+};
 
 // Need a way to search for either a file or a directory
 #[derive(Ord, PartialEq, Eq, PartialOrd)]
 pub enum NamedItem {
     File(String),
-    Directory(String)
+    Directory(String),
 }
 /// Specific types for named items.
 impl NamedItem {
@@ -41,4 +43,3 @@ impl From<DirectoryItem> for NamedItem {
         }
     }
 }
-

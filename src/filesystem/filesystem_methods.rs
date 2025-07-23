@@ -42,9 +42,11 @@ impl FilesystemOptions {
         // set the floppy disk path
         debug!("Setting the floppy path...");
         debug!("Locking FLOPPY_PATH...");
-        *FLOPPY_PATH.try_lock().expect("Fluster! Is single threaded.") = floppy_drive.clone();
+        *FLOPPY_PATH
+            .try_lock()
+            .expect("Fluster! Is single threaded.") = floppy_drive.clone();
         debug!("Done.");
-        
+
         // Set the virtual disk flag if needed
         if let Some(path) = use_virtual_disks.clone() {
             debug!("Setting up virtual disks...");
@@ -55,14 +57,14 @@ impl FilesystemOptions {
                 println!("Virtual disk argument must be a valid path to a pre-existing directory.");
                 exit(-1);
             }
-            
+
             debug!("Locking USE_VIRTUAL_DISKS...");
             *USE_VIRTUAL_DISKS
-            .try_lock()
-            .expect("Fluster! Is single threaded.") = Some(path.to_path_buf());
+                .try_lock()
+                .expect("Fluster! Is single threaded.") = Some(path.to_path_buf());
             debug!("Done.");
         };
-    
+
         debug!("Done configuring.");
         Self {
             use_virtual_disks,

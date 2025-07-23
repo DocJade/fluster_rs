@@ -1,13 +1,15 @@
 // yeah
 
-use crate::pool::disk::{dense_disk::block::header::header_struct::{DenseDiskFlags, DenseDiskHeader}, generic::block::{block_structs::RawBlock, crc::add_crc_to_block}};
+use crate::pool::disk::{
+    dense_disk::block::header::header_struct::{DenseDiskFlags, DenseDiskHeader},
+    generic::block::{block_structs::RawBlock, crc::add_crc_to_block},
+};
 
 impl DenseDiskHeader {
     pub fn to_disk_block(&self) -> RawBlock {
         todo!();
     }
 }
-
 
 /// Extract header info from a disk
 fn extract_header(raw_block: &RawBlock) -> DenseDiskHeader {

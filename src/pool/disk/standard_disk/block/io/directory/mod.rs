@@ -1,6 +1,6 @@
-pub mod write;
-pub mod read;
 pub mod movement;
-pub mod types;
+pub mod read;
 #[cfg(test)]
 mod tests;
+pub mod types;
+pub mod write;

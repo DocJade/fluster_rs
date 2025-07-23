@@ -2,10 +2,7 @@
 
 // Imports
 
-use std::fs::File;
-
 use log::debug;
-use log::info;
 use log::warn;
 
 use crate::filesystem::filesystem_struct::USE_VIRTUAL_DISKS;
@@ -205,10 +202,7 @@ fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolDiskHeader, PoolHe
     let block_usage_map: [u8; 360] = block.data[148..148 + 360].try_into().expect("Impossible");
 
     // The latest inode write is not persisted between launches, so we point at the root inode.
-    let latest_inode_write: DiskPointer = DiskPointer {
-        disk: 1,
-        block: 1,
-    };
+    let latest_inode_write: DiskPointer = DiskPointer { disk: 1, block: 1 };
 
     Ok(PoolDiskHeader {
         flags,
@@ -228,8 +222,9 @@ fn pool_header_to_raw_block(header: PoolDiskHeader) -> RawBlock {
         highest_known_disk,
         disk_with_next_free_block,
         pool_standard_blocks_free,
-        latest_inode_write ,
-        block_usage_map,} = header;
+        latest_inode_write,
+        block_usage_map,
+    } = header;
 
     // Create buffer for the header
     let mut buffer: [u8; 512] = [0u8; 512];
@@ -301,8 +296,10 @@ fn check_for_external_error(error: &FloppyDriveError) -> Result<(), FloppyDriveE
         FloppyDriveError::NotBlank => todo!(),
         FloppyDriveError::WipeFailure => todo!(),
         FloppyDriveError::WrongDisk => todo!(),
-        FloppyDriveError::BadHeader(header_conversion_error) => todo!(),
-        FloppyDriveError::BlockError(block_error) => todo!(),
+        FloppyDriveError::BadHeader(header_conversion_error) => {
+            todo!("{header_conversion_error:#?}")
+        }
+        FloppyDriveError::BlockError(block_error) => todo!("{block_error:#?}"),
     }
 }
 
@@ -331,11 +328,7 @@ fn new_pool_header() -> PoolDiskHeader {
     block_usage_map[0] = 0b10000000;
 
     // Everything is empty, so the latest write is just gonna be the root inode.
-    let latest_inode_write: DiskPointer = DiskPointer {
-        disk: 1,
-        block: 1,
-    };
-    
+    let latest_inode_write: DiskPointer = DiskPointer { disk: 1, block: 1 };
 
     PoolDiskHeader {
         flags,
@@ -343,6 +336,6 @@ fn new_pool_header() -> PoolDiskHeader {
         disk_with_next_free_block,
         pool_standard_blocks_free,
         latest_inode_write, // This is not persisted on disk.
-        block_usage_map
+        block_usage_map,
     }
 }

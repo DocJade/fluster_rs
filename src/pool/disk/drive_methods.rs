@@ -5,7 +5,6 @@
 
 // Imports
 
-use log::debug;
 use log::error;
 use log::trace;
 use log::warn;
@@ -36,7 +35,6 @@ use std::fs::File;
 use std::fs::OpenOptions;
 use std::sync::atomic::AtomicU16;
 use std::sync::atomic::Ordering;
-
 
 // Disk tracking global.
 
@@ -73,14 +71,14 @@ fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, Fl
     trace!("Is it a new disk? : {new_disk}");
     // First, we need the file to read from
     let disk_file: File = get_floppy_drive_file(disk_number, new_disk)?;
-    
+
     // Now we must get the 0th block
     // We need to read a block before we have an actual disk, so we need
     // to call this function directly as a workaround.
     // We must ignore the CRC here, since we know nothing about the disk.
     trace!("Reading in the header at block 0...");
     let header_block = read_block_direct(&disk_file, disk_number, 0, true)?;
-    
+
     // Now we check for the magic
     trace!("Checking for magic...");
     if !check_for_magic(&header_block.data) {
@@ -96,11 +94,11 @@ fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, Fl
         trace!("Disk was not blank, returning unknown disk...");
         return Ok(DiskType::Unknown(UnknownDisk::new(disk_file)));
     }
-    
+
     // Magic exists, time to figure out what kind of disk this is.
     trace!("Disk has magic, deducing type...");
     // Bitflags will tell us.
-    
+
     // Pool disk.
     // The header reads should check the CRC of the block.
     if header_block.data[8] & 0b10000000 != 0 {
@@ -110,7 +108,7 @@ fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, Fl
             disk_file,
         )));
     }
-    
+
     // Dense disk.
     if header_block.data[8] & 0b01000000 != 0 {
         trace!("Head is for a dense disk, returning.");
@@ -119,7 +117,7 @@ fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, Fl
             disk_file,
         )));
     }
-    
+
     // Standard disk.
     if header_block.data[8] & 0b00100000 != 0 {
         trace!("Head is for a standard disk, returning.");
@@ -128,10 +126,10 @@ fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, Fl
             disk_file,
         )));
     }
-    
+
     // it should be impossible to get here
     error!("Header of disk did not match any known disk type!");
-    error!("Hexdump:\n{}",hex_view(header_block.data.to_vec()));
+    error!("Hexdump:\n{}", hex_view(header_block.data.to_vec()));
     error!("We cannot continue with an un-deducible disk!");
     unreachable!();
 }
@@ -181,7 +179,7 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Flopp
         // they will already be this size.
         trace!("Attempting to resize the temporary file to floppy size...");
         temp_disk_file.set_len(512 * 2880)?;
-        
+
         trace!("Returning virtual disk.");
         return Ok(temp_disk_file);
     }
@@ -220,7 +218,7 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
         // We do not create disks here.
         disk = open_and_deduce_disk(disk_number, false);
         // Is this the correct disk?
-        
+
         match disk {
             Ok(ok) => {
                 let new_disk_number = ok.get_disk_number();
@@ -231,7 +229,13 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
                     CURRENT_DISK_IN_DRIVE.store(new_disk_number, Ordering::SeqCst);
                     // Update the swap count
                     trace!("Locking GLOBAL_POOL, updating disk swap count.");
-                    GLOBAL_POOL.get().expect("single threaded").try_lock().expect("single threaded").statistics.swaps += 1;
+                    GLOBAL_POOL
+                        .get()
+                        .expect("single threaded")
+                        .try_lock()
+                        .expect("single threaded")
+                        .statistics
+                        .swaps += 1;
                 }
 
                 // Check if this is the right disk number
@@ -241,10 +245,10 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
                     return Ok(ok);
                 }
                 warn!("Wrong disk received. Got disk {}", ok.get_disk_number());
-            },
+            }
             Err(error) => match error {
                 // If the error isn't about it being the wrong disk, we need to throw the error up.
-                FloppyDriveError::WrongDisk => {},
+                FloppyDriveError::WrongDisk => {}
                 _ => {
                     warn!("Got an error while prompting for disk: {error}");
                     return Err(error);
@@ -259,7 +263,7 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
             error!("Got an invalid disk during a test!");
             panic!("Test received an invalid disk!");
         }
-        
+
         // Prompt user to swap disks.
 
         if is_user_an_idiot {
@@ -279,13 +283,21 @@ fn prompt_for_blank_disk(disk_number: u16) -> Result<BlankDisk, FloppyDriveError
     let mut try_again: bool = false;
 
     // If we are on virtual disks, skip the initial prompt
-    if !USE_VIRTUAL_DISKS.try_lock().expect("Fluster is single threaded.").is_some() {
-        let _ = rprompt::prompt_reply("That disk is not blank. Please insert a blank disk, then hit enter.")?;
+    if !USE_VIRTUAL_DISKS
+        .try_lock()
+        .expect("Fluster is single threaded.")
+        .is_some()
+    {
+        let _ = rprompt::prompt_reply(
+            "That disk is not blank. Please insert a blank disk, then hit enter.",
+        )?;
     }
 
     loop {
         if try_again {
-            let _ = rprompt::prompt_reply("That disk is not blank. Please insert a blank disk, then hit enter.")?;
+            let _ = rprompt::prompt_reply(
+                "That disk is not blank. Please insert a blank disk, then hit enter.",
+            )?;
         }
         // we are making a new disk, so we must specify as such.
         let disk = open_and_deduce_disk(disk_number, true)?;
@@ -297,11 +309,11 @@ fn prompt_for_blank_disk(disk_number: u16) -> Result<BlankDisk, FloppyDriveError
                 display_info_and_ask_wipe(unknown_disk.into())?;
                 // try again
                 continue;
-            },
+            }
             _ => {
                 // This is not a blank disk.
                 try_again = true;
-            },
+            }
         }
     }
 }
@@ -330,7 +342,6 @@ pub fn display_info_and_ask_wipe(disk: DiskType) -> Result<(), FloppyDriveError>
         }
     }
 }
-
 
 // Error conversion
 impl From<std::io::Error> for FloppyDriveError {

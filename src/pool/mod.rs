@@ -1,3 +1,3 @@
 mod disk;
-pub mod pool_actions;
 pub mod io;
+pub mod pool_actions;

@@ -78,5 +78,5 @@ pub fn find_free_space<T: BytePingPong>(data: &[u8], requested_space: usize) -> 
     }
 
     // If we made it out of the while loop, that must mean there is not an open space.
-    return None;
+    None
 }

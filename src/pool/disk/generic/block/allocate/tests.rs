@@ -3,8 +3,7 @@
 #![allow(clippy::unwrap_used)]
 use test_log::test; // We want to see logs while testing.
 
-
-use rand::{rngs::ThreadRng, Rng};
+use rand::{Rng, rngs::ThreadRng};
 
 use crate::pool::disk::generic::block::block_structs::BlockError;
 
@@ -15,18 +14,20 @@ use super::block_allocation::BlockAllocation;
 fn allocate_and_free_one_block() {
     let mut table = TestTable::new();
 
-    let open_block = table.find_free_blocks(1).expect("Should have > 1 block free.");
+    let open_block = table
+        .find_free_blocks(1)
+        .expect("Should have > 1 block free.");
 
     assert_eq!(open_block.len(), 1); // We only asked for 1 block
     assert_eq!(*open_block.first().expect("Guarded"), 0_u16); // the first block should be free
-    
+
     let blocks_allocated = table.allocate_blocks(&open_block).unwrap();
-    
+
     assert_eq!(blocks_allocated, 1); // Should have allocated 1 block
     assert_eq!(table.block_usage_map[0], 0b10000000); // First block got set.
-    
+
     let blocks_freed = table.free_blocks(&[0_u16].to_vec()).unwrap(); // free the first block
-    
+
     assert_eq!(blocks_freed, 1); // Should have freed the block
     assert_eq!(table.block_usage_map[0], 0b00000000); // First block got freed
 }
@@ -37,7 +38,9 @@ fn allocate_and_free_one_block() {
 /// putting as much data as we can fit onto a disk.
 fn oversized_allocation() {
     let table = TestTable::new();
-    let open_block = table.find_free_blocks(5000).expect_err("There shouldn't be enough room.");
+    let open_block = table
+        .find_free_blocks(5000)
+        .expect_err("There shouldn't be enough room.");
     assert_eq!(open_block, 2880);
 }
 
@@ -60,17 +63,25 @@ fn saturate_table() {
         let blocks_pre_set: u32 = random_table.iter().map(|byte| byte.count_ones()).sum();
 
         // Now fill up the table
-        let free_blocks = table.find_free_blocks(5000).expect_err("There shouldn't be enough room.");
+        let free_blocks = table
+            .find_free_blocks(5000)
+            .expect_err("There shouldn't be enough room.");
 
         // make sure the table is reporting the correct amount of free blocks.
         assert_eq!(2880 - free_blocks as u32, blocks_pre_set);
 
-        let blocks_to_allocate = table.find_free_blocks(free_blocks).expect("Self reported max capacity.");
+        let blocks_to_allocate = table
+            .find_free_blocks(free_blocks)
+            .expect("Self reported max capacity.");
         let blocks_allocated: u16 = table.allocate_blocks(&blocks_to_allocate).unwrap();
 
         assert_eq!(blocks_allocated, free_blocks);
         // Is it actually full tho?
-        let num_unset_bits: u32 = table.block_usage_map.iter().map(|byte| byte.count_zeros()).sum();
+        let num_unset_bits: u32 = table
+            .block_usage_map
+            .iter()
+            .map(|byte| byte.count_zeros())
+            .sum();
         assert_eq!(num_unset_bits, 0);
     }
 }
@@ -81,7 +92,7 @@ fn marking() {
     for _ in 0..1000 {
         let mut random: ThreadRng = rand::rng();
         let mut table = TestTable::new();
-        
+
         // the table is empty, so we should be able to reserve any block we want.
         let random_block: u16 = random.random_range(0..2880);
         let allocated_count = table.allocate_blocks(&[random_block].to_vec()).unwrap();
@@ -91,7 +102,6 @@ fn marking() {
         assert!(is_allocated)
     }
 }
-
 
 // We need a struct that implements the allocation methods for testing
 
@@ -113,7 +123,9 @@ impl BlockAllocation for TestTable {
     }
 
     fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), BlockError> {
-        self.block_usage_map = new_table.try_into().expect("New table should be the same size as old table.");
+        self.block_usage_map = new_table
+            .try_into()
+            .expect("New table should be the same size as old table.");
         // We dont need to flush, since this table is all in memory for testing
         Ok(())
     }

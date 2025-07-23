@@ -4,11 +4,15 @@
 
 use crate::pool::pool_actions::pool_struct::Pool;
 use easy_fuser::templates::DefaultFuseHandler;
-use std::{path::PathBuf, sync::{Arc, Mutex}};
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 // Structs, Enums, Flags
 
 pub struct FlusterFS {
     pub(crate) inner: Box<DefaultFuseHandler>,
+    #[allow(dead_code)] // it's lying.
     pub(crate) pool: Arc<Mutex<Pool>>,
 }
 
@@ -26,7 +30,9 @@ lazy_static! {
 pub struct FilesystemOptions {
     /// Use virtual disks in a temp folder instead of accessing the floppy drive.
     /// This option is used for testing.
+    #[allow(dead_code)] // it's lying.
     pub(super) use_virtual_disks: Option<PathBuf>,
     /// The location of the floppy drive block device
+    #[allow(dead_code)] // it's lying.
     pub(super) floppy_drive: PathBuf,
 }

@@ -21,9 +21,9 @@ fn create_directory() {
     // make a new dir
     let mut new_dir = mount_point.path().to_path_buf();
     new_dir.push("testdir");
-    
+
     let result = std::fs::create_dir(new_dir);
-    
+
     // cleanup
     test_common::unmount(mount_point.path().to_path_buf());
     let _ = mount_thread.join();

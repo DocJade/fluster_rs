@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use fluster_fs::filesystem::filesystem_struct::{FilesystemOptions, FlusterFS};
 use log::debug;
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 
 //
 // Helper functions
@@ -12,7 +12,10 @@ use tempfile::{tempdir, TempDir};
 pub fn get_new_temp_dir() -> TempDir {
     let mut dir = tempdir().unwrap();
     dir.disable_cleanup(true);
-    debug!("Created a temp directory at {}, it will not be deleted on exit.", dir.path().to_string_lossy());
+    debug!(
+        "Created a temp directory at {}, it will not be deleted on exit.",
+        dir.path().to_string_lossy()
+    );
     dir
 }
 
@@ -21,7 +24,7 @@ pub fn get_actually_temp_dir() -> TempDir {
     tempdir().unwrap()
 }
 
-// Create a temporary filesystem, and returns the 
+// Create a temporary filesystem, and returns the
 pub fn start_filesystem() -> FlusterFS {
     let temp_dir = get_new_temp_dir();
     let floppy_drive: PathBuf = PathBuf::new(); // This is never read since we are using temporary disks.

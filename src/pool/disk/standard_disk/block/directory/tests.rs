@@ -22,7 +22,10 @@ fn blank_directory_block_serialization() {
     let mut test_block: DirectoryBlock = DirectoryBlock::new();
     // For our equal check to work, we need to set the block to come from the same
     // disk that we're pretending to read it from.
-    test_block.block_origin = DiskPointer { disk: 420, block: 69 };
+    test_block.block_origin = DiskPointer {
+        disk: 420,
+        block: 69,
+    };
     let mut serialized = test_block.to_block(69);
     // Directory blocks assume they are written to disk before being
     // deserialized, because they must know where they came from.
@@ -48,7 +51,10 @@ fn filled_directory_block_serialization() {
         let mut test_block: DirectoryBlock = DirectoryBlock::new();
         // For our equal check to work, we need to set the block to come from the same
         // disk that we're pretending to read it from.
-        test_block.block_origin = DiskPointer { disk: 420, block: 69 };
+        test_block.block_origin = DiskPointer {
+            disk: 420,
+            block: 69,
+        };
         // Fill with random inodes until we run out of room.
         loop {
             match test_block.try_add_item(&DirectoryItem::get_random()) {
@@ -56,8 +62,8 @@ fn filled_directory_block_serialization() {
                 Err(err) => match err {
                     DirectoryBlockError::NotEnoughSpace => {
                         // Done filling it up
-                        break
-                    },
+                        break;
+                    }
                     _ => panic!("Got an error while adding item!"),
                 },
             }

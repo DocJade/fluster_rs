@@ -42,9 +42,10 @@ pub trait BlockAllocation {
     }
 }
 
-
-
-fn go_find_free_blocks<T: BlockAllocation + ?Sized>(caller: &T, blocks_requested: u16) -> Result<Vec<u16>, u16> {
+fn go_find_free_blocks<T: BlockAllocation + ?Sized>(
+    caller: &T,
+    blocks_requested: u16,
+) -> Result<Vec<u16>, u16> {
     // The allocation table is a stream of bits, the first bit is the 0th block.
 
     // Vector of free block locations
@@ -76,7 +77,11 @@ fn go_find_free_blocks<T: BlockAllocation + ?Sized>(caller: &T, blocks_requested
 }
 
 /// allocate false frees the provided bytes.
-fn go_allocate_or_free_blocks<T: BlockAllocation + ?Sized>(caller: &mut T, blocks: &Vec<u16>, allocate: bool) -> Result<u16, BlockError> {
+fn go_allocate_or_free_blocks<T: BlockAllocation + ?Sized>(
+    caller: &mut T,
+    blocks: &Vec<u16>,
+    allocate: bool,
+) -> Result<u16, BlockError> {
     debug!(
         "Attempting to {} {} blocks on the current disk...",
         if allocate { "Allocate" } else { "free" },
@@ -123,7 +128,7 @@ fn go_allocate_or_free_blocks<T: BlockAllocation + ?Sized>(caller: &mut T, block
         }
     }
     trace!("Done updating blocks.");
-    
+
     // All operations are done, write back the new table
     trace!("Writing back new allocation table...");
     caller.set_allocation_table(&new_allocation_table)?;

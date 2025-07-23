@@ -55,7 +55,9 @@ impl From<&RawBlock> for DiskPointer {
             // disk information. The information MUST be present on
             // read blocks, and this call should not be made on blocks
             // that are intended to be written.
-            error!("Attempted to get a disk pointer from a RawBlock that had no origin disk, we cannot continue.");
+            error!(
+                "Attempted to get a disk pointer from a RawBlock that had no origin disk, we cannot continue."
+            );
             error!("The block in question: \n{value:#?}");
             unreachable!("");
         }

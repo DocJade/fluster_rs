@@ -5,7 +5,10 @@ use std::fs::File;
 use crate::pool::disk::{
     drive_struct::{DiskBootstrap, FloppyDriveError},
     generic::{
-        block::{allocate::block_allocation::BlockAllocation, block_structs::{BlockError, RawBlock}},
+        block::{
+            allocate::block_allocation::BlockAllocation,
+            block_structs::{BlockError, RawBlock},
+        },
         disk_trait::GenericDiskMethods,
         io::{checked_io::CheckedIO, read::read_block_direct, write::write_block_direct},
     },
@@ -36,7 +39,9 @@ impl BlockAllocation for DenseDisk {
     }
 
     fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), BlockError> {
-        self.header.block_usage_map = new_table.try_into().expect("Incoming table should be the same as outgoing.");
+        self.header.block_usage_map = new_table
+            .try_into()
+            .expect("Incoming table should be the same as outgoing.");
         self.flush()
     }
 }
@@ -62,17 +67,17 @@ impl GenericDiskMethods for DenseDisk {
     fn get_disk_number(&self) -> u16 {
         self.number
     }
-    
+
     #[doc = " Set the number of this disk."]
     fn set_disk_number(&mut self, disk_number: u16) -> () {
         self.number = disk_number;
     }
-    
+
     #[doc = " Get the inner file used for write operations"]
-    fn disk_file_mut(&mut self) ->  &mut File {
+    fn disk_file_mut(&mut self) -> &mut File {
         &mut self.disk_file
     }
-    
+
     #[doc = " Sync all in-memory information to disk"]
     fn flush(&mut self) -> Result<(), BlockError> {
         self.checked_update(&self.header.to_disk_block())

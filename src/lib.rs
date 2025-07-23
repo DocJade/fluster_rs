@@ -5,5 +5,5 @@
 pub mod filesystem;
 
 // Within the crate, we can use:
-mod pool;
 mod helpers;
+mod pool;

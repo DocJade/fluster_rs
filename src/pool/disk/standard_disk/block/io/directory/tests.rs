@@ -5,10 +5,19 @@
 use std::path::PathBuf;
 
 use log::debug;
-use rand::{rngs::ThreadRng, seq::IndexedRandom, Rng};
-use tempfile::{tempdir, TempDir};
+use rand::{Rng, rngs::ThreadRng, seq::IndexedRandom};
+use tempfile::{TempDir, tempdir};
 
-use crate::{filesystem::filesystem_struct::{FilesystemOptions, FlusterFS}, pool::{disk::{drive_struct::FloppyDrive, generic::{generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::block::{directory::directory_struct::DirectoryBlock, io::directory::types::NamedItem}}, pool_actions::pool_struct::Pool}};
+use crate::{
+    filesystem::filesystem_struct::{FilesystemOptions, FlusterFS},
+    pool::{
+        disk::{
+            generic::generic_structs::pointer_struct::DiskPointer,
+            standard_disk::block::io::directory::types::NamedItem,
+        },
+        pool_actions::pool_struct::Pool,
+    },
+};
 
 use test_log::test; // We want to see logs while testing.
 
@@ -20,7 +29,6 @@ fn add_directory() {
     let _fs = get_filesystem();
     // Now try adding a directory to the pool
     let block = Pool::root_directory(None).unwrap();
-    let origin: DiskPointer = DiskPointer { disk: 1, block: 2 };
     block.make_directory("test".to_string(), None).unwrap();
     // We dont even check if its there, we just want to know if writing it failed.
 }
@@ -31,12 +39,16 @@ fn add_directory_and_list() {
     let _fs = get_filesystem();
     // Now try adding a directory to the pool
     let block = Pool::root_directory(None).unwrap();
-    let origin: DiskPointer = DiskPointer { disk: 1, block: 2 };
     block.make_directory("test".to_string(), None).unwrap();
-    
+
     // try to find it again
     let new_block = Pool::root_directory(None).unwrap();
-    assert!(new_block.contains_item(&NamedItem::Directory("test".to_string()), None).unwrap().is_some());
+    assert!(
+        new_block
+            .contains_item(&NamedItem::Directory("test".to_string()), None)
+            .unwrap()
+            .is_some()
+    );
 }
 
 #[test]
@@ -46,7 +58,7 @@ fn nested_directory_hell() {
     let _fs = get_filesystem();
     let mut random: ThreadRng = rand::rng();
     let mut name_number: usize = 0;
-    
+
     // Create random directories at random places.
     for _ in 0..10_000 {
         // Load in the root
@@ -57,22 +69,32 @@ fn nested_directory_hell() {
             let square_holes = where_are_we.list(None).unwrap();
             // If there is no directories at this level, we're done.
             if square_holes.is_empty() {
-                break
+                break;
             }
             // Random chance to not go any deeper.
-            if random.random_bool(0.2) { // Incentivize deep nesting.
+            if random.random_bool(0.2) {
+                // Incentivize deep nesting.
                 // not going any further.
-                break
+                break;
             }
             // Looks like we're entering a new directory.
-            let destination = square_holes.choose(&mut random).expect("Already checked if it was empty.").name.clone();
+            let destination = square_holes
+                .choose(&mut random)
+                .expect("Already checked if it was empty.")
+                .name
+                .clone();
             // Go forth!
-            where_are_we = where_are_we.change_directory(destination, None).unwrap().unwrap();
+            where_are_we = where_are_we
+                .change_directory(destination, None)
+                .unwrap()
+                .unwrap();
             continue;
         }
         // Now that we've picked a directory, lets make a new one in here.
         // To make sure we dont end up with duplicate directory names, we just use a counter.
-        where_are_we.make_directory(name_number.to_string(), None).unwrap();
+        where_are_we
+            .make_directory(name_number.to_string(), None)
+            .unwrap();
         name_number += 1;
     }
 }
@@ -83,7 +105,8 @@ fn nested_directory_hell() {
 fn directories_switch_disks() -> Result<(), ()> {
     // Use the filesystem starter to get everything in the right spots
     let _fs = get_filesystem();
-    for i in 0..3000 { // There's only 2880 blocks on the first disk, assuming no overhead.
+    for i in 0..3000 {
+        // There's only 2880 blocks on the first disk, assuming no overhead.
         let root_dir = Pool::root_directory(None).unwrap();
         root_dir.make_directory(i.to_string(), None).unwrap();
     }
@@ -92,14 +115,16 @@ fn directories_switch_disks() -> Result<(), ()> {
     for dir in root_dir_done.list(None).unwrap() {
         if dir.location.disk.unwrap() != 1 {
             // Made it to another disk.
-            debug!("Made it onto another disk! Disk: {}", dir.location.disk.unwrap());
+            debug!(
+                "Made it onto another disk! Disk: {}",
+                dir.location.disk.unwrap()
+            );
             return Ok(());
         }
     }
     // They were all disk 1!
     panic!("All directories are on disk 1!");
 }
-
 
 // We need a filesystem to run directory tests on.
 fn get_filesystem() -> FlusterFS {
@@ -114,6 +139,9 @@ fn get_filesystem() -> FlusterFS {
 pub fn get_new_temp_dir() -> TempDir {
     let mut dir = tempdir().unwrap();
     dir.disable_cleanup(true);
-    debug!("Created a temp directory at {}, it will not be deleted on exit.", dir.path().to_string_lossy());
+    debug!(
+        "Created a temp directory at {}, it will not be deleted on exit.",
+        dir.path().to_string_lossy()
+    );
     dir
 }

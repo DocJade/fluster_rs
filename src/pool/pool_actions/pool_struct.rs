@@ -1,13 +1,11 @@
 // Did you know, if lightning struct a pool, everyone dies?
 // Imports
 
-
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolDiskHeader;
 
 use lazy_static::lazy_static;
 use once_cell::sync::OnceCell;
 use std::sync::{Arc, Mutex};
-
 
 // The global access to the pool.
 // It was either have a globally accessible pool, or put a reference to the pool in every method... No thanks.

@@ -13,7 +13,7 @@ pub fn hex_view(bytes: Vec<u8>) -> String {
         // make the line
         let mut line = String::new();
         // first goes the offset, padded so its 10 characters long
-        line.push_str(&format!("{:0>10X}  ", offset));
+        line.push_str(&format!("{offset:0>10X}  "));
         // now for all the numbers
         for i in 0..16 {
             // skip if we are outside of range
@@ -21,7 +21,7 @@ pub fn hex_view(bytes: Vec<u8>) -> String {
                 line.push_str("  ");
             } else {
                 let byte = bytes[offset + i];
-                let byte_component = format!("{:02X} ", byte);
+                let byte_component = format!("{byte:02X} ");
                 line.push_str(&byte_component);
             }
         }

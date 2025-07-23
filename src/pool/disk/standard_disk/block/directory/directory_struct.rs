@@ -5,7 +5,10 @@
 use bitflags::bitflags;
 use thiserror::Error;
 
-use crate::pool::disk::{generic::generic_structs::pointer_struct::DiskPointer, standard_disk::block::inode::inode_struct::InodeLocation};
+use crate::pool::disk::{
+    generic::generic_structs::pointer_struct::DiskPointer,
+    standard_disk::block::inode::inode_struct::InodeLocation,
+};
 
 // Structs / Enums / Flags
 

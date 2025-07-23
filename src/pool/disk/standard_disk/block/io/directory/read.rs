@@ -2,20 +2,34 @@
 
 use log::{debug, trace};
 
-use crate::pool::disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::io::checked_io::CheckedIO, standard_disk::block::{directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem}, io::directory::types::NamedItem}};
+use crate::pool::disk::{
+    drive_struct::{DiskType, FloppyDrive, FloppyDriveError},
+    generic::io::checked_io::CheckedIO,
+    standard_disk::block::{
+        directory::directory_struct::{DirectoryBlock, DirectoryItem},
+        io::directory::types::NamedItem,
+    },
+};
 
 impl DirectoryBlock {
     /// Check if this directory contains an item with the provided name and type.
     /// This checks the entire directory, not just the current block.
     /// Returns Option<DirectoryItem> if it exists.
     /// You must specify which disk this block came from.
-    /// 
+    ///
     /// May swap disks.
-    /// 
+    ///
     /// Optionally returns to a specified disk when done.
-    pub fn contains_item(&self, item_to_find: &NamedItem, return_to: Option<u16>) -> Result<Option<DirectoryItem>, FloppyDriveError> {
+    pub fn contains_item(
+        &self,
+        item_to_find: &NamedItem,
+        return_to: Option<u16>,
+    ) -> Result<Option<DirectoryItem>, FloppyDriveError> {
         let extracted_debug = item_to_find.debug_strings();
-        debug!("Checking if a directory contains the {} `{}`...", extracted_debug.0, extracted_debug.1);
+        debug!(
+            "Checking if a directory contains the {} `{}`...",
+            extracted_debug.0, extracted_debug.1
+        );
         // Get items
         let items: Vec<DirectoryItem> = self.list(return_to)?;
 
@@ -24,19 +38,19 @@ impl DirectoryBlock {
         if let Some(item) = item_to_find.find_in(&items) {
             // It's in there!
             debug!("Yes it did.");
-            return Ok(Some(item));
+            Ok(Some(item))
         } else {
             // The item wasn't in there.
             debug!("No it didn't.");
-            return Ok(None);
+            Ok(None)
         }
     }
     /// Returns an Vec of all items in this directory ordered alphabetically descending.
-    /// 
+    ///
     /// Returned DirectoryItem(s) will have their InodeLocation's disk set.
-    /// 
+    ///
     /// May swap disks.
-    /// 
+    ///
     /// Optionally returns to a specified disk after gathering directory items.
     pub fn list(&self, return_to: Option<u16>) -> Result<Vec<DirectoryItem>, FloppyDriveError> {
         go_list_directory(self, return_to)
@@ -45,7 +59,10 @@ impl DirectoryBlock {
 
 // Functions
 
-fn go_list_directory(block: &DirectoryBlock, return_to: Option<u16>) -> Result<Vec<DirectoryItem>, FloppyDriveError> {
+fn go_list_directory(
+    block: &DirectoryBlock,
+    return_to: Option<u16>,
+) -> Result<Vec<DirectoryItem>, FloppyDriveError> {
     debug!("Listing a directory...");
     // We need to iterate over the entire directory and get every single item.
     // We assume we are handed the first directory in the chain.
@@ -70,7 +87,7 @@ fn go_list_directory(block: &DirectoryBlock, return_to: Option<u16>) -> Result<V
             }
             // Otherwise there was already a disk being pointed to.
             // Overwriting it here would corrupt it.
-        };
+        }
 
         items_found.extend_from_slice(&new_items);
 
@@ -78,7 +95,7 @@ fn go_list_directory(block: &DirectoryBlock, return_to: Option<u16>) -> Result<V
         if current_dir_block.next_block.no_destination() {
             // We're done!
             trace!("Done getting DirectoryItem(s).");
-            break
+            break;
         }
 
         trace!("Need to continue on the next block.");
@@ -98,7 +115,7 @@ fn go_list_directory(block: &DirectoryBlock, return_to: Option<u16>) -> Result<V
         // Onwards!
         continue;
     }
-    
+
     // Sort all of the items by name, not sure what internal order it is, but it will be
     // sorted by whatever comparison function String uses.
     items_found.sort_by_key(|item| item.name.to_lowercase());

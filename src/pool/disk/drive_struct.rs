@@ -3,8 +3,7 @@
 // Imports
 
 use crate::pool::disk::{
-    blank_disk::blank_disk_struct::BlankDisk, generic::disk_trait::GenericDiskMethods,
-    unknown_disk::unknown_disk_struct::UnknownDisk,
+    blank_disk::blank_disk_struct::BlankDisk, unknown_disk::unknown_disk_struct::UnknownDisk,
 };
 use std::fs::File;
 

@@ -34,18 +34,18 @@ impl GenericDiskMethods for BlankDisk {
         // Why are we getting the disk number of a blank floppy?
         unreachable!()
     }
-    
+
     #[doc = " Set the number of this disk."]
     fn set_disk_number(&mut self, disk_number: u16) -> () {
         // You cannot set the number of a blank disk.
         unreachable!()
     }
-    
+
     #[doc = " Get the inner file used for write operations"]
-    fn disk_file_mut(&mut self) ->  &mut File {
+    fn disk_file_mut(&mut self) -> &mut File {
         &mut self.disk_file
     }
-    
+
     #[doc = " Sync all in-memory information to disk"]
     fn flush(&mut self) -> Result<(), BlockError> {
         // There is no in-memory information for this disk.

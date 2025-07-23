@@ -59,7 +59,7 @@ impl InodeBlock {
     }
     /// Try to add an Inode to this block.
     /// Updates the byte usage counter.
-    /// 
+    ///
     /// This does NOT automatically flush information to the disk.
     ///
     /// Returns the offset of the added inode
@@ -81,9 +81,9 @@ impl InodeBlock {
         inode_block_try_read_inode(self, inode_offset)
     }
     /// Set a new destination on a block.
-    /// 
+    ///
     /// Does not flush the new destination to disk, only updates it.
-    /// 
+    ///
     /// May swap disks. Will not return to original disk.
     pub fn new_destination(&mut self, pointer: DiskPointer) {
         // dont feel like splitting this into a function rn, sue me.
@@ -233,14 +233,17 @@ fn from_raw_block(block: &RawBlock) -> InodeBlock {
     let bytes_free: u16 = u16::from_le_bytes(block.data[1..1 + 2].try_into().expect("2 into 2"));
 
     // Next inode block
-    let next_inode_block: DiskPointer = DiskPointer::from_bytes(block.data[3..3 + 4].try_into().expect("4 into 4"));
+    let next_inode_block: DiskPointer =
+        DiskPointer::from_bytes(block.data[3..3 + 4].try_into().expect("4 into 4"));
 
     // Inodes
     let inodes_data: [u8; 501] = block.data[7..7 + 501].try_into().expect("501 into 501");
 
     // From dust we came
     let block_origin: DiskPointer = DiskPointer {
-        disk: block.originating_disk.expect("Read blocks should have their origin."),
+        disk: block
+            .originating_disk
+            .expect("Read blocks should have their origin."),
         block: block.block_index,
     };
 
@@ -260,7 +263,7 @@ fn to_raw_bytes(block: &InodeBlock, block_number: u16) -> RawBlock {
         bytes_free,
         next_inode_block,
         inodes_data,
-        block_origin: _ // And to dust we shall return.
+        block_origin: _, // And to dust we shall return.
     } = block;
 
     let mut buffer: [u8; 512] = [0u8; 512];
@@ -412,9 +415,7 @@ impl InodeDirectory {
     }
     // Converts a disk pointer into a directory
     pub fn from_disk_pointer(pointer: DiskPointer) -> Self {
-        Self {
-            pointer,
-        }
+        Self { pointer }
     }
 }
 
@@ -435,7 +436,9 @@ impl InodeTimestamp {
     pub fn now() -> Self {
         // Get the time
         let now = SystemTime::now();
-        let duration_since_epoch = now.duration_since(UNIX_EPOCH).expect("You shouldn't be using fluster in the 1960s.");
+        let duration_since_epoch = now
+            .duration_since(UNIX_EPOCH)
+            .expect("You shouldn't be using fluster in the 1960s.");
         Self {
             seconds: duration_since_epoch.as_secs(),
             nanos: duration_since_epoch.subsec_nanos(),
@@ -485,10 +488,13 @@ impl InodeLocation {
         // Index into Inode block
         let offset: u16 = u16::from_le_bytes(bytes[index..index + 2].try_into().expect("2 = 2"));
 
-        Self { disk, block, offset }
+        Self {
+            disk,
+            block,
+            offset,
+        }
     }
 }
-
 
 impl InodeBlock {
     /// Find the next block in the inode chain, if it exists.

@@ -6,19 +6,32 @@
 
 // Functions
 
-use log::{debug, trace};
+use log::trace;
 
-use crate::pool::{disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::{block::block_structs::RawBlock, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::{block::inode::inode_struct::{Inode, InodeBlock, InodeBlockError, InodeLocation}, standard_disk_struct::StandardDisk}}, pool_actions::pool_struct::{Pool, GLOBAL_POOL}};
+use crate::pool::{
+    disk::{
+        drive_struct::{DiskType, FloppyDrive, FloppyDriveError},
+        generic::{
+            block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer,
+            io::checked_io::CheckedIO,
+        },
+        standard_disk::{
+            block::inode::inode_struct::{Inode, InodeBlock, InodeBlockError, InodeLocation},
+            standard_disk_struct::StandardDisk,
+        },
+    },
+    pool_actions::pool_struct::{GLOBAL_POOL, Pool},
+};
 
 // For the pool implementations, we do not use Self, as we might try to double mut it if the inode
 // addition routine adds a new disk.
 impl Pool {
     /// Add an inode to the never ending inode chain.
-    /// 
+    ///
     /// This method will look at the pool, and attempt adding an inode
     /// to the lowest disk with the most recent successful inode write.
     /// (Ignoring manual writes done outside of this method.)
-    /// 
+    ///
     /// This function will traverse to the next blocks in the chain,
     /// and create new disks if needed.
     ///
@@ -27,7 +40,13 @@ impl Pool {
         trace!("Fast adding inode...");
         // Get the pool's latest inode disk
         trace!("Locking GLOBAL_POOL...");
-        let start_pointer: DiskPointer = GLOBAL_POOL.get().expect("Single thread").try_lock().expect("Single thread").header.latest_inode_write;
+        let start_pointer: DiskPointer = GLOBAL_POOL
+            .get()
+            .expect("Single thread")
+            .try_lock()
+            .expect("Single thread")
+            .header
+            .latest_inode_write;
 
         // load in that block
         let current_disk: StandardDisk = match FloppyDrive::open(start_pointer.disk)? {
@@ -35,7 +54,8 @@ impl Pool {
             _ => panic!("Incoming inode block must be from a standard disk!"),
         };
 
-        let start_block: InodeBlock = InodeBlock::from_block(&current_disk.checked_read(start_pointer.block)?);
+        let start_block: InodeBlock =
+            InodeBlock::from_block(&current_disk.checked_read(start_pointer.block)?);
 
         let result = go_add_inode(inode, start_block)?;
         // Where that ended up needs to be known
@@ -46,18 +66,24 @@ impl Pool {
 
         // Update the pool with new successful write.
         trace!("Locking GLOBAL_POOL...");
-        GLOBAL_POOL.get().expect("Single thread").try_lock().expect("Single thread").header.latest_inode_write = success_write_pointer;
-        
+        GLOBAL_POOL
+            .get()
+            .expect("Single thread")
+            .try_lock()
+            .expect("Single thread")
+            .header
+            .latest_inode_write = success_write_pointer;
+
         // all done
         Ok(result)
     }
     /// Add an inode to the never ending inode chain.
-    /// 
+    ///
     /// This method adds an inode to the pool, starting from
     /// the origin inode block on the origin disk.
     /// This may take a long time, but will ensure that the first
     /// available spot within the entire inode pool is used.
-    /// 
+    ///
     /// This function will traverse to the next blocks in the chain,
     /// and create new disks if needed.
     ///
@@ -73,7 +99,8 @@ impl Pool {
             _ => panic!("Incoming inode block must be from a standard disk!"),
         };
 
-        let start_block: InodeBlock = InodeBlock::from_block(&current_disk.checked_read(start_pointer.block)?);
+        let start_block: InodeBlock =
+            InodeBlock::from_block(&current_disk.checked_read(start_pointer.block)?);
 
         let result = go_add_inode(inode, start_block)?;
         // Where that ended up needs to be known
@@ -84,13 +111,18 @@ impl Pool {
 
         // Update the pool with new successful write.
         trace!("Locking GLOBAL_POOL...");
-        GLOBAL_POOL.get().expect("Single thread").try_lock().expect("Single thread").header.latest_inode_write = success_write_pointer;
-        
+        GLOBAL_POOL
+            .get()
+            .expect("Single thread")
+            .try_lock()
+            .expect("Single thread")
+            .header
+            .latest_inode_write = success_write_pointer;
+
         // all done
         Ok(result)
     }
 }
-
 
 fn go_add_inode(inode: Inode, start_block: InodeBlock) -> Result<InodeLocation, FloppyDriveError> {
     // We will start from the provided block.
@@ -113,16 +145,16 @@ fn go_add_inode(inode: Inode, start_block: InodeBlock) -> Result<InodeLocation, 
             Ok(ok) => {
                 // We've got a spot!
                 inode_offset = ok;
-                break
+                break;
             }
             Err(error) => match error {
                 InodeBlockError::NotEnoughSpace => {
                     // Not enough room on this block, go fish.
-                },
+                }
                 InodeBlockError::BlockIsFragmented => {
                     // Someday, we'll be able to request an inode defrag.
                     todo!("Inode defrag not written.")
-                },
+                }
                 InodeBlockError::InvalidOffset => todo!(),
             },
         }
@@ -135,25 +167,24 @@ fn go_add_inode(inode: Inode, start_block: InodeBlock) -> Result<InodeLocation, 
             _ => panic!("New inode block must be on a standard disk!"),
         };
 
-        current_block = InodeBlock::from_block(&current_disk.checked_read(pointer_to_next_block.block)?);
+        current_block =
+            InodeBlock::from_block(&current_disk.checked_read(pointer_to_next_block.block)?);
         current_block_number = pointer_to_next_block.block;
         // start over!
         continue;
     }
-    
+
     // The inode has now been added to the block, we must write this to disk before continuing.
     let block_to_write: RawBlock = current_block.to_block(current_block_number);
     // We are updating, because how would we be writing back to a block that was not allocated when we read it?
     current_disk.checked_update(&block_to_write)?;
 
     // All done! Now we can return where that inode eventually ended up
-    Ok(
-        InodeLocation {
-            disk: Some(current_disk.number),
-            block: current_block_number,
-            offset: inode_offset,
-        }
-    )
+    Ok(InodeLocation {
+        disk: Some(current_disk.number),
+        block: current_block_number,
+        offset: inode_offset,
+    })
 }
 
 fn get_next_block(current_block: InodeBlock) -> Result<DiskPointer, FloppyDriveError> {
@@ -188,14 +219,13 @@ fn get_next_block(current_block: InodeBlock) -> Result<DiskPointer, FloppyDriveE
     Ok(new_block_location)
 }
 
-
 /// We need a new inode block, we will reach upwards and get a new block made for us.
 fn make_new_inode_block() -> Result<DiskPointer, FloppyDriveError> {
     // Ask the pool for a new block pwease
     let ask_nicely = Pool::find_free_pool_blocks(1)?;
     // And you shall receive.
     let new_block_location = ask_nicely.first().expect("Asked for 1.");
-    
+
     // New block to throw there
     let new_block: InodeBlock = InodeBlock::new();
     let but_raw: RawBlock = new_block.to_block(new_block_location.block);
@@ -205,7 +235,7 @@ fn make_new_inode_block() -> Result<DiskPointer, FloppyDriveError> {
         DiskType::Standard(standard_disk) => standard_disk,
         _ => unreachable!("Non standard disk was given when asking for new block."),
     };
-    
+
     // I'm gonna write it!
     // New block, so standard write.
     disk.checked_write(&but_raw)?;

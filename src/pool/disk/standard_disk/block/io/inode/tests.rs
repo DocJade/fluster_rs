@@ -5,9 +5,14 @@
 use std::path::PathBuf;
 
 use log::debug;
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 
-use crate::{filesystem::filesystem_struct::{FilesystemOptions, FlusterFS}, pool::{disk::standard_disk::block::inode::inode_struct::Inode, pool_actions::pool_struct::Pool}};
+use crate::{
+    filesystem::filesystem_struct::{FilesystemOptions, FlusterFS},
+    pool::{
+        disk::standard_disk::block::inode::inode_struct::Inode, pool_actions::pool_struct::Pool,
+    },
+};
 
 use test_log::test; // We want to see logs while testing.
 
@@ -18,19 +23,18 @@ use test_log::test; // We want to see logs while testing.
 #[test]
 fn add_inode() {
     // Use the filesystem starter to get everything in the right spots
-    let fs = get_filesystem();
+    let _fs = get_filesystem();
     // Now try adding a directory to the pool
     Pool::add_inode(Inode::get_random()).unwrap();
 }
 
 #[test]
 fn add_many_inode() {
-    let fs = get_filesystem();
+    let _fs = get_filesystem();
     for _ in 0..1000 {
         Pool::add_inode(Inode::get_random()).unwrap();
     }
 }
-
 
 // We need a filesystem to run directory tests on.
 fn get_filesystem() -> FlusterFS {
@@ -38,7 +42,6 @@ fn get_filesystem() -> FlusterFS {
     let floppy_drive: PathBuf = PathBuf::new(); // This is never read since we are using temporary disks.
     let fs_options = FilesystemOptions::new(Some(temp_dir.path().to_path_buf()), floppy_drive);
     FlusterFS::start(&fs_options)
-    
 }
 
 //
@@ -49,6 +52,9 @@ fn get_filesystem() -> FlusterFS {
 fn get_new_temp_dir() -> TempDir {
     let mut dir = tempdir().unwrap();
     dir.disable_cleanup(true);
-    debug!("Created a temp directory at {}, it will not be deleted on exit.", dir.path().to_string_lossy());
+    debug!(
+        "Created a temp directory at {}, it will not be deleted on exit.",
+        dir.path().to_string_lossy()
+    );
     dir
 }
