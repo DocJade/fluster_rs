@@ -34,6 +34,13 @@ impl FlusterFS {
     }
 }
 
+// Now for the actual FUSE layer
+//
+// There's a lot of stuff in here we technically dont need. And I'm going to assume the information on this page is correct
+// https://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html
+// I have archived this page on internet archive.
+// Thanks Geoff! I hope your life is going well, 16 years later.
+
 impl FilesystemOptions {
     /// Initializes options for the filesystem, also configures the virtual disks if needed.
     pub fn new(use_virtual_disks: Option<PathBuf>, floppy_drive: PathBuf) -> Self {
@@ -83,4 +90,615 @@ impl FuseHandler<PathBuf> for FlusterFS {
     fn get_inner(&self) -> &dyn FuseHandler<PathBuf> {
         self.inner.as_ref()
     }
+
+    fn get_default_ttl(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(10) // we're slow okay
+    }
+
+    // fn init(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     config: &mut easy_fuser::prelude::KernelConfig,
+    // ) -> easy_fuser::prelude::FuseResult<()> {
+    //     self.get_inner().init(req, config)
+    // }
+
+    // fn destroy(&self) {
+    //     self.get_inner().destroy();
+    // }
+
+    // "This call is not required but is highly recommended." Okay then we wont do it muhahaha
+    // fn access(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     file_id: PathBuf,
+    //     mask: easy_fuser::prelude::AccessMask,
+    // ) -> easy_fuser::prelude::FuseResult<()> {
+    //     self.get_inner().access(req, file_id, mask)
+    // }
+
+    // fn bmap(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     file_id: PathBuf,
+    //     blocksize: u32,
+    //     idx: u64,
+    // ) -> easy_fuser::prelude::FuseResult<u64> {
+    //     self.get_inner().bmap(req, file_id, blocksize, idx)
+    // }
+
+    // fn copy_file_range(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     file_in: PathBuf,
+    //     file_handle_in: easy_fuser::prelude::BorrowedFileHandle,
+    //     offset_in: i64,
+    //     file_out: PathBuf,
+    //     file_handle_out: easy_fuser::prelude::BorrowedFileHandle,
+    //     offset_out: i64,
+    //     len: u64,
+    //     flags: u32, // Not implemented yet in standard
+    // ) -> easy_fuser::prelude::FuseResult<u32> {
+    //     self.get_inner().copy_file_range(
+    //         req,
+    //         file_in,
+    //         file_handle_in,
+    //         offset_in,
+    //         file_out,
+    //         file_handle_out,
+    //         offset_out,
+    //         len,
+    //         easy_fuser::prelude::flags,
+    //     )
+    // }
+
+    // Cant imagine a filesystem with no files.
+    // Wait I actually can, the OS would just have to manipulate a LOT of directories...
+    // Exercise for the reader, dir_fs where all files are just directories in disguise
+    // // fn create(
+    // //     &self,
+    // //     req: &easy_fuser::prelude::RequestInfo,
+    // //     parent_id: PathBuf,
+    // //     name: &std::ffi::OsStr,
+    // //     mode: u32,
+    // //     umask: u32,
+    // //     flags: easy_fuser::prelude::OpenFlags,
+    // // ) -> easy_fuser::prelude::FuseResult<(
+    // //     easy_fuser::prelude::OwnedFileHandle,
+    // //     <PathBuf as easy_fuser::prelude::FileIdType>::Metadata,
+    // //     easy_fuser::prelude::FUSEOpenResponseFlags,
+    // // )> {
+    // //     self.get_inner().create(
+    // //         req,
+    // //         parent_id,
+    // //         name,
+    // //         mode,
+    // //         umask,
+    // //         easy_fuser::prelude::flags,
+    // //     )
+    // // }
+
+    // Unknown if this is needed. We'll find out.
+    // fn fallocate(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     file_id: PathBuf,
+    //     file_handle: easy_fuser::prelude::BorrowedFileHandle,
+    //     offset: i64,
+    //     length: i64,
+    //     mode: easy_fuser::prelude::FallocateFlags,
+    // ) -> easy_fuser::prelude::FuseResult<()> {
+    //     self.get_inner().fallocate(
+    //         req,
+    //         file_id,
+    //         easy_fuser::prelude::file_handle,
+    //         offset,
+    //         length,
+    //         mode,
+    //     )
+    // }
+
+    /// Flushing information about open files / the file system to disk.
+    /// We dont hold information about the filesystem in memory. If you wrote something, it already hit disk.
+    fn flush(
+        &self,
+        _req: &easy_fuser::prelude::RequestInfo,
+        _file_id: PathBuf,
+        _file_handle: easy_fuser::prelude::BorrowedFileHandle,
+        _lock_owner: u64,
+    ) -> easy_fuser::prelude::FuseResult<()> {
+        // bro idgaf
+        Ok(())
+    }
+
+    // fn forget(&self, req: &easy_fuser::prelude::RequestInfo, file_id: PathBuf, nlookup: u64) {
+    //     self.get_inner().forget(req, file_id, nlookup);
+    // }
+
+    // Sync a file to disk
+    fn fsync(
+        &self,
+        _req: &easy_fuser::prelude::RequestInfo,
+        _file_id: PathBuf,
+        _file_handle: easy_fuser::prelude::BorrowedFileHandle,
+        _datasync: bool,
+    ) -> easy_fuser::prelude::FuseResult<()> {
+        // See flush()
+        Ok(())
+    }
+
+    // Sync a whole directory
+    fn fsyncdir(
+        &self,
+        req: &easy_fuser::prelude::RequestInfo,
+        file_id: PathBuf,
+        file_handle: easy_fuser::prelude::BorrowedFileHandle,
+        datasync: bool,
+    ) -> easy_fuser::prelude::FuseResult<()> {
+        // See flush()
+        Ok(())
+    }
+
+    // "This call is pretty much required for a usable filesystem." okay fine.
+    fn getattr(
+        &self,
+        req: &easy_fuser::prelude::RequestInfo,
+        file_id: PathBuf,
+        file_handle: Option<easy_fuser::prelude::BorrowedFileHandle>,
+    ) -> easy_fuser::prelude::FuseResult<easy_fuser::prelude::FileAttribute> {
+        todo!();
+        // self.get_inner()
+        //     .getattr(req, file_id, easy_fuser::prelude::file_handle)
+    }
+
+    // Lock related, do we need this?
+    // "If you want locking to work, you will need to implement the lock function"
+    // To be frank, I dont really care. And i trust Frank so we wont do it.
+    // // fn getlk(
+    // //     &self,
+    // //     req: &easy_fuser::prelude::RequestInfo,
+    // //     file_id: PathBuf,
+    // //     file_handle: easy_fuser::prelude::BorrowedFileHandle,
+    // //     lock_owner: u64,
+    // //     lock_info: easy_fuser::prelude::LockInfo,
+    // // ) -> easy_fuser::prelude::FuseResult<easy_fuser::prelude::LockInfo> {
+    // //     self.get_inner().getlk(
+    // //         req,
+    // //         file_id,
+    // //         easy_fuser::prelude::file_handle,
+    // //         lock_owner,
+    // //         lock_info,
+    // //     )
+    // // }
+
+    // "This should be implemented only if HAVE_SETXATTR is true." Guess we ain't doin that.
+    // fn getxattr(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     file_id: PathBuf,
+    //     name: &std::ffi::OsStr,
+    //     size: u32,
+    // ) -> easy_fuser::prelude::FuseResult<Vec<u8>> {
+    //     self.get_inner().getxattr(req, file_id, name, size)
+    // }
+
+    // No idea what this would even do
+    // "Support the ioctl(2) system call. As such, almost everything is up to the filesystem."
+    // Lets just imagine this call explodes the floppy drive, thus we will not implement it.
+    // fn ioctl(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     file_id: PathBuf,
+    //     file_handle: easy_fuser::prelude::BorrowedFileHandle,
+    //     flags: easy_fuser::prelude::IOCtlFlags,
+    //     cmd: u32,
+    //     in_data: Vec<u8>,
+    //     out_size: u32,
+    // ) -> easy_fuser::prelude::FuseResult<(i32, Vec<u8>)> {
+    //     self.get_inner().ioctl(
+    //         req,
+    //         file_id,
+    //         easy_fuser::prelude::file_handle,
+    //         easy_fuser::prelude::flags,
+    //         cmd,
+    //         in_data,
+    //         out_size,
+    //     )
+    // }
+
+    // We wont allow links.
+    // fn link(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     file_id: PathBuf,
+    //     newparent: PathBuf,
+    //     newname: &std::ffi::OsStr,
+    // ) -> easy_fuser::prelude::FuseResult<<PathBuf as easy_fuser::prelude::FileIdType>::Metadata>
+    // {
+    //     self.get_inner().link(req, file_id, newparent, newname)
+    // }
+
+    // We wont have HAVE_SETXATTR
+    // fn listxattr(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     file_id: PathBuf,
+    //     size: u32,
+    // ) -> easy_fuser::prelude::FuseResult<Vec<u8>> {
+    //     self.get_inner().listxattr(req, file_id, size)
+    // }
+
+    // Not mentioned in the Geoff page, but this relates to `pathname lookup` so...
+    // I think this is where we can cram some caching in by checking if the full path is already referenced
+    // in the cache section of the pool disk... We'll see.
+    fn lookup(
+        &self,
+        req: &easy_fuser::prelude::RequestInfo,
+        parent_id: PathBuf,
+        name: &std::ffi::OsStr,
+    ) -> easy_fuser::prelude::FuseResult<<PathBuf as easy_fuser::prelude::FileIdType>::Metadata>
+    {
+        todo!();
+        // self.get_inner().lookup(req, parent_id, name)
+    }
+
+    // Not mentioned, Assuming we're tracking where we are in files when handing out those BorrowedFileHandle's, in theory
+    // we could do seeking. But if possible I would prefer to not let the OS hold onto any information to make my life easier in
+    // case the OS's perspective gets de-synced... bhopping...
+    // // fn lseek(
+    // //     &self,
+    // //     req: &easy_fuser::prelude::RequestInfo,
+    // //     file_id: PathBuf,
+    // //     file_handle: easy_fuser::prelude::BorrowedFileHandle,
+    // //     seek: std::io::SeekFrom,
+    // // ) -> easy_fuser::prelude::FuseResult<i64> {
+    // //     self.get_inner()
+    // //         .lseek(req, file_id, easy_fuser::prelude::file_handle, seek)
+    // // }
+
+    // Makes a directory
+    // Yeah I think we need this.
+    fn mkdir(
+        &self,
+        req: &easy_fuser::prelude::RequestInfo,
+        parent_id: PathBuf,
+        name: &std::ffi::OsStr,
+        mode: u32,
+        umask: u32,
+    ) -> easy_fuser::prelude::FuseResult<<PathBuf as easy_fuser::prelude::FileIdType>::Metadata>
+    {
+        todo!();
+        // self.get_inner().mkdir(req, parent_id, name, mode, umask)
+    }
+
+    // "This function is rarely needed, since it's uncommon to make these objects inside special-purpose filesystems."
+    // Well, is fluster special-purpose? I guess? We'll see if this is needed, but for now, no.
+    // fn mknod(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     parent_id: PathBuf,
+    //     name: &std::ffi::OsStr,
+    //     mode: u32,
+    //     umask: u32,
+    //     rdev: easy_fuser::prelude::DeviceType,
+    // ) -> easy_fuser::prelude::FuseResult<<PathBuf as easy_fuser::prelude::FileIdType>::Metadata>
+    // {
+    //     self.get_inner()
+    //         .mknod(req, parent_id, name, mode, umask, rdev)
+    // }
+
+    // "Open a file. If you aren't using file handles-" No geoff i am not 
+    // "-this function should just check for existence and permissions and return either success or an error code"
+    // Seems reasonable. Whens the last time you used a file system that didn't support opening files?
+    fn open(
+        &self,
+        req: &easy_fuser::prelude::RequestInfo,
+        file_id: PathBuf,
+        flags: easy_fuser::prelude::OpenFlags,
+    ) -> easy_fuser::prelude::FuseResult<(
+        easy_fuser::prelude::OwnedFileHandle,
+        easy_fuser::prelude::FUSEOpenResponseFlags,
+    )> {
+        todo!();
+        // self.get_inner()
+        //     .open(req, file_id, easy_fuser::prelude::flags)
+    }
+
+    // "Open a directory for reading." Thanks Geoff, I think I got that.
+    // I mean, feels pretty fundamental... We'll do it I guess...
+    fn opendir(
+        &self,
+        req: &easy_fuser::prelude::RequestInfo,
+        file_id: PathBuf,
+        flags: easy_fuser::prelude::OpenFlags,
+    ) -> easy_fuser::prelude::FuseResult<(
+        easy_fuser::prelude::OwnedFileHandle,
+        easy_fuser::prelude::FUSEOpenResponseFlags,
+    )> {
+        todo!();
+        // self.get_inner()
+        //     .opendir(req, file_id, easy_fuser::prelude::flags)
+    }
+
+    // "Read `size` bytes from the given file into the buffer `buf`, beginning offset bytes into the file."
+    // "Required for any sensible filesystem." Yeah I bet.
+    // It looks like we don't have some async buffer to write into, so we'll have to write the whole thing.
+    // Although I did see whispers of a max read size setting... if we set that small-ish, then there shouldn't
+    // be a massive latency problem from trying to load 30MB files or something.
+    // What's a reasonable max though? 1MB? We'll see.
+    fn read(
+        &self,
+        req: &easy_fuser::prelude::RequestInfo,
+        file_id: PathBuf,
+        file_handle: easy_fuser::prelude::BorrowedFileHandle,
+        seek: std::io::SeekFrom,
+        size: u32,
+        flags: easy_fuser::prelude::FUSEOpenFlags,
+        lock_owner: Option<u64>,
+    ) -> easy_fuser::prelude::FuseResult<Vec<u8>> {
+        todo!();
+        // self.get_inner().read(
+        //     req,
+        //     file_id,
+        //     easy_fuser::prelude::file_handle,
+        //     seek,
+        //     size,
+        //     easy_fuser::prelude::flags,
+        //     lock_owner,
+        // )
+    }
+
+    // "Return one or more directory entries (struct dirent) to the caller."
+    // "This is one of the most complex FUSE functions." Oof.
+    // "The readdir function is somewhat like read, in that it starts at a
+    //  given offset and returns results in a caller-supplied buffer."
+    // "However, the offset not a byte offset" What the hell
+    // "...and the results are a series of struct dirents rather than being uninterpreted bytes" those are just words Geoffery
+    // It seems that easy_fuser at least has a special type for it, a Vec of tuple of string and file metadata... Might not be
+    // too bad, almost seems like it could be deconstructed into other calls... Might do that.
+
+    fn readdir(
+        &self,
+        req: &easy_fuser::prelude::RequestInfo,
+        file_id: PathBuf,
+        file_handle: easy_fuser::prelude::BorrowedFileHandle,
+    ) -> easy_fuser::prelude::FuseResult<
+        Vec<(
+            std::ffi::OsString,
+            <PathBuf as easy_fuser::prelude::FileIdType>::MinimalMetadata,
+        )>,
+    > {
+        todo!();
+        // self.get_inner()
+        //     .readdir(req, file_id, easy_fuser::prelude::file_handle)
+    }
+
+    // is this HAVE_SETXATTR related? No idea.
+    // For now, its a no from me. *dramatic TV stinger sound*
+    // fn readdirplus(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     file_id: PathBuf,
+    //     file_handle: easy_fuser::prelude::BorrowedFileHandle,
+    // ) -> easy_fuser::prelude::FuseResult<
+    //     Vec<(
+    //         std::ffi::OsString,
+    //         <PathBuf as easy_fuser::prelude::FileIdType>::Metadata,
+    //     )>,
+    // > {
+    //     let readdir_result =
+    //         self.readdir(req, file_id.clone(), easy_fuser::prelude::file_handle)?;
+    //     let mut result = Vec::with_capacity(readdir_result.len());
+    //     for (name, _) in readdir_result.into_iter() {
+    //         let metadata = self.lookup(req, file_id.clone(), &name)?;
+    //         result.push((name, metadata));
+    //     }
+    //     Ok(result)
+    // }
+
+    // No links
+    // fn readlink(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     file_id: PathBuf,
+    // ) -> easy_fuser::prelude::FuseResult<Vec<u8>> {
+    //     self.get_inner().readlink(req, file_id)
+    // }
+
+    // "Release is called when FUSE is completely done with a file;
+    //  at that point, you can free up any temporarily allocated data structures."
+    // Well in that case, we shouldn't have any temporary stuff. So this function is free.
+    fn release(
+        &self,
+        req: &easy_fuser::prelude::RequestInfo,
+        file_id: PathBuf,
+        file_handle: easy_fuser::prelude::OwnedFileHandle,
+        flags: easy_fuser::prelude::OpenFlags,
+        lock_owner: Option<u64>,
+        flush: bool,
+    ) -> easy_fuser::prelude::FuseResult<()> {
+        // self.get_inner().release(
+        //     req,
+        //     file_id,
+        //     easy_fuser::prelude::file_handle,
+        //     easy_fuser::prelude::flags,
+        //     lock_owner,
+        //     flush,
+        // )
+        Ok(())
+    }
+
+    // Same as release
+    fn releasedir(
+        &self,
+        req: &easy_fuser::prelude::RequestInfo,
+        file_id: PathBuf,
+        file_handle: easy_fuser::prelude::OwnedFileHandle,
+        flags: easy_fuser::prelude::OpenFlags,
+    ) -> easy_fuser::prelude::FuseResult<()> {
+        // self.get_inner().releasedir(
+        //     req,
+        //     file_id,
+        //     easy_fuser::prelude::file_handle,
+        //     easy_fuser::prelude::flags,
+        // )
+        Ok(())
+    }
+
+    // HAVE_SETXATTR? More like HAVE_SEXATTR
+    // fn removexattr(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     file_id: PathBuf,
+    //     name: &std::ffi::OsStr,
+    // ) -> easy_fuser::prelude::FuseResult<()> {
+    //     self.get_inner().removexattr(req, file_id, name)
+    // }
+
+    // No renaming, yeah it wouldnt be impossible to implement but we shouldn't need that for Factorio.
+    // fn rename(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     parent_id: PathBuf,
+    //     name: &std::ffi::OsStr,
+    //     newparent: PathBuf,
+    //     newname: &std::ffi::OsStr,
+    //     flags: easy_fuser::prelude::RenameFlags,
+    // ) -> easy_fuser::prelude::FuseResult<()> {
+    //     self.get_inner().rename(
+    //         req,
+    //         parent_id,
+    //         name,
+    //         newparent,
+    //         newname,
+    //         easy_fuser::prelude::flags,
+    //     )
+    // }
+
+    // "Remove the given directory.
+    // This should succeed only if the directory is empty (except for "." and "..")."
+    // Seems easy enough.
+    fn rmdir(
+        &self,
+        req: &easy_fuser::prelude::RequestInfo,
+        parent_id: PathBuf,
+        name: &std::ffi::OsStr,
+    ) -> easy_fuser::prelude::FuseResult<()> {
+        // self.get_inner().rmdir(req, parent_id, name)
+        todo!();
+    }
+
+    // This HAS to be mandatory right?
+    // Linux > Yo what kinda file is this
+    // Fluster! > Boi if you don't shut yo flightless bird ass up ima whoop yo ass
+    // *Linux has SIGKILL'ed Fluster!*
+    fn setattr(
+        &self,
+        req: &easy_fuser::prelude::RequestInfo,
+        file_id: PathBuf,
+        attrs: easy_fuser::prelude::SetAttrRequest,
+    ) -> easy_fuser::prelude::FuseResult<easy_fuser::prelude::FileAttribute> {
+        todo!();
+        // self.get_inner().setattr(req, file_id, attrs)
+    }
+
+    // No file locking.
+    // fn setlk(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     file_id: PathBuf,
+    //     file_handle: easy_fuser::prelude::BorrowedFileHandle,
+    //     lock_owner: u64,
+    //     lock_info: easy_fuser::prelude::LockInfo,
+    //     sleep: bool,
+    // ) -> easy_fuser::prelude::FuseResult<()> {
+    //     self.get_inner().setlk(
+    //         req,
+    //         file_id,
+    //         easy_fuser::prelude::file_handle,
+    //         lock_owner,
+    //         lock_info,
+    //         sleep,
+    //     )
+    // }
+
+    // Again with these extended mfs
+    // fn setxattr(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     file_id: PathBuf,
+    //     name: &std::ffi::OsStr,
+    //     value: Vec<u8>,
+    //     flags: easy_fuser::prelude::FUSESetXAttrFlags,
+    //     position: u32,
+    // ) -> easy_fuser::prelude::FuseResult<()> {
+    //     self.get_inner().setxattr(
+    //         req,
+    //         file_id,
+    //         name,
+    //         value,
+    //         easy_fuser::prelude::flags,
+    //         position,
+    //     )
+    // }
+
+    // Who would even call this?
+    // "Not required, but handy for read/write filesystems since this is how programs like df determine the free space."
+    // I mean, if there's an issue were creating files fails due to it not seeing enough space, maybe.
+    // fn statfs(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     file_id: PathBuf,
+    // ) -> easy_fuser::prelude::FuseResult<easy_fuser::prelude::StatFs> {
+    //     self.get_inner().statfs(req, file_id)
+    // }
+
+    // No links
+    // fn symlink(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     parent_id: PathBuf,
+    //     link_name: &std::ffi::OsStr,
+    //     target: &std::path::Path,
+    // ) -> easy_fuser::prelude::FuseResult<<PathBuf as easy_fuser::prelude::FileIdType>::Metadata>
+    // {
+    //     self.get_inner().symlink(req, parent_id, link_name, target)
+    // }
+
+    // Returns how many bytes were written
+    // We could grab pool statistics from here...
+    fn write(
+        &self,
+        req: &easy_fuser::prelude::RequestInfo,
+        file_id: PathBuf,
+        file_handle: easy_fuser::prelude::BorrowedFileHandle,
+        seek: std::io::SeekFrom,
+        data: Vec<u8>,
+        write_flags: easy_fuser::prelude::FUSEWriteFlags,
+        flags: easy_fuser::prelude::OpenFlags,
+        lock_owner: Option<u64>,
+    ) -> easy_fuser::prelude::FuseResult<u32> {
+        todo!();
+        // self.get_inner().write(
+        //     req,
+        //     file_id,
+        //     easy_fuser::prelude::file_handle,
+        //     seek,
+        //     data,
+        //     write_flags,
+        //     easy_fuser::prelude::flags,
+        //     lock_owner,
+        // )
+    }
+
+    // Not sure if this is file deletion or symlink related.
+    // I'll need to investigate.
+    // fn unlink(
+    //     &self,
+    //     req: &easy_fuser::prelude::RequestInfo,
+    //     parent_id: PathBuf,
+    //     name: &std::ffi::OsStr,
+    // ) -> easy_fuser::prelude::FuseResult<()> {
+    //     self.get_inner().unlink(req, parent_id, name)
+    // }
 }
