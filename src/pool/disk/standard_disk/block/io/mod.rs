@@ -1,3 +1,3 @@
 mod directory;
-mod file_extents;
+mod file;
 mod inode;

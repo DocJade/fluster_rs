@@ -9,18 +9,20 @@ use thiserror::Error;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct FileExtent {
-    pub(super) flags: ExtentFlags,
-    pub(super) disk_number: Option<u16>, // not included on local blocks
-    pub(super) start_block: Option<u16>, // inclusive // not included on dense disks
-    pub(super) length: Option<u8>,       // in blocks // not included on dense disks
+    pub(crate) flags: ExtentFlags,
+    pub(crate) disk_number: Option<u16>, // not included on local blocks
+    /// The block this file's section starts on. Inclusive.
+    pub(crate) start_block: u16,
+    /// How many blocks in a row starting from the start block
+    /// are data blocks for this file.
+    /// 
+    /// Never traverses disks.
+    pub(crate) length: u8,
 }
 
 bitflags! {
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct ExtentFlags: u8 {
-        // Assumption:
-        // A dense disk can NEVER be local.
-        const OnDenseDisk = 0b00000001;
         const OnThisDisk = 0b00000010;
         const MarkerBit = 0b10000000;
     }
@@ -45,14 +47,6 @@ bitflags! {
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct FileExtentBlockFlags: u8 {
     }
-}
-
-/// Calculated allocations needed to add a file to the pool.
-pub(crate) struct FileAllocationPlan {
-    /// How many blocks are needed to store the file (remainder in case of dense disks)
-    blocks_required: u16,
-    /// How many dense disks are required.
-    dense_disks_required: u16,
 }
 
 // Error types

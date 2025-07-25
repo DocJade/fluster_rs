@@ -1,8 +1,11 @@
 // Method acting, for extents.
 
+// Consts
+// This may change if I decide to get rid of the flags on data blocks, so here's a const.
+pub(crate) const DATA_BLOCK_OVERHEAD: u64 = 5; // 1 flag, 4 checksum.
+
 // Imports
 
-// Implementations
 
 use crate::pool::disk::{
     generic::block::{block_structs::RawBlock, crc::add_crc_to_block},
@@ -11,6 +14,8 @@ use crate::pool::disk::{
         FileExtentPointer,
     },
 };
+
+// Implementations
 
 // Impl the conversion from RawBlock
 impl From<RawBlock> for FileExtentBlock {
@@ -59,19 +64,18 @@ impl FileExtentBlock {
         self.extents.clone()
     }
     /// Helper function that calculates how many blocks an input amount of data will require.
+    /// Does not take into account the sizes of FileExtent blocks or such, just the DataBlock size.
     /// We are assuming you aren't going to write more than 32MB at a time.
     pub const fn size_to_blocks(size_in_bytes: u64) -> u16 {
         // This calculation never changes, since the overhead of block is always the same.
         // A block holds 512 bytes, but we reserve 1 bytes for the flags (Currently unused),
         // and 4 more bytes for the checksum.
-        // This may change if I decide to get rid of the flags, so here's a const.
-        const DATA_BLOCK_OVERHEAD: u64 = 5;
 
         // We will always need to round up on this division.
         let mut blocks: u64;
-        blocks = size_in_bytes/DATA_BLOCK_OVERHEAD;
+        blocks = size_in_bytes / (512 - DATA_BLOCK_OVERHEAD);
         // If there is a remainder, we also need to add an additional block.
-        if size_in_bytes % DATA_BLOCK_OVERHEAD != 0 {
+        if size_in_bytes % (512 - DATA_BLOCK_OVERHEAD) != 0 {
             // One more.
             blocks += 1;
         }
@@ -212,9 +216,7 @@ fn bytes_to_extents(bytes: &[u8]) -> Vec<FileExtent> {
 
         // find how many bytes long the extent is
         // yes this is silly, but idk
-        let length: usize = if flag.contains(ExtentFlags::OnDenseDisk) {
-            3
-        } else if flag.contains(ExtentFlags::OnThisDisk) {
+        let length: usize = if flag.contains(ExtentFlags::OnThisDisk) {
             4
         } else {
             6
@@ -273,58 +275,50 @@ impl FileExtent {
             );
         }
 
-        if !self.flags.contains(ExtentFlags::OnDenseDisk) {
-            // Start block
-            vec.extend_from_slice(
-                &self
-                    .start_block
-                    .expect("Start blocks are on all non-dense file extents.")
-                    .to_le_bytes(),
-            );
-            // Length
-            vec.push(
-                self.length
-                    .expect("If we have a start block, we should also have a length."),
-            );
-        }
+        // Start block
+        vec.extend_from_slice(
+            &self
+                .start_block
+                .to_le_bytes(),
+        );
+        // Length
+        vec.push(
+            self.length
+        );
+        
 
         vec
     }
     /// You can feed feed this too many bytes, but as long as the flag is in the right spot, it will work correctly
     pub(super) fn from_bytes(bytes: &[u8]) -> FileExtent {
+        let mut offset: usize = 0;
+
         let flags: ExtentFlags =
             ExtentFlags::from_bits(bytes[0]).expect("Unused bits should not be set.");
-        // 3 distinct disk types as of writing.
-        // cleaner implementation is probably possible, but for just 3 types? this is fine
+        
+        offset += 1;
 
         let disk_number: Option<u16>;
-        let start_block: Option<u16>;
-        let length: Option<u8>;
+        let start_block: u16;
+        let length: u8;
 
-        // Dense disk
-        if flags.contains(ExtentFlags::OnDenseDisk) {
-            disk_number = Some(u16::from_le_bytes(
-                bytes[1..1 + 2].try_into().expect("2 = 2 "),
-            ));
-            start_block = None;
-            length = None;
-        } else if flags.contains(ExtentFlags::OnThisDisk) {
-            // Local
+        // Disk number
+        if flags.contains(ExtentFlags::OnThisDisk) {
+            // Dont need the disk number.
             disk_number = None;
-            start_block = Some(u16::from_le_bytes(
-                bytes[1..1 + 2].try_into().expect("2 = 2 "),
-            ));
-            length = Some(bytes[3]);
         } else {
-            // Neither.
             disk_number = Some(u16::from_le_bytes(
-                bytes[1..1 + 2].try_into().expect("2 = 2 "),
+                bytes[offset..offset + 2].try_into().expect("2 = 2 "),
             ));
-            start_block = Some(u16::from_le_bytes(
-                bytes[3..3 + 2].try_into().expect("2 = 2 "),
-            ));
-            length = Some(bytes[5]);
+            offset += 2;
         }
+        
+        // Start block
+        start_block = u16::from_le_bytes(bytes[offset..offset + 2].try_into().expect("2 = 2 "));
+        offset += 2;
+
+        // Length
+        length = bytes[offset];
 
         FileExtent {
             flags,

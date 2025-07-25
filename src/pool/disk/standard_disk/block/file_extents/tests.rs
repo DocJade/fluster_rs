@@ -97,32 +97,21 @@ impl FileExtent {
         // Decide what kind of disk
         let mut flags = ExtentFlags::new();
         let disk_number: Option<u16>;
-        let start_block: Option<u16>;
-        let length: Option<u8>;
+        let start_block: u16;
+        let length: u8;
 
-        // Dense disk
         if random.random_bool(0.5) {
-            flags.insert(ExtentFlags::OnDenseDisk);
-            disk_number = Some(random.random());
-            start_block = None;
-            length = None;
-        } else if random.random_bool(0.5) {
             // Local
             flags.insert(ExtentFlags::OnThisDisk);
             disk_number = None;
-            start_block = Some(random.random());
-            length = Some(random.random());
+            start_block = random.random();
+            length = random.random();
         } else {
-            // Neither.
+            // Non-local
             disk_number = Some(random.random());
-            start_block = Some(random.random());
-            length = Some(random.random());
-        }
-
-        // Ensure that only one of the two flags is set.
-        assert!(
-            !(flags.contains(ExtentFlags::OnDenseDisk) && flags.contains(ExtentFlags::OnThisDisk))
-        );
+            start_block = random.random();
+            length = random.random();
+        };
 
         // All done.
         FileExtent {

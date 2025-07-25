@@ -180,28 +180,29 @@ impl FuseHandler<PathBuf> for FlusterFS {
     // Cant imagine a filesystem with no files.
     // Wait I actually can, the OS would just have to manipulate a LOT of directories...
     // Exercise for the reader, dir_fs where all files are just directories in disguise
-    // // fn create(
-    // //     &self,
-    // //     req: &easy_fuser::prelude::RequestInfo,
-    // //     parent_id: PathBuf,
-    // //     name: &std::ffi::OsStr,
-    // //     mode: u32,
-    // //     umask: u32,
-    // //     flags: easy_fuser::prelude::OpenFlags,
-    // // ) -> easy_fuser::prelude::FuseResult<(
-    // //     easy_fuser::prelude::OwnedFileHandle,
-    // //     <PathBuf as easy_fuser::prelude::FileIdType>::Metadata,
-    // //     easy_fuser::prelude::FUSEOpenResponseFlags,
-    // // )> {
-    // //     self.get_inner().create(
-    // //         req,
-    // //         parent_id,
-    // //         name,
-    // //         mode,
-    // //         umask,
-    // //         easy_fuser::prelude::flags,
-    // //     )
-    // // }
+    fn create(
+        &self,
+        req: &easy_fuser::prelude::RequestInfo,
+        parent_id: PathBuf,
+        name: &std::ffi::OsStr,
+        mode: u32,
+        umask: u32,
+        flags: easy_fuser::prelude::OpenFlags,
+    ) -> easy_fuser::prelude::FuseResult<(
+        easy_fuser::prelude::OwnedFileHandle,
+        <PathBuf as easy_fuser::prelude::FileIdType>::Metadata,
+        easy_fuser::prelude::FUSEOpenResponseFlags,
+    )> {
+        todo!();
+        // self.get_inner().create(
+        //     req,
+        //     parent_id,
+        //     name,
+        //     mode,
+        //     umask,
+        //     easy_fuser::prelude::flags,
+        // )
+    }
 
     // Unknown if this is needed. We'll find out.
     // fn fallocate(
@@ -427,6 +428,7 @@ impl FuseHandler<PathBuf> for FlusterFS {
 
         // To disable any caching or reading ahead by the linux kernel (see init()) we need to
         // tell fuse that every file it opens is direct io with with the `FOPEN_DIRECT_IO` flag!
+        // We also must support seeking, so the file handle that we give out needs to have a seek index.
         // TODO: see above!
 
         todo!();
@@ -622,6 +624,8 @@ impl FuseHandler<PathBuf> for FlusterFS {
     // Linux > Yo what kinda file is this
     // Fluster! > Boi if you don't shut yo flightless bird ass up ima whoop yo ass
     // *Linux has SIGKILL'ed Fluster!*
+    //
+    // Yes we 100% need this, since we need to track file size changes and stuff.
     fn setattr(
         &self,
         req: &easy_fuser::prelude::RequestInfo,
