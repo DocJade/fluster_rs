@@ -1,5 +1,4 @@
 pub mod blank_disk;
-pub mod dense_disk;
 mod drive_methods;
 pub mod drive_struct;
 pub mod generic;

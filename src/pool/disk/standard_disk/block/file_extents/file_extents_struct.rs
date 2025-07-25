@@ -47,6 +47,14 @@ bitflags! {
     }
 }
 
+/// Calculated allocations needed to add a file to the pool.
+pub(crate) struct FileAllocationPlan {
+    /// How many blocks are needed to store the file (remainder in case of dense disks)
+    blocks_required: u16,
+    /// How many dense disks are required.
+    dense_disks_required: u16,
+}
+
 // Error types
 #[derive(Debug, Error, PartialEq, Eq)]
 pub(crate) enum FileExtentBlockError {

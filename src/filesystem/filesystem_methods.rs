@@ -95,13 +95,38 @@ impl FuseHandler<PathBuf> for FlusterFS {
         std::time::Duration::from_secs(10) // we're slow okay
     }
 
-    // fn init(
-    //     &self,
-    //     req: &easy_fuser::prelude::RequestInfo,
-    //     config: &mut easy_fuser::prelude::KernelConfig,
-    // ) -> easy_fuser::prelude::FuseResult<()> {
-    //     self.get_inner().init(req, config)
-    // }
+    // There's a few things we need to tweak in the KernelConfig.
+    // This should be automatically called right when the FS starts if I'm reading the docs correctly.
+    fn init(
+        &self,
+        req: &easy_fuser::prelude::RequestInfo,
+        config: &mut easy_fuser::prelude::KernelConfig,
+    ) -> easy_fuser::prelude::FuseResult<()> {
+
+        // We don't want to stall for too long while doing writes, so we will set a max
+        // write size of 1MB.
+        // 
+        // This value is in bytes.
+        config.set_max_write(1024 * 1024).expect("Max write size of 1MB is invalid?");
+
+        // The Linux kernel (and others) has this cool feature where it expects (reasonably) that when you read
+        // from a disk, chances are, you will want to keep reading more of it.
+        // Based on this assumption, it will automatically read past the end of what was actually requested from
+        // the disk, and keep that in a little buffer/cache so subsequent reads can skip the disk.
+        // 
+        // In Fluster!, every additional byte you read increases the chance that the use will have to swap disks.
+        // Any read-ahead could cause pointless disk swapping, since maybe that application did only need those
+        // exact bytes it requested. In a normal filesystem, this would be super super stupid to turn off for
+        // performance reasons, but this is Fluster! bay-be, we clown in this mf.
+        //
+        // In theory this shouldn't matter, since we want to be mounting Fluser! in direct-io mode to disable
+        // all kernel side caching.
+        //
+        // This cannot be set to zero, and I cannot even find what unit this is, it might be KB?
+        config.set_max_readahead(1).expect("Checked the implementation, this requires at least 1.");
+
+        Ok(())
+    }
 
     // fn destroy(&self) {
     //     self.get_inner().destroy();
@@ -399,6 +424,11 @@ impl FuseHandler<PathBuf> for FlusterFS {
         easy_fuser::prelude::OwnedFileHandle,
         easy_fuser::prelude::FUSEOpenResponseFlags,
     )> {
+
+        // To disable any caching or reading ahead by the linux kernel (see init()) we need to
+        // tell fuse that every file it opens is direct io with with the `FOPEN_DIRECT_IO` flag!
+        // TODO: see above!
+
         todo!();
         // self.get_inner()
         //     .open(req, file_id, easy_fuser::prelude::flags)

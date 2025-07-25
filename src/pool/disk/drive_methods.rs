@@ -18,8 +18,6 @@ use crate::pool::disk::generic::io::read::read_block_direct;
 
 use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
 
-use crate::pool::disk::dense_disk::dense_disk_struct::DenseDisk;
-
 use crate::pool::disk::pool_disk::pool_disk_struct::PoolDisk;
 
 use crate::filesystem::filesystem_struct::FLOPPY_PATH;
@@ -104,15 +102,6 @@ fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, Fl
     if header_block.data[8] & 0b10000000 != 0 {
         trace!("Head is for a pool disk, returning.");
         return Ok(DiskType::Pool(PoolDisk::from_header(
-            header_block,
-            disk_file,
-        )));
-    }
-
-    // Dense disk.
-    if header_block.data[8] & 0b01000000 != 0 {
-        trace!("Head is for a dense disk, returning.");
-        return Ok(DiskType::Dense(DenseDisk::from_header(
             header_block,
             disk_file,
         )));

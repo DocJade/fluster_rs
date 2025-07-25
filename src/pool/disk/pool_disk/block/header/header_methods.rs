@@ -95,10 +95,6 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, FloppyDriveError> {
                 // Start the loop over, if they wiped the disk, the outcome will change.
                 continue;
             }
-            crate::pool::disk::drive_struct::DiskType::Dense(dense_disk) => {
-                display_info_and_ask_wipe(DiskType::Dense(dense_disk))?;
-                continue;
-            }
             crate::pool::disk::drive_struct::DiskType::Unknown(file) => {
                 display_info_and_ask_wipe(DiskType::Unknown(file))?;
                 continue;

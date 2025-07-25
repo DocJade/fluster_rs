@@ -11,7 +11,6 @@ use enum_dispatch::enum_dispatch;
 use thiserror::Error;
 
 use crate::pool::disk::{
-    dense_disk::dense_disk_struct::DenseDisk,
     generic::block::block_structs::{BlockError, RawBlock},
     pool_disk::pool_disk_struct::PoolDisk,
     standard_disk::standard_disk_struct::StandardDisk,
@@ -32,7 +31,6 @@ pub struct FloppyDrive {
 pub enum DiskType {
     Pool(PoolDisk),
     Standard(StandardDisk),
-    Dense(DenseDisk),
     Unknown(UnknownDisk),
     Blank(BlankDisk),
 }
