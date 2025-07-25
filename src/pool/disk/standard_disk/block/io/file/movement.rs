@@ -1,13 +1,13 @@
 // We need to go to seek points and such.
 
-use crate::pool::disk::{generic::generic_structs::pointer_struct::DiskPointer, standard_disk::block::{file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::{FileExtent, FileExtentBlock}}, inode::inode_struct::InodeFile, io::file::types::DataBytePointer}};
+use crate::pool::disk::{standard_disk::block::{file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::{FileExtent, FileExtentBlock}}, inode::inode_struct::InodeFile, io::file::types::DataBytePointer}};
 
 impl InodeFile {
     /// Find where a seek lands.
     /// Takes in a Vec<FileExtent> of every extent within the chain of blocks.
     pub(super) fn byte_finder(extents: &[FileExtent], byte_offset: u64) -> DataBytePointer {
         // There might be smarter ways to do this, but this should be fast enough.
-        
+
         // Assumptions:
         // The list of FileExtents is ordered.
         // 
