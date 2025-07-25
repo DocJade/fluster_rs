@@ -2,6 +2,8 @@
 
 // Imports
 
+use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+
 use super::file_extents_struct::ExtentFlags;
 use super::file_extents_struct::FileExtent;
 use super::file_extents_struct::FileExtentBlock;
@@ -27,8 +29,13 @@ fn random_extents_serialization() {
 
 #[test]
 fn empty_extent_block_serialization() {
-    let test_block = FileExtentBlock::new();
-    let serialized = test_block.to_block(69);
+    let mut test_block = FileExtentBlock::new();
+    test_block.block_origin = DiskPointer {
+            disk: 420,
+            block: 69,
+        };
+    let mut serialized = test_block.to_block(69);
+    serialized.originating_disk = Some(420);
     let deserialized = FileExtentBlock::from_block(&serialized);
     assert_eq!(test_block, deserialized);
 }
@@ -58,10 +65,17 @@ fn full_extent_block() {
 #[test]
 fn random_block_serialization() {
     for _ in 0..1000 {
-        let block = FileExtentBlock::get_random();
-        let serialized = block.to_block(69);
+        let mut test_block = FileExtentBlock::get_random();
+        // For our equal check to work, we need to set the block to come from the same
+        // disk that we're pretending to read it from.
+        test_block.block_origin = DiskPointer {
+            disk: 420,
+            block: 69,
+        };
+        let mut serialized = test_block.to_block(69);
+        serialized.originating_disk = Some(420);
         let deserialized = FileExtentBlock::from_block(&serialized);
-        assert_eq!(block, deserialized)
+        assert_eq!(test_block, deserialized)
     }
 }
 
