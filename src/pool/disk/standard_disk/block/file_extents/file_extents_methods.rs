@@ -8,10 +8,9 @@ pub(crate) const DATA_BLOCK_OVERHEAD: u64 = 5; // 1 flag, 4 checksum.
 
 
 use crate::pool::disk::{
-    generic::block::{block_structs::RawBlock, crc::add_crc_to_block},
+    generic::{block::{block_structs::RawBlock, crc::add_crc_to_block}, generic_structs::pointer_struct::DiskPointer},
     standard_disk::block::file_extents::file_extents_struct::{
         ExtentFlags, FileExtent, FileExtentBlock, FileExtentBlockError, FileExtentBlockFlags,
-        FileExtentPointer,
     },
 };
 
@@ -32,11 +31,11 @@ impl FileExtentBlock {
     pub(super) fn bytes_to_extents(&mut self, bytes: &[u8]) {
         self.extents = bytes_to_extents(bytes)
     }
-    pub(super) fn from_bytes(block: &RawBlock) -> Self {
+    pub(crate) fn from_block(block: &RawBlock) -> Self {
         from_bytes(block)
     }
     /// The destination block must be known when calling.
-    pub(super) fn to_bytes(&self, block_number: u16) -> RawBlock {
+    pub(super) fn to_block(&self, block_number: u16) -> RawBlock {
         to_bytes(self, block_number)
     }
     /// Attempts to add a file extent to this block
@@ -54,12 +53,14 @@ impl FileExtentBlock {
         FileExtentBlock {
             flags: FileExtentBlockFlags::default(),
             bytes_free: 501, // new blocks have 501 free bytes
-            next_block: FileExtentPointer::final_block(),
+            next_block: DiskPointer::new_final_pointer(),
             extents: Vec::new(),
+            // This is for writing, not reading, so there is no origin.
+            block_origin: DiskPointer::new_final_pointer(),
         }
     }
     /// Reterieves all extents within this block.
-    pub(super) fn get_extents(&self) -> Vec<FileExtent> {
+    pub(crate) fn get_extents(&self) -> Vec<FileExtent> {
         // Just a layer of abstraction to prevent direct access.
         self.extents.clone()
     }
@@ -125,8 +126,8 @@ fn from_bytes(block: &RawBlock) -> FileExtentBlock {
     let bytes_free: u16 = u16::from_le_bytes(block.data[1..1 + 2].try_into().expect("2 = 2"));
 
     // Next block
-    let next_block: FileExtentPointer =
-        FileExtentPointer::from_bytes(block.data[3..3 + 4].try_into().expect("4 is 4"));
+    let next_block: DiskPointer =
+        DiskPointer::from_bytes(block.data[3..3 + 4].try_into().expect("4 is 4"));
 
     let extents: Vec<FileExtent> =
         bytes_to_extents(block.data[7..7 + 501].try_into().expect("503 bytes"));
@@ -136,6 +137,7 @@ fn from_bytes(block: &RawBlock) -> FileExtentBlock {
         bytes_free,
         next_block,
         extents,
+        block_origin: DiskPointer::from(block),
     }
 }
 
@@ -146,7 +148,7 @@ fn to_bytes(extent_block: &FileExtentBlock, block_number: u16) -> RawBlock {
         bytes_free,
         #[allow(unused_variables)] // The extents are extracted in a different way
         extents,
-    } = extent_block;
+        block_origin: _ } = extent_block;
 
     let mut buffer: [u8; 512] = [0u8; 512];
     let mut index: usize = 0;
@@ -174,9 +176,6 @@ fn to_bytes(extent_block: &FileExtentBlock, block_number: u16) -> RawBlock {
         data: buffer,
         originating_disk: None, // We only write this.
     };
-
-    // make sure this matches
-    assert_eq!(extent_block, &FileExtentBlock::from_bytes(&finished_block));
 
     finished_block
 }
@@ -234,29 +233,6 @@ fn bytes_to_extents(bytes: &[u8]) -> Vec<FileExtent> {
 }
 
 // Welcome to subtype impl hell
-
-impl FileExtentPointer {
-    pub fn to_bytes(&self) -> [u8; 4] {
-        let mut buffer: [u8; 4] = [0u8; 4];
-        // Disk number
-        buffer[..2].copy_from_slice(&self.disk_number.to_le_bytes());
-        // Block on disk
-        buffer[2..].copy_from_slice(&self.block_index.to_le_bytes());
-        buffer
-    }
-
-    pub fn from_bytes(bytes: [u8; 4]) -> Self {
-        Self {
-            disk_number: u16::from_le_bytes(bytes[..2].try_into().expect("2 is 2")),
-            block_index: u16::from_le_bytes(bytes[2..].try_into().expect("2 is 2")),
-        }
-    }
-
-    // Helper to see if this is the last block easily
-    pub fn is_final_block(&self) -> bool {
-        self.block_index == u16::MAX && self.disk_number == u16::MAX
-    }
-}
 
 impl FileExtent {
     pub(super) fn to_bytes(self) -> Vec<u8> {
@@ -334,15 +310,5 @@ impl FileExtentBlockFlags {
     pub fn default() -> Self {
         // We aren't using any bits right now.
         FileExtentBlockFlags::empty()
-    }
-}
-
-// Final block
-impl FileExtentPointer {
-    const fn final_block() -> Self {
-        FileExtentPointer {
-            disk_number: u16::MAX,
-            block_index: u16::MAX,
-        }
     }
 }

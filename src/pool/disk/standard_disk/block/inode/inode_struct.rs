@@ -22,8 +22,8 @@ pub struct Inode {
 pub struct InodeFile {
     /// The size of the pointed to file in bytes.
     pub(super) size: u64,
-    /// Points to extents
-    pub(super) pointer: DiskPointer,
+    /// Points to the first extent block in the chain for this file.
+    pub(crate) pointer: DiskPointer,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

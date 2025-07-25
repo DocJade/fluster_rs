@@ -28,8 +28,8 @@ fn random_extents_serialization() {
 #[test]
 fn empty_extent_block_serialization() {
     let test_block = FileExtentBlock::new();
-    let serialized = test_block.to_bytes(69);
-    let deserialized = FileExtentBlock::from_bytes(&serialized);
+    let serialized = test_block.to_block(69);
+    let deserialized = FileExtentBlock::from_block(&serialized);
     assert_eq!(test_block, deserialized);
 }
 
@@ -59,8 +59,8 @@ fn full_extent_block() {
 fn random_block_serialization() {
     for _ in 0..1000 {
         let block = FileExtentBlock::get_random();
-        let serialized = block.to_bytes(69);
-        let deserialized = FileExtentBlock::from_bytes(&serialized);
+        let serialized = block.to_block(69);
+        let deserialized = FileExtentBlock::from_block(&serialized);
         assert_eq!(block, deserialized)
     }
 }

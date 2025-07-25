@@ -5,6 +5,8 @@
 use bitflags::bitflags;
 use thiserror::Error;
 
+use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+
 // Structs, Enums, Flags
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -29,18 +31,15 @@ bitflags! {
 }
 
 // Extents block
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileExtentBlock {
     pub(super) flags: FileExtentBlockFlags,
     pub(super) bytes_free: u16,
-    pub(super) next_block: FileExtentPointer,
+    pub(crate) next_block: DiskPointer,
+    // At runtime its useful to know where this block came from.
+    // This doesn't need to get written to disk.
+    pub block_origin: DiskPointer, // This MUST be set. it cannot point nowhere.
     pub(super) extents: Vec<FileExtent>,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct FileExtentPointer {
-    pub(super) disk_number: u16,
-    pub(super) block_index: u16,
 }
 
 bitflags! {

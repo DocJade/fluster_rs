@@ -3,7 +3,7 @@
 // We will take in InodeFile(s) instead of Extent related types, since we need info about how big files are so they are easier to extend.
 // Creating files is handles on the directory side, since new files just have a name and location.
 
-use crate::pool::disk::{drive_struct::{FloppyDrive, FloppyDriveError}, generic::{block::crc::add_crc_to_block, generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::block::{file_extents::file_extents_methods::DATA_BLOCK_OVERHEAD, inode::inode_struct::InodeFile}};
+use crate::pool::disk::{drive_struct::{FloppyDrive, FloppyDriveError}, generic::{block::crc::add_crc_to_block, generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::block::{file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::FileExtent}, inode::inode_struct::InodeFile}};
 
 impl InodeFile {
     /// Update the contents of a file starting at the provided seek point.
@@ -26,7 +26,8 @@ impl InodeFile {
 }
 
 fn go_write(inode: InodeFile, bytes: &[u8], seek_point: u64) -> Result<u64, FloppyDriveError> {
-    // Working unaligned is annoying, we want to get back to being aligned as soon as possible,
+    // Decompose the file into its pointers
+    // let blocks: Vec<DiskPointer> = inode.
     todo!();
 }
 
