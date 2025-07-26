@@ -35,13 +35,15 @@ impl FileExtentBlock {
         from_bytes(block)
     }
     /// The destination block must be known when calling.
-    pub(super) fn to_block(&self, block_number: u16) -> RawBlock {
+    pub(crate) fn to_block(&self, block_number: u16) -> RawBlock {
         to_bytes(self, block_number)
     }
-    /// Attempts to add a file extent to this block
+    /// Attempts to add a file extent to this block.
+    /// 
+    /// Does not write new block to disk. Caller must write it.
     ///
     /// Returns nothing
-    pub(super) fn add_extent(&mut self, extent: FileExtent) -> Result<(), FileExtentBlockError> {
+    pub(crate) fn add_extent(&mut self, extent: FileExtent) -> Result<(), FileExtentBlockError> {
         extent_block_add_extent(self, extent)
     }
     /// Create a new extent block.
@@ -49,7 +51,7 @@ impl FileExtentBlock {
     /// New Extent blocks are the new final block on the disk.
     /// New Extent blocks do not point to the next block (as none exists).
     /// Caller is responsible with updating previous block to point to this new block.
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         FileExtentBlock {
             flags: FileExtentBlockFlags::default(),
             bytes_free: 501, // new blocks have 501 free bytes
@@ -95,6 +97,13 @@ fn extent_block_add_extent(
     extent: FileExtent,
 ) -> Result<(), FileExtentBlockError> {
     // Try and add an extent to the block
+
+    // Since new blocks always have to go at the end of the inode chain, if there
+    // is a block after this, the block needs to immediately fail.
+    if !block.next_block.no_destination() {
+        // Keep goin dawg, not this block.
+        return Err(FileExtentBlockError::NotFinalBlock)
+    }
 
     // figure out how big the extent is
     let extent_size: u16 = extent

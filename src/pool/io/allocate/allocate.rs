@@ -16,6 +16,16 @@ use crate::pool::{
 
 impl Pool {
     /// Finds blocks across the entire pool.
+    /// 
+    /// == WARNING ==
+    /// 
+    /// You should really only be calling this for singular blocks, or when you know that you will write all of these blocks
+    /// without possibly allocating another one. Since the blocks returned are not marked as allocated yet, in theory while you
+    /// are writing to them, you may call this function again form another method (think expanding inodes) which would use one of
+    /// the blocks that you will be assuming are free. If you need to know that these blocks wont move, you should reserve them
+    /// ahead of time with find_and_allocate_pool_blocks() !
+    /// 
+    /// == WARNING ==
     ///
     /// The blocks will be searched for only on Standard disks, all other allocations have to be done on the individual disk.
     ///
@@ -27,12 +37,38 @@ impl Pool {
     ///
     /// Returns disk pointers for the found blocks, or a disk error.
     pub fn find_free_pool_blocks(blocks: u16) -> Result<Vec<DiskPointer>, FloppyDriveError> {
-        go_find_free_pool_blocks(blocks)
+        // We will not be marking the blocks as used.
+        go_find_free_pool_blocks(blocks, false)
+    }
+    /// Finds blocks across the entire pool.
+    /// 
+    /// Can only allocate a maximum of 32MB worth of blocks in one go.
+    /// If you are asking for that many, something is 100% wrong.
+    /// Writes should be limited to 1MB so this should never happen.
+    /// 
+    /// If this fails, ur kinda cooked ngl, since now a bunch of random blocks have been
+    /// allocated for no reason.
+    /// 
+    /// Searches standard disks, yada yada.
+    /// 
+    /// This will mark the blocks as allocated.
+    /// 
+    /// Will add new disks if needed.
+    /// 
+    /// May swap disks, will not return to where it started.
+    /// 
+    /// Returns disk pointers for the newly reserved blocks, or a disk error.
+    pub fn find_and_allocate_pool_blocks(blocks: u16) -> Result<Vec<DiskPointer>, FloppyDriveError> {
+        // This is just an abstraction to force a different function name, even though
+        // the function it calls is the same as find_free_pool_blocks()
+        go_find_free_pool_blocks(blocks, true)
     }
 }
 
-fn go_find_free_pool_blocks(blocks: u16) -> Result<Vec<DiskPointer>, FloppyDriveError> {
+fn go_find_free_pool_blocks(blocks: u16, mark: bool) -> Result<Vec<DiskPointer>, FloppyDriveError> {
     debug!("Attempting to allocate {blocks} blocks across the pool...");
+    debug!("We will _{}_ be marking the blocks as used.", if mark {"will"} else {"will not"});
+
 
     debug!("Locking GLOBAL_POOL...");
     let probable_disk = GLOBAL_POOL
@@ -61,7 +97,7 @@ fn go_find_free_pool_blocks(blocks: u16) -> Result<Vec<DiskPointer>, FloppyDrive
 
     // Now we loop until we find enough free blocks.
     loop {
-        let disk: StandardDisk;
+        let mut disk: StandardDisk;
         // Check if the disk we are about to load is out of range
         if disk_to_check > new_highest_disk {
             debug!("Ran out of room, creating new disk...");
@@ -87,7 +123,13 @@ fn go_find_free_pool_blocks(blocks: u16) -> Result<Vec<DiskPointer>, FloppyDrive
             Ok(ok) => {
                 // We were able to allocate all of the blocks we asked for!
                 // We're done!
-                free_blocks.append(&mut block_indexes_to_pointers(ok, disk_to_check));
+                free_blocks.append(&mut block_indexes_to_pointers(ok.clone(), disk_to_check));
+
+                // Allocate those blocks if needed.
+                if mark {
+                    disk.allocate_blocks(&ok)?;
+                }
+
                 break;
             }
             Err(amount) => {
@@ -101,7 +143,13 @@ fn go_find_free_pool_blocks(blocks: u16) -> Result<Vec<DiskPointer>, FloppyDrive
                 let blockie_doos = disk
                     .find_free_blocks(amount)
                     .expect("We already asked how much room you had.");
-                free_blocks.append(&mut block_indexes_to_pointers(blockie_doos, disk_to_check));
+                free_blocks.append(&mut block_indexes_to_pointers(blockie_doos.clone(), disk_to_check));
+
+                // Allocate those blocks if needed.
+                if mark {
+                    disk.allocate_blocks(&blockie_doos)?;
+                }
+
                 // Waiter! Waiter! More disks please!
                 disk_to_check += 1;
                 continue;

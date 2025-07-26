@@ -54,6 +54,7 @@ fn full_extent_block() {
             }
             Err(err) => match err {
                 super::file_extents_struct::FileExtentBlockError::NotEnoughSpace => break, // full
+                _ => panic!("This only happens on one block, how is this not the final block?")
             },
         }
     }
@@ -97,6 +98,7 @@ impl FileExtentBlock {
                 Ok(_) => {}
                 Err(err) => match err {
                     super::file_extents_struct::FileExtentBlockError::NotEnoughSpace => break, // full
+                    _ => panic!("This only happens on one block, how is this not the final block?")
                 },
             }
         }

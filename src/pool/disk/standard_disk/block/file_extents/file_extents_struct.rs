@@ -53,4 +53,6 @@ bitflags! {
 pub(crate) enum FileExtentBlockError {
     #[error("There aren't enough free bytes in the block.")]
     NotEnoughSpace,
+    #[error("New extents must go in the final block in the chain.")]
+    NotFinalBlock,
 }

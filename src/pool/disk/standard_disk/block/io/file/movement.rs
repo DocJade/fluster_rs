@@ -1,13 +1,12 @@
 // We need to go to seek points and such.
 
-use crate::pool::disk::{drive_struct::FloppyDriveError, generic::generic_structs::pointer_struct::DiskPointer, standard_disk::block::{file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::{FileExtent, FileExtentBlock}}, inode::inode_struct::InodeFile, io::file::types::DataBytePointer}};
+use crate::pool::disk::{generic::generic_structs::pointer_struct::DiskPointer, standard_disk::block::{file_extents::file_extents_methods::DATA_BLOCK_OVERHEAD, inode::inode_struct::InodeFile}};
 
 impl InodeFile {
     /// Find where a seek lands.
-    /// Takes in a slice of DiskPointer for every block in the file.
     /// Returns (index, offset), index is the index into the input blocks array,
     /// offset is the offset within that block, skipping the flag byte already.
-    pub(super) fn byte_finder(blocks: &[DiskPointer], byte_offset: u64) -> (usize, u16) {
+    pub(super) fn byte_finder(byte_offset: u64) -> (usize, u16) {
         // Assumptions:
         // We aren't attempting to find a byte offset that is outside of the file.
 
@@ -20,9 +19,6 @@ impl InodeFile {
         // Now within that block we can find which byte it is by taking the modulo.
         // But we do need to move forwards one byte into the block to skip the flag.
         let offset_in_block = (byte_offset % block_capacity) as u16 + 1;
-
-        // Make sure we aren't trying to find a byte outside of the file.
-        assert!(block_index < blocks.len(), "Attempted to find a byte outside of the file's block list!");
 
         // All done!
         (block_index, offset_in_block)
