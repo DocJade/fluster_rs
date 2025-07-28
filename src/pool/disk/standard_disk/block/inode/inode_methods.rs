@@ -13,17 +13,22 @@ use super::inode_struct::InodeBlockError;
 use super::inode_struct::InodeBlockFlags;
 use super::inode_struct::InodeFlags;
 use super::inode_struct::InodeReadError;
+use crate::pool::disk::drive_struct::DiskType;
+use crate::pool::disk::drive_struct::FloppyDrive;
 use crate::pool::disk::drive_struct::FloppyDriveError;
 use crate::pool::disk::generic::block::crc::add_crc_to_block;
 use crate::pool::disk::generic::generic_structs::find_space::find_free_space;
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+use crate::pool::disk::generic::io::checked_io::CheckedIO;
 use crate::pool::disk::generic::{
     block::block_structs::RawBlock, generic_structs::find_space::BytePingPong,
 };
+use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryItem;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::{
     InodeDirectory, InodeFile, InodeTimestamp,
 };
+use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
 
 impl From<RawBlock> for InodeBlock {
     fn from(value: RawBlock) -> Self {
@@ -88,6 +93,47 @@ impl InodeBlock {
     pub fn new_destination(&mut self, pointer: DiskPointer) {
         // dont feel like splitting this into a function rn, sue me.
         self.next_inode_block = pointer;
+    }
+    /// Underlying inode information (File size for example) may change, so we need to be able to
+    /// update our insides.
+    /// 
+    /// Updates internal data, flushes to disk.
+    /// 
+    /// Incoming inode data must be the same size as the pre-existing inode.
+    /// Will panic if incoming inode is of the wrong size.
+    /// Will panic if there is not an inode at the location you are trying to overwrite.
+    /// 
+    /// May swap disks, does not return to caller disk. Ends up wherever the inode block originally came from.
+    /// 
+    /// Returns nothing,
+    pub fn update_inode(&mut self, inode_offset: u16, updated_inode: Inode,) -> Result<(), FloppyDriveError> {
+        // get the item at the current offset
+        let old = self.try_read_inode(inode_offset).expect("Caller should provide valid offset");
+
+        // Find out how big that is
+        let old_size = old.to_bytes().len();
+
+        // Make sure the new one is the right size
+        let new_size = updated_inode.to_bytes().len();
+
+        assert_eq!(old_size, new_size, "To update an inode, the new inode must be the same size as the old one.");
+
+        // Now that we know we can safely perform this operation, we will directly edit ourselves.
+        self.inodes_data[inode_offset as usize..inode_offset as usize + old_size].copy_from_slice(&updated_inode.to_bytes());
+
+        // Now we need to flush these updates to disk
+        // Open the disk where this lived.
+        let mut disk: StandardDisk = match FloppyDrive::open(self.block_origin.disk)? {
+            DiskType::Standard(standard_disk) => standard_disk,
+            _ => unreachable!("How did this inode block come from a non-standard disk?"),
+        };
+
+        // Update that block
+        let raw = self.to_block(self.block_origin.block);
+        disk.checked_update(&raw)?;
+
+        // All done!
+        Ok(())
     }
 }
 
@@ -522,5 +568,21 @@ impl InodeFile {
     /// Get size of a file
     pub fn get_size(&self) -> u64 {
         self.size
+    }
+    /// Set the size of the file
+    pub fn set_size(&mut self, size: u64) {
+        self.size = size;
+    }
+}
+
+
+// Extract an inode into its inner type
+// TODO: Remove access to innards of Inode, force usage of method calls.
+impl Inode {
+    pub fn extract_file(&self) -> Option<InodeFile> {
+        self.file
+    }
+     pub fn extract_directory(&self) -> Option<InodeDirectory> {
+        self.directory
     }
 }

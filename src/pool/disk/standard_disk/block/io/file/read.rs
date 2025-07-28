@@ -2,7 +2,7 @@
 
 use log::{debug, trace};
 
-use crate::pool::disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::{generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::block::{file_extents::file_extents_struct::{FileExtent, FileExtentBlock}, inode::inode_struct::{InodeBlock, InodeFile}}};
+use crate::pool::disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::{generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::{block::{directory::directory_struct::{DirectoryFlags, DirectoryItem}, file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::{FileExtent, FileExtentBlock}}, inode::inode_struct::{InodeBlock, InodeFile}}, standard_disk_struct::StandardDisk}};
 
 impl InodeFile {
     // Local functions
@@ -20,6 +20,58 @@ impl InodeFile {
     /// Goes and gets the FileExtentBlock this refers to.
     fn get_root_block(&self) -> Result<FileExtentBlock, FloppyDriveError> {
         go_get_root_block(self)
+    }
+    /// Read a file
+    fn read(&self, seek_point: u64, size: u32, return_to: Option<u16>) -> Result<Vec<u8>, FloppyDriveError> {
+        go_read_file(self, seek_point, size, return_to)
+    }
+}
+
+// We dont want to call read/write on the inodes, we should do it up here so we
+// we can automatically update the information on the file, and the directory if needed.
+impl DirectoryItem {
+    /// Read a file.
+    ///
+    /// Assumptions:
+    /// - This is an FILE, not a DIRECTORY.
+    /// - The location of this directory item has it's disk set.
+    /// - The inode that the item points at does exist, and is valid.
+    /// 
+    /// Reads in a file at a starting offset, and returns `x` bytes after that offset.
+    /// 
+    /// Optionally returns to a specified disk.
+    pub fn read_file(&self, seek_point: u64, size: u32, return_to: Option<u16>) -> Result<Vec<u8>, FloppyDriveError> {
+        // Is this a file?
+        if self.flags.contains(DirectoryFlags::IsDirectory) {
+            // Uh, no it isn't why did you give me a dir?
+            panic!("Tried to read a directory as a file!")
+        }
+
+        // Extract out the file
+        assert!(self.location.disk.is_some());
+        let location = &self.location;
+
+        // Open the disk that this file's inode lives at
+        let disk: StandardDisk = match FloppyDrive::open(location.disk.expect("Guarded"))? {
+            DiskType::Standard(standard_disk) => standard_disk,
+            _ => todo!(),
+        };
+
+        // Get the inode block
+        let inode_block: InodeBlock = InodeBlock::from_block(&disk.checked_read(location.block)?);
+
+        // Get the actual file
+        let inode_file = inode_block.try_read_inode(location.offset).expect("Caller guarantee.");
+        let file = inode_file.extract_file().expect("Caller guarantee.");
+
+        // Now we can read in the file
+        // We pass in return_to since this is the final movement we will do with disks.
+        let read_bytes = file.read(seek_point, size, return_to)?;
+
+        // Now we have the bytes. If we were writing, we would have to flush info about the file to disk, but we don't
+        // need to for a read. We are all done
+
+        Ok(read_bytes)
     }
 }
 
@@ -128,4 +180,105 @@ fn go_get_root_block(file: &InodeFile) -> Result<FileExtentBlock, FloppyDriveErr
         };
     let block = FileExtentBlock::from_block(&disk.checked_read(file.pointer.block)?);
     Ok(block)
+}
+
+
+
+fn go_read_file(file: &InodeFile, seek_point: u64, size: u32, return_to: Option<u16>) -> Result<Vec<u8>, FloppyDriveError> {
+    // Make sure the file is big enough
+    assert!(file.get_size()>= seek_point + size as u64);
+
+    // Find the start point
+    let (block_index, mut byte_index) = InodeFile::byte_finder( seek_point);
+
+    // The byte_finder already skips the flag, so it ends up adding one, we need to subtract that.
+    // TODO: This is a bandaid fix. this logic is ugly.
+    byte_index -= 1;
+
+    let blocks = file.to_pointers(return_to)?;
+    let mut bytes_remaining: u32 = size;
+    let mut current_block: usize = block_index;
+    let mut collected_bytes: Vec<u8> = Vec::new();
+
+    let mut disk: StandardDisk = match FloppyDrive::open(blocks[current_block].disk)? {
+        DiskType::Standard(standard_disk) => standard_disk,
+        _ => unreachable!("Why did we try to read from a non-standard disk?"),
+    };
+
+    loop {
+        // Are we done reading?
+        if bytes_remaining == 0 {
+            // All done!
+            break
+        }
+        // Are we on the right disk
+        if blocks[current_block].disk != disk.number {
+            // Need to go to another disk
+            disk = match FloppyDrive::open(blocks[current_block].disk)? {
+                DiskType::Standard(standard_disk) => standard_disk,
+                _ => unreachable!("Why did the block point to a non-standard disk?"),
+            };
+        }
+        // We're on the right disk
+        let mut read_bytes = read_bytes_from_block(blocks[current_block], byte_index, bytes_remaining)?;
+        // After the first read, we are now aligned to the start of blocks
+        byte_index = 0;
+
+        // Update how many bytes we've read
+        bytes_remaining -= read_bytes.len() as u32;
+
+        // add to the bucket
+        collected_bytes.append(&mut read_bytes);
+        // Keep going!
+        current_block += 1;
+        continue;
+    }
+
+    // All done!
+    Ok(collected_bytes)
+}
+
+
+
+
+
+/// Read as many bytes as we can from this block.
+/// 
+/// Returns number of bytes read
+fn read_bytes_from_block(block: DiskPointer, offset: u16, bytes_to_read: u32) -> Result<Vec<u8>, FloppyDriveError> {
+
+    // How much data a block can hold
+    let data_capacity = 512 - DATA_BLOCK_OVERHEAD as usize;
+    let offset = offset as usize;
+
+    // Check for impossible offsets
+    assert!(offset < data_capacity, "Tried to read outside of the capacity of a block.");
+    
+    // Calculate bytes to write based on REMAINING space.
+    let remaining_space = data_capacity - offset;
+    let bytes_to_read = std::cmp::min(bytes_to_read, remaining_space as u32);
+    
+    // We also don't support 0 byte reads
+    // Since that would be a failure mode of the caller, in theory could be
+    // stuck in an infinite loop type shi.
+    // Why panic? It won't if you fix the caller! :D
+    assert_ne!(bytes_to_read, 0, "Tried to read 0 bytes from a block!");
+
+
+    // load the block
+    let disk = match FloppyDrive::open(block.disk)? {
+        crate::pool::disk::drive_struct::DiskType::Standard(standard_disk) => standard_disk,
+        _ => unreachable!("How are we reading a block from a non-standard disk?"),
+    };
+    let block_copy = disk.checked_read(block.block)?;
+    
+    // Read that sucker
+    // Skip the first byte with the flag
+    let start = offset + 1;
+    let end = start + bytes_to_read as usize;
+
+    let read_bytes: Vec<u8> = Vec::from(&block_copy.data[start..end]);
+
+    // Return the bytes we read.
+    Ok(read_bytes)
 }

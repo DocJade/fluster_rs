@@ -5,16 +5,19 @@
 
 use std::{cmp::max, u16};
 
-use crate::pool::{disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::{block::{block_structs::RawBlock, crc::add_crc_to_block}, generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::{block::{directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem}, file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::{ExtentFlags, FileExtent, FileExtentBlock, FileExtentBlockFlags}}, inode::inode_struct::{Inode, InodeFile, InodeFlags, InodeLocation, InodeTimestamp}}, standard_disk_struct::StandardDisk}}, pool_actions::pool_struct::Pool};
+use crate::pool::{disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::{block::{block_structs::RawBlock, crc::add_crc_to_block}, generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::{block::{directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem}, file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::{ExtentFlags, FileExtent, FileExtentBlock, FileExtentBlockFlags}}, inode::inode_struct::{Inode, InodeBlock, InodeFile, InodeFlags, InodeLocation, InodeTimestamp}}, standard_disk_struct::StandardDisk}}, pool_actions::pool_struct::Pool};
 
 impl InodeFile {
     /// Update the contents of a file starting at the provided seek point.
     /// Will automatically grow file if needed.
     /// 
+    /// !! This does not flush information to disk! You must
+    /// write back the new size of the file to disk! !!
+    /// 
     /// Optionally returns to a provided disk when done.
     /// 
-    /// Returns number of bytes written.
-    pub fn write(self, bytes: &[u8], seek_point: u64, return_to: Option<u16>) -> Result<u64, FloppyDriveError> {
+    /// Returns number of bytes written, but also updates the incoming file's size automatically
+    fn write(&mut self, bytes: &[u8], seek_point: u64, return_to: Option<u16>) -> Result<u64, FloppyDriveError> {
        go_write(self, bytes, seek_point, return_to)
     }
     /// Deletes a file by deallocating every block the file used to take up, including
@@ -34,15 +37,83 @@ impl DirectoryBlock {
     /// 
     /// Adds the file to the directory, flushes it to disk.
     /// 
-    /// Returns the created file.
+    /// Returns the created file's directory item. Will contain disk info.
     /// 
     /// Should include extension iirc?
-    pub fn new_file(self, name: String, return_to: Option<u16>) -> Result<InodeFile, FloppyDriveError> {
+    pub fn new_file(self, name: String, return_to: Option<u16>) -> Result<DirectoryItem, FloppyDriveError> {
         go_make_new_file(self, name, return_to)
     }
 }
 
-fn go_write(inode: InodeFile, bytes: &[u8], seek_point: u64, return_to: Option<u16>) -> Result<u64, FloppyDriveError> {
+// We dont want to call read/write on the inodes, we should do it up here so we
+// we can automatically update the information on the file, and the directory if needed.
+impl DirectoryItem {
+    /// Write data to a file.
+    ///
+    /// Assumptions:
+    /// - This is an FILE, not a DIRECTORY.
+    /// - The location of this directory item has it's disk set.
+    /// - The inode that the item points at does exist, and is valid.
+    /// 
+    /// Write to a file at a starting offset, and sets `x` bytes after that offset.
+    /// 
+    /// Does not consume the directory item, since the data lower down was updated, not the
+    /// directory item itself.
+    /// 
+    /// Returns how many bytes were written.
+    /// 
+    /// Optionally returns to a specified disk.
+    pub fn write_file(&self, bytes: &[u8], seek_point: u64, return_to: Option<u16>) -> Result<u64, FloppyDriveError> {
+        // Is this a file?
+        if self.flags.contains(DirectoryFlags::IsDirectory) {
+            // Uh, no it isn't why did you give me a dir?
+            panic!("Tried to read a directory as a file!")
+        }
+
+        // Extract out the file
+        assert!(self.location.disk.is_some());
+        let location = &self.location;
+
+        // Open the disk that this file's inode lives at
+        let disk: StandardDisk = match FloppyDrive::open(location.disk.expect("Guarded"))? {
+            DiskType::Standard(standard_disk) => standard_disk,
+            _ => todo!(),
+        };
+
+        // Get the inode block
+        let mut inode_block: InodeBlock = InodeBlock::from_block(&disk.checked_read(location.block)?);
+
+        // Get the actual file
+        let inode_with_file = inode_block.try_read_inode(location.offset).expect("Caller guarantee.");
+        let mut file = inode_with_file.extract_file().expect("Caller guarantee.");
+
+        // Write to the file
+        // We do not pass in `return_to` since this might not be the final disk swap.
+        // This automatically updates the underlying file with the new size.
+        let num_bytes_written = file.write(bytes, seek_point, None)?;
+
+        // Now that the bytes are written, the size of the file may have changed, so we need to flush this new information to disk.
+
+        // Reconstruct the inode
+        let mut updated_inode: Inode = inode_with_file;
+
+        // Replace the inner file with the new updated one
+        updated_inode.file = Some(file);
+
+        // Now update the inode in the block. This also flushes to disk for us.
+        inode_block.update_inode(location.offset, updated_inode)?;
+
+        // Return to the requested disk if asked
+        if let Some(disk_number) = return_to {
+            let _ = FloppyDrive::open(disk_number)?;
+        }
+
+        // All done. Return the number of bytes we wrote.
+        Ok(num_bytes_written)
+    }
+}
+
+fn go_write(inode: &mut InodeFile, bytes: &[u8], seek_point: u64, return_to: Option<u16>) -> Result<u64, FloppyDriveError> {
     // Decompose the file into its pointers
     // No return location, we don't care where this puts us.
     let mut blocks = inode.to_pointers(None)?;
@@ -84,7 +155,7 @@ fn go_write(inode: InodeFile, bytes: &[u8], seek_point: u64, return_to: Option<u
 
         // Add that many more blocks to this file.
         // Since we know its already less than u16::MAX this cast is fine.
-        let new_pointers = expand_file(inode, needed_blocks.try_into().expect("Guarded."))?;
+        let new_pointers = expand_file(*inode, needed_blocks.try_into().expect("Guarded."))?;
 
         // The new pointers are already in order for us, and we will add them onto the end of the
         // pointers we grabbed earlier from the file.
@@ -137,6 +208,10 @@ fn go_write(inode: InodeFile, bytes: &[u8], seek_point: u64, return_to: Option<u
     if let Some(returning) = return_to {
         let _ = FloppyDrive::open(returning)?;
     }
+
+    // Update the file size with the new bytes we wrote.
+    let before = inode.get_size();
+    inode.set_size(before + bytes_written as u64);
 
     // Return how many bytes we wrote!
     Ok(bytes_written as u64)
@@ -375,16 +450,31 @@ fn pointers_into_extents(pointers: &[DiskPointer]) -> Vec<FileExtent> {
         }
         // Check if we're still on the correct disk
         if current_extent.disk_number == Some(pointer.disk) {
-            // Same disk, increment block length.
-            current_extent.length += 1
+            // Same disk, but in theory this could have skipped blocks.
+            if pointer.block == current_extent.start_block + current_extent.length as u16 {
+                // This is the next block, we didn't skip anything.
+                // I know this nesting is ugly, but its better than one massive if clause
+                // Also make sure we can keep extending
+                if current_extent.length != u8::MAX {
+                    current_extent.length += 1;
+                    continue;
+                }
+            }
         }
-        // If the disk number doesn't match, or we cant add to the length anymore, time for a new extent.
-        if current_extent.disk_number != Some(pointer.disk) || current_extent.length == u8::MAX {
-            // push the current extent
-            new_extents.push(current_extent);
-            // clear the current extent so we can start over.
-            current_extent = FileExtent::new()
-        }
+        
+        // If we are here, either the disk, or the next block is not correct, or we hit the max size.
+        // Time for a new extent.
+
+        // push the current extent
+        new_extents.push(current_extent);
+        // clear the current extent so we can start over.
+        current_extent = FileExtent::new();
+        // brand new, add disk and start block.
+        // use the current pointer to start the new extent
+        current_extent.disk_number = Some(pointer.disk);
+        current_extent.start_block = pointer.block;
+        // New extent will have a new block, so len==1
+        current_extent.length += 1;
     }
 
     // After the loop there might be one final extent, check for that
@@ -411,7 +501,7 @@ fn pointers_into_extents(pointers: &[DiskPointer]) -> Vec<FileExtent> {
 }
 
 /// Create a new file.
-fn go_make_new_file(directory_block: DirectoryBlock, name: String, return_to: Option<u16>) -> Result<InodeFile, FloppyDriveError> {
+fn go_make_new_file(directory_block: DirectoryBlock, name: String, return_to: Option<u16>) -> Result<DirectoryItem, FloppyDriveError> {
     // Directory blocks already have a method to add a new item to them, so we just need
     // to create that item to add.
 
@@ -470,7 +560,8 @@ fn go_make_new_file(directory_block: DirectoryBlock, name: String, return_to: Op
     let mut flags: DirectoryFlags = DirectoryFlags::MarkerBit;
 
     // If the new inode location is on this disk we must set the location, otherwise clear it.
-    if new_inode_location.disk.expect("Should be there") == directory_block.block_origin.disk {
+    let directory_block_origin_disk = directory_block.block_origin.disk;
+    if new_inode_location.disk.expect("Should be there") == directory_block_origin_disk {
         // We need to remove the disk info.
         flags.insert(DirectoryFlags::OnThisDisk);
         new_inode_location.disk = None;
@@ -479,17 +570,27 @@ fn go_make_new_file(directory_block: DirectoryBlock, name: String, return_to: Op
     }
 
 
-    let new_file: DirectoryItem = DirectoryItem {
+    let mut new_file: DirectoryItem = DirectoryItem {
         flags,
         name_length: name.len().try_into().expect("Already checked name length."),
         name,
         location: new_inode_location,
     };
 
-    directory_block.add_item(new_file, return_to)?;
+    // This is our last disk operation so we will pass in the return_to.
+    directory_block.add_item(&new_file, return_to)?;
     // If we're here, that worked. We are all done adding the item to the directory.
 
-    Ok(finished_new_file)
+    // This function always returns a directory item with the disk set, regardless if it was local to the
+    // DirectoryBlock that was passed in.
+
+    if new_file.location.disk.is_none() {
+        // It's not set already, so it was local to the DirectoryBlock, so we grab the disk from that
+        new_file.location.disk = Some(directory_block_origin_disk)
+    }
+    // All done.
+    // Dont need to swap disks, already did that on the item add.
+    Ok(new_file)
 }
 
 /// Just flushes the current FileExtentBlock to disk, nice helper function

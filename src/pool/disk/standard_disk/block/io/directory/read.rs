@@ -20,7 +20,7 @@ impl DirectoryBlock {
     /// May swap disks.
     ///
     /// Optionally returns to a specified disk when done.
-    pub fn contains_item(
+    pub fn find_item(
         &self,
         item_to_find: &NamedItem,
         return_to: Option<u16>,

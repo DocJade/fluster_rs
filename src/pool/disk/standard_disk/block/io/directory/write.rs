@@ -34,7 +34,7 @@ impl DirectoryBlock {
     /// Returns nothing.
     pub fn add_item(
         self,
-        item: DirectoryItem,
+        item: &DirectoryItem,
         return_to: Option<u16>,
     ) -> Result<(), FloppyDriveError> {
         go_add_item(self, item, return_to)
@@ -73,7 +73,7 @@ fn go_make_directory(
     // go get a new directory block, which would possibly just swap disks again, and our final update
     // to the original directory block has its origin already specified with block_origin.
     if directory
-        .contains_item(&NamedItem::Directory(name.clone()), None)?
+        .find_item(&NamedItem::Directory(name.clone()), None)?
         .is_some()
     {
         // We are attempting to create a duplicate item.
@@ -138,7 +138,7 @@ fn go_make_directory(
     // Put it into the caller directory!
     // We dont need to pass in a return disk, since we will return ourselves next if needed.
     trace!("Adding the new directory to the caller...");
-    directory.add_item(final_directory_item, None)?;
+    directory.add_item(&final_directory_item, None)?;
 
     // Go back to the return disk if needed
     if let Some(number) = return_to {
@@ -177,7 +177,7 @@ fn go_make_new_directory_block() -> Result<DiskPointer, FloppyDriveError> {
 // Add an item to a directory
 fn go_add_item(
     directory: DirectoryBlock,
-    item: DirectoryItem,
+    item: &DirectoryItem,
     return_to: Option<u16>,
 ) -> Result<(), FloppyDriveError> {
     debug!("Adding new item to directory...");
@@ -191,7 +191,8 @@ fn go_add_item(
     let mut new_block_origin: DiskPointer = directory.block_origin;
     let original_location: DiskPointer = directory.block_origin;
     // If we swap disks, we need to update the item to not be on the local disk anymore.
-    let mut item_to_add: DirectoryItem = item;
+    // We clone here so higher up we can keep directory items that are added to directories instead of consuming them on write.
+    let mut item_to_add: DirectoryItem = item.clone(); 
 
     // Now for the loop
     loop {

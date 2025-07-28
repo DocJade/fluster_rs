@@ -45,7 +45,7 @@ fn add_directory_and_list() {
     let new_block = Pool::root_directory(None).unwrap();
     assert!(
         new_block
-            .contains_item(&NamedItem::Directory("test".to_string()), None)
+            .find_item(&NamedItem::Directory("test".to_string()), None)
             .unwrap()
             .is_some()
     );
