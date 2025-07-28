@@ -8,7 +8,7 @@
 
 use log::{debug, trace};
 
-use crate::pool::disk::generic::block::block_structs::BlockError;
+use crate::pool::{disk::generic::block::block_structs::BlockError, pool_actions::pool_struct::GLOBAL_POOL};
 
 // To be able to allocate blocks, we need a couple things
 pub trait BlockAllocation {

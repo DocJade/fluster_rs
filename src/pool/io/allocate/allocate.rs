@@ -6,12 +6,12 @@ use crate::pool::{
     disk::{
         drive_struct::{DiskType, FloppyDrive, FloppyDriveError},
         generic::{
-            block::allocate::block_allocation::BlockAllocation,
-            generic_structs::pointer_struct::DiskPointer,
+            block::{allocate::block_allocation::BlockAllocation, block_structs::RawBlock, crc::add_crc_to_block},
+            generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO,
         },
         standard_disk::standard_disk_struct::StandardDisk,
     },
-    pool_actions::pool_struct::{GLOBAL_POOL, Pool},
+    pool_actions::pool_struct::{Pool, GLOBAL_POOL},
 };
 
 impl Pool {
@@ -38,7 +38,7 @@ impl Pool {
     /// Returns disk pointers for the found blocks, or a disk error.
     pub fn find_free_pool_blocks(blocks: u16) -> Result<Vec<DiskPointer>, FloppyDriveError> {
         // We will not be marking the blocks as used.
-        go_find_free_pool_blocks(blocks, false)
+        go_find_free_pool_blocks(blocks, false, false)
     }
     /// Finds blocks across the entire pool.
     /// 
@@ -53,19 +53,22 @@ impl Pool {
     /// 
     /// This will mark the blocks as allocated.
     /// 
+    /// You can optionally also set the CRC on the new empty blocks, which is useful for
+    /// new file blocks.
+    /// 
     /// Will add new disks if needed.
     /// 
     /// May swap disks, will not return to where it started.
     /// 
     /// Returns disk pointers for the newly reserved blocks, or a disk error.
-    pub fn find_and_allocate_pool_blocks(blocks: u16) -> Result<Vec<DiskPointer>, FloppyDriveError> {
+    pub fn find_and_allocate_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointer>, FloppyDriveError> {
         // This is just an abstraction to force a different function name, even though
         // the function it calls is the same as find_free_pool_blocks()
-        go_find_free_pool_blocks(blocks, true)
+        go_find_free_pool_blocks(blocks, true, add_crc)
     }
 }
 
-fn go_find_free_pool_blocks(blocks: u16, mark: bool) -> Result<Vec<DiskPointer>, FloppyDriveError> {
+fn go_find_free_pool_blocks(blocks: u16, mark: bool, add_crc: bool) -> Result<Vec<DiskPointer>, FloppyDriveError> {
     debug!("Attempting to allocate {blocks} blocks across the pool...");
     debug!("We will _{}_ be marking the blocks as used.", if mark {"will"} else {"will not"});
 
@@ -128,6 +131,23 @@ fn go_find_free_pool_blocks(blocks: u16, mark: bool) -> Result<Vec<DiskPointer>,
                 // Allocate those blocks if needed.
                 if mark {
                     disk.allocate_blocks(&ok)?;
+                    // We also need to update the global pool to say these were marked as used, otherwise we would never know.
+                    // Trust me I found out the hard way.
+                    debug!("Updating the pool's free block count...");
+                    debug!("Locking GLOBAL_POOL...");
+                    GLOBAL_POOL
+                        .get()
+                        .expect("single threaded")
+                        .try_lock()
+                        .expect("single threaded")
+                        .header
+                        .pool_standard_blocks_free -= ok.len() as u16;
+                }
+
+                // Add crc to blocks if requested.
+                // You must have already marked the new block.
+                if add_crc && mark {
+                    write_empty_crc(&ok, &mut disk)?;
                 }
 
                 break;
@@ -148,6 +168,22 @@ fn go_find_free_pool_blocks(blocks: u16, mark: bool) -> Result<Vec<DiskPointer>,
                 // Allocate those blocks if needed.
                 if mark {
                     disk.allocate_blocks(&blockie_doos)?;
+                    // We also need to update the global pool to say these were marked as used, otherwise we would never know.
+                    // Trust me I found out the hard way.
+                    debug!("Updating the pool's free block count...");
+                    debug!("Locking GLOBAL_POOL...");
+                    GLOBAL_POOL
+                        .get()
+                        .expect("single threaded")
+                        .try_lock()
+                        .expect("single threaded")
+                        .header
+                        .pool_standard_blocks_free -= blockie_doos.len() as u16;
+                }
+                // Add crc to blocks if requested
+                // You must have already marked the new block.
+                if add_crc && mark {
+                    write_empty_crc(&blockie_doos, &mut disk)?;
                 }
 
                 // Waiter! Waiter! More disks please!
@@ -156,6 +192,8 @@ fn go_find_free_pool_blocks(blocks: u16, mark: bool) -> Result<Vec<DiskPointer>,
             }
         }
     }
+
+
 
     // We will sort the resulting vector to make to group the disks together, this will
     // reduce swapping.
@@ -173,4 +211,30 @@ fn block_indexes_to_pointers(blocks: Vec<u16>, disk: u16) -> Vec<DiskPointer> {
         result.push(DiskPointer { disk, block });
     }
     result
+}
+
+/// Sometimes we need a new block that is empty, but we still need to have the crc set.
+/// Assumes block are already marked.
+/// Will not swap disks.
+/// Assumes blocks are for the disk currently in the drive.
+fn write_empty_crc(blocks: &[u16], disk: &mut StandardDisk) -> Result<(), FloppyDriveError> {
+    // These new blocks do not have their CRC set, we need to just write empty blocks to them to set the crc.
+    let mut empty_data: [u8; 512] = [0_u8; 512];
+    // CRC that sucker
+    add_crc_to_block(&mut empty_data);
+
+    // Make block to write, must update inside of loop.
+    let mut empty_raw_block: RawBlock = RawBlock {
+        block_index: u16::MAX,
+        originating_disk: None, // We are writing.
+        data: empty_data,
+    };
+
+    for block in blocks {
+        empty_raw_block.block_index = *block;
+        disk.checked_update(&empty_raw_block)?;
+    }
+
+    // All of the blocks now have a empty block with a crc on it.
+    Ok(())
 }

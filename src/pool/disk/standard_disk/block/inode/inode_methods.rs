@@ -508,3 +508,19 @@ impl InodeBlock {
         }
     }
 }
+
+
+impl InodeFile {
+    /// New empty inode files
+    /// Pointer points to the first extent block.
+    pub fn new(disk_pointer: DiskPointer) -> Self {
+        Self {
+            size: 0, // New files are empty
+            pointer: disk_pointer,
+        }
+    }
+    /// Get size of a file
+    pub fn get_size(&self) -> u64 {
+        self.size
+    }
+}

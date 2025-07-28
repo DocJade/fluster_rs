@@ -272,6 +272,12 @@ impl DirectoryItem {
         // Flags
         vec.push(self.flags.bits());
 
+        // Make sure that the inode location has None if its on local, and vice versa
+        if self.flags.contains(DirectoryFlags::OnThisDisk) {
+            // Make sure that Disk is set to NONE!
+            assert!(self.location.disk.is_none());
+        }
+
         // Item name length
         vec.push(self.name_length);
 

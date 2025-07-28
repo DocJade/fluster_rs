@@ -1,6 +1,6 @@
 // We need to go to seek points and such.
 
-use crate::pool::disk::{generic::generic_structs::pointer_struct::DiskPointer, standard_disk::block::{file_extents::file_extents_methods::DATA_BLOCK_OVERHEAD, inode::inode_struct::InodeFile}};
+use crate::pool::disk::{standard_disk::block::{file_extents::file_extents_methods::DATA_BLOCK_OVERHEAD, inode::inode_struct::InodeFile}};
 
 impl InodeFile {
     /// Find where a seek lands.

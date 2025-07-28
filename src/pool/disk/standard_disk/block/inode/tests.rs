@@ -15,11 +15,11 @@ use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeFile;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeFlags;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeTimestamp;
+use crate::pool::pool_actions::pool_struct::Pool;
 use rand::Rng;
 use rand::rngs::ThreadRng;
 
 use test_log::test; // We want to see logs while testing.
-
 #[test]
 fn blank_inode_block_serialization() {
     let mut test_block: InodeBlock = InodeBlock::new();

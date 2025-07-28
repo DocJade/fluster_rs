@@ -3,9 +3,9 @@
 // We will take in InodeFile(s) instead of Extent related types, since we need info about how big files are so they are easier to extend.
 // Creating files is handles on the directory side, since new files just have a name and location.
 
-use std::cmp::max;
+use std::{cmp::max, u16};
 
-use crate::pool::{disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::{block::{block_structs::RawBlock, crc::add_crc_to_block}, generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::{block::{directory::directory_struct::DirectoryBlock, file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::{ExtentFlags, FileExtent, FileExtentBlock, FileExtentBlockFlags}}, inode::inode_struct::InodeFile}, standard_disk_struct::StandardDisk}}, pool_actions::pool_struct::Pool};
+use crate::pool::{disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::{block::{block_structs::RawBlock, crc::add_crc_to_block}, generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::{block::{directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem}, file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::{ExtentFlags, FileExtent, FileExtentBlock, FileExtentBlockFlags}}, inode::inode_struct::{Inode, InodeFile, InodeFlags, InodeLocation, InodeTimestamp}}, standard_disk_struct::StandardDisk}}, pool_actions::pool_struct::Pool};
 
 impl InodeFile {
     /// Update the contents of a file starting at the provided seek point.
@@ -14,7 +14,7 @@ impl InodeFile {
     /// Optionally returns to a provided disk when done.
     /// 
     /// Returns number of bytes written.
-    fn write(self, bytes: &[u8], seek_point: u64, return_to: Option<u16>) -> Result<u64, FloppyDriveError> {
+    pub fn write(self, bytes: &[u8], seek_point: u64, return_to: Option<u16>) -> Result<u64, FloppyDriveError> {
        go_write(self, bytes, seek_point, return_to)
     }
     /// Deletes a file by deallocating every block the file used to take up, including
@@ -37,8 +37,8 @@ impl DirectoryBlock {
     /// Returns the created file.
     /// 
     /// Should include extension iirc?
-    fn new_file(self, name: String) -> InodeFile {
-        todo!();
+    pub fn new_file(self, name: String, return_to: Option<u16>) -> Result<InodeFile, FloppyDriveError> {
+        go_make_new_file(self, name, return_to)
     }
 }
 
@@ -50,13 +50,21 @@ fn go_write(inode: InodeFile, bytes: &[u8], seek_point: u64, return_to: Option<u
     // get the seek point
     let (block_index, mut byte_index) = InodeFile::byte_finder( seek_point);
 
+    // The byte_finder already skips the flag, so it ends up adding one, we need to subtract that.
+    // TODO: This is a bandaid fix. this logic is ugly.
+    byte_index -= 1;
+
     // Make sure we actually have a block at that offset. We cannot start writing from unallocated space.
     assert!(block_index <= blocks.len());
     
     // Now we can calculate where the final byte of this write will end up.
     // Minus 1, since we are writing to the byte we start the seek from
     // IE: if we write 1 byte from out offset, we don't actually move forwards into the next byte.
-    let (final_block_index, _) = InodeFile::byte_finder(seek_point + bytes.len() as u64 - 1);
+    let (mut final_block_index, _) = InodeFile::byte_finder(seek_point + bytes.len() as u64 - 1);
+
+    // If final block index is 0, we still need at least 1 block, since block 0 is the first block.
+    // Thus we must always add 1.
+    final_block_index += 1;
 
     // Special case, if we have 0 blocks, everything up till now works fine, but we always need at least 1 block to write into.
     // To make my life easier, we will do it here instead of relying on the caller.
@@ -113,10 +121,10 @@ fn go_write(inode: InodeFile, bytes: &[u8], seek_point: u64, return_to: Option<u
             floppy_disk = new_disk;
         }
         // Update the block
-        let written = update_block(*block, &bytes[bytes_written..], byte_index)?;
+        let written = update_block(*block, &bytes[bytes_written..], byte_write_index)?;
         // After the first write, the offset should be fixed now, since we've either written all of our bytes, in
         // which case we would be done, or we ran out of room in the block, thus the next block's offset would be 0.
-        byte_index = 0;
+        byte_write_index = 0;
         // Update how many bytes we've written
         bytes_written += written;
         // Keep going!
@@ -193,7 +201,8 @@ fn update_block(block: DiskPointer, bytes: &[u8], offset: u16) -> Result<usize, 
 fn expand_file(inode_file: InodeFile, blocks: u16) -> Result<Vec<DiskPointer>, FloppyDriveError> {
     // Go grabby some new blocks.
     // These will be already reserved for us.
-    let reserved_blocks = Pool::find_and_allocate_pool_blocks(blocks)?;
+    // We also need to write the CRC for later.
+    let reserved_blocks = Pool::find_and_allocate_pool_blocks(blocks, true)?;
 
     // Make some extents from that
     let new_extents = pointers_into_extents(&reserved_blocks);
@@ -399,6 +408,88 @@ fn pointers_into_extents(pointers: &[DiskPointer]) -> Vec<FileExtent> {
         }
     }
     new_extents
+}
+
+/// Create a new file.
+fn go_make_new_file(directory_block: DirectoryBlock, name: String, return_to: Option<u16>) -> Result<InodeFile, FloppyDriveError> {
+    // Directory blocks already have a method to add a new item to them, so we just need
+    // to create that item to add.
+
+    // New files must have a filename that is <= u8::MAX
+    assert!(name.len() <= u8::MAX.into());
+
+    // Timestamp for file creation
+    let right_now: InodeTimestamp = InodeTimestamp::now();
+    
+    let in_progress = Pool::find_free_pool_blocks(1)?;
+    let reserved_block: DiskPointer = *in_progress.last().expect("Only asked for one block.");
+    
+    // Now that we have the new block we need a FileExtentBlock to write into it.
+    let mut new_block: FileExtentBlock = FileExtentBlock::new();
+    new_block.block_origin = reserved_block;
+
+    // No need to set the marker bit since this is a file ofc.
+
+    // Now let's write that new block
+
+    let mut disk: StandardDisk = match FloppyDrive::open(reserved_block.disk)? {
+        DiskType::Standard(standard_disk) => standard_disk,
+        _ => unreachable!("We should always get a standard disk when we ask for a new block from the pool."),
+    };
+
+    // write that block
+    let raw: RawBlock = new_block.to_block(reserved_block.block);
+    // Block is not marked as reserved, so this is a write.
+    disk.checked_write(&raw)?;
+
+    // Construct the file that we'll be returning.
+    let finished_new_file: InodeFile = InodeFile::new(reserved_block);
+
+    // Now that the block has been written, put that sucker into the directory
+    
+    // We do need an inode location tho, so get one
+    let new_inode: Inode = Inode {
+        flags: {
+            // We need to set the marker bit and the inode type (file)
+            let mut inner = InodeFlags::MarkerBit;
+            inner.insert(InodeFlags::FileType);
+            inner
+        },
+        file: Some(finished_new_file),
+        directory: None,
+        created: right_now,
+        modified: right_now,
+    };
+
+    let mut new_inode_location = Pool::fast_add_inode(new_inode)?;
+
+    // Wrap it all up in a little bow to put into the directory
+
+    // Now we need to set up the flags for the new directory item
+    // Flag
+    let mut flags: DirectoryFlags = DirectoryFlags::MarkerBit;
+
+    // If the new inode location is on this disk we must set the location, otherwise clear it.
+    if new_inode_location.disk.expect("Should be there") == directory_block.block_origin.disk {
+        // We need to remove the disk info.
+        flags.insert(DirectoryFlags::OnThisDisk);
+        new_inode_location.disk = None;
+    } else {
+        // Otherwise, this is on another disk, and we do not need to do anything.
+    }
+
+
+    let new_file: DirectoryItem = DirectoryItem {
+        flags,
+        name_length: name.len().try_into().expect("Already checked name length."),
+        name,
+        location: new_inode_location,
+    };
+
+    directory_block.add_item(new_file, return_to)?;
+    // If we're here, that worked. We are all done adding the item to the directory.
+
+    Ok(finished_new_file)
 }
 
 /// Just flushes the current FileExtentBlock to disk, nice helper function
