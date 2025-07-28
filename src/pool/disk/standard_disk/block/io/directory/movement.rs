@@ -28,19 +28,15 @@ impl DirectoryBlock {
     ) -> Result<Option<DirectoryBlock>, FloppyDriveError> {
         info!("Attempting to CD to `{directory_name}`");
         // Get all items in this directory
-        let items = self.list(return_to)?;
-        // Is it in there?
-        let wanted = if let Some(item) =
-            NamedItem::Directory(directory_name.clone()).find_in(items.as_slice())
-        {
-            // there it is!
-            info!("Directory exists.");
-            item
-        } else {
-            // Directory does not exist.
+
+        let found_dir = self.find_item(&NamedItem::Directory(directory_name), return_to)?;
+        if found_dir.is_none() {
+            // The directory did not exist.
             info!("Directory did not exist.");
-            return Ok(None);
-        };
+            return Ok(None)
+        }
+        info!("Directory exists.");
+        let wanted = found_dir.expect("Just checked");
 
         // Directory exists, time to open that bad boy
         // Extract the location
