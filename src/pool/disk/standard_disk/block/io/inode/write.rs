@@ -10,17 +10,16 @@ use log::trace;
 
 use crate::pool::{
     disk::{
-        drive_struct::{DiskType, FloppyDrive, FloppyDriveError},
+        drive_struct::{FloppyDriveError, JustDiskType},
         generic::{
             block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer,
-            io::checked_io::CheckedIO,
+            io::cache::BlockCache,
         },
         standard_disk::{
-            block::inode::inode_struct::{Inode, InodeBlock, InodeBlockError, InodeLocation},
-            standard_disk_struct::StandardDisk,
+            block::inode::inode_struct::{Inode, InodeBlock, InodeBlockError, InodeLocation}
         },
     },
-    pool_actions::pool_struct::{GLOBAL_POOL, Pool},
+    pool_actions::pool_struct::{Pool, GLOBAL_POOL},
 };
 
 // For the pool implementations, we do not use Self, as we might try to double mut it if the inode
@@ -49,13 +48,8 @@ impl Pool {
             .latest_inode_write;
 
         // load in that block
-        let current_disk: StandardDisk = match FloppyDrive::open(start_pointer.disk)? {
-            DiskType::Standard(standard_disk) => standard_disk,
-            _ => panic!("Incoming inode block must be from a standard disk!"),
-        };
-
-        let start_block: InodeBlock =
-            InodeBlock::from_block(&current_disk.checked_read(start_pointer.block)?);
+        let da_reader: RawBlock = BlockCache::read_block(start_pointer, JustDiskType::Standard)?;
+        let start_block: InodeBlock = InodeBlock::from_block(&da_reader);
 
         let result = go_add_inode(inode, start_block)?;
         // Where that ended up needs to be known
@@ -93,14 +87,9 @@ impl Pool {
         // Start from the origin.
         let start_pointer: DiskPointer = DiskPointer { disk: 1, block: 1 };
 
-        // load in that block
-        let current_disk: StandardDisk = match FloppyDrive::open(start_pointer.disk)? {
-            DiskType::Standard(standard_disk) => standard_disk,
-            _ => panic!("Incoming inode block must be from a standard disk!"),
-        };
+        let da_reader: RawBlock = BlockCache::read_block(start_pointer, JustDiskType::Standard)?;
 
-        let start_block: InodeBlock =
-            InodeBlock::from_block(&current_disk.checked_read(start_pointer.block)?);
+        let start_block: InodeBlock = InodeBlock::from_block(&da_reader);
 
         let result = go_add_inode(inode, start_block)?;
         // Where that ended up needs to be known
@@ -127,13 +116,10 @@ impl Pool {
 fn go_add_inode(inode: Inode, start_block: InodeBlock) -> Result<InodeLocation, FloppyDriveError> {
     // We will start from the provided block.
 
-    // For when we switch disks
-    let mut current_disk: StandardDisk = match FloppyDrive::open(start_block.block_origin.disk)? {
-        DiskType::Standard(standard_disk) => standard_disk,
-        _ => panic!("New inode block must be on a standard disk!"),
-    };
-
+    
+    // For when we switch disks (abstracted away but hehe!)
     let mut current_block_number: u16 = start_block.block_origin.block;
+    let mut current_disk: u16 = start_block.block_origin.disk;
     let mut current_block: InodeBlock = start_block;
     // For when we eventually find a spot.
     let inode_offset: u16;
@@ -162,13 +148,10 @@ fn go_add_inode(inode: Inode, start_block: InodeBlock) -> Result<InodeLocation, 
         let pointer_to_next_block: DiskPointer = get_next_block(current_block.clone())?;
         // Go there
         // We always re-open the disk to get the freshest allocation table.
-        current_disk = match FloppyDrive::open(pointer_to_next_block.disk)? {
-            DiskType::Standard(standard_disk) => standard_disk,
-            _ => panic!("New inode block must be on a standard disk!"),
-        };
+        current_disk = pointer_to_next_block.disk;
 
-        current_block =
-            InodeBlock::from_block(&current_disk.checked_read(pointer_to_next_block.block)?);
+        let reader: RawBlock = BlockCache::read_block(pointer_to_next_block, JustDiskType::Standard)?;
+        current_block = InodeBlock::from_block(&reader);
         current_block_number = pointer_to_next_block.block;
         // start over!
         continue;
@@ -177,11 +160,11 @@ fn go_add_inode(inode: Inode, start_block: InodeBlock) -> Result<InodeLocation, 
     // The inode has now been added to the block, we must write this to disk before continuing.
     let block_to_write: RawBlock = current_block.to_block(current_block_number);
     // We are updating, because how would we be writing back to a block that was not allocated when we read it?
-    current_disk.checked_update(&block_to_write)?;
+    BlockCache::update_block(&block_to_write, current_disk, JustDiskType::Standard)?;
 
     // All done! Now we can return where that inode eventually ended up
     Ok(InodeLocation {
-        disk: Some(current_disk.number),
+        disk: Some(current_disk),
         block: current_block_number,
         offset: inode_offset,
     })
@@ -204,16 +187,8 @@ fn get_next_block(current_block: InodeBlock) -> Result<DiskPointer, FloppyDriveE
     the_cooler_inode.new_destination(new_block_location);
     let please_let_me_hit = the_cooler_inode.to_block(the_cooler_inode.block_origin.block);
 
-    // Write the updated block
-    // We may need to swap back to the disk the block we extended was on.
-
-    let mut original_disk = match FloppyDrive::open(the_cooler_inode.block_origin.disk)? {
-        DiskType::Standard(standard_disk) => standard_disk,
-        _ => unreachable!("The disk we started on was non-standard?"),
-    };
-
     // Update that block G
-    original_disk.checked_update(&please_let_me_hit)?;
+    BlockCache::update_block(&please_let_me_hit, the_cooler_inode.block_origin.disk, JustDiskType::Standard)?;
 
     // return the pointer to the next block.
     Ok(new_block_location)
@@ -231,14 +206,9 @@ fn make_new_inode_block() -> Result<DiskPointer, FloppyDriveError> {
     let but_raw: RawBlock = new_block.to_block(new_block_location.block);
 
     // Write it Ralph!
-    let mut disk = match FloppyDrive::open(new_block_location.disk)? {
-        DiskType::Standard(standard_disk) => standard_disk,
-        _ => unreachable!("Non standard disk was given when asking for new block."),
-    };
-
     // I'm gonna write it!
     // New block, so standard write.
-    disk.checked_write(&but_raw)?;
+    BlockCache::write_block(&but_raw, new_block_location.disk, JustDiskType::Standard)?;
 
     // Now throw it back, I mean the pointer
     Ok(*new_block_location)

@@ -1,12 +1,11 @@
 use std::fs::File;
 
 use crate::pool::disk::{
-    generic::{
+    drive_struct::FloppyDriveError, generic::{
         block::{allocate::block_allocation::BlockAllocation, block_structs::{BlockError, RawBlock}},
         disk_trait::GenericDiskMethods,
         io::write::write_block_direct,
-    },
-    unknown_disk::unknown_disk_struct::UnknownDisk,
+    }, unknown_disk::unknown_disk_struct::UnknownDisk
 };
 
 impl GenericDiskMethods for UnknownDisk {
@@ -45,7 +44,7 @@ impl GenericDiskMethods for UnknownDisk {
     }
 
     #[doc = " Sync all in-memory information to disk"]
-    fn flush(&mut self) -> Result<(), BlockError> {
+    fn flush(&mut self) -> Result<(), FloppyDriveError> {
         // There is no in-memory information for this disk.
         unreachable!()
     }
@@ -64,7 +63,7 @@ impl BlockAllocation for UnknownDisk {
     }
     
     #[doc = " Update and flush the allocation table to disk."]
-    fn set_allocation_table(&mut self,new_table: &[u8]) -> Result<(),BlockError> {
+    fn set_allocation_table(&mut self, _new_table: &[u8]) -> Result<(), FloppyDriveError> {
         panic!("Why are we getting the allocation table for an unknown disk?");
     }
 }

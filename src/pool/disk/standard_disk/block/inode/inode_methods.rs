@@ -13,22 +13,19 @@ use super::inode_struct::InodeBlockError;
 use super::inode_struct::InodeBlockFlags;
 use super::inode_struct::InodeFlags;
 use super::inode_struct::InodeReadError;
-use crate::pool::disk::drive_struct::DiskType;
-use crate::pool::disk::drive_struct::FloppyDrive;
 use crate::pool::disk::drive_struct::FloppyDriveError;
+use crate::pool::disk::drive_struct::JustDiskType;
 use crate::pool::disk::generic::block::crc::add_crc_to_block;
 use crate::pool::disk::generic::generic_structs::find_space::find_free_space;
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
-use crate::pool::disk::generic::io::checked_io::CheckedIO;
+use crate::pool::disk::generic::io::cache::BlockCache;
 use crate::pool::disk::generic::{
     block::block_structs::RawBlock, generic_structs::find_space::BytePingPong,
 };
-use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryItem;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::{
     InodeDirectory, InodeFile, InodeTimestamp,
 };
-use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
 
 impl From<RawBlock> for InodeBlock {
     fn from(value: RawBlock) -> Self {
@@ -122,15 +119,9 @@ impl InodeBlock {
         self.inodes_data[inode_offset as usize..inode_offset as usize + old_size].copy_from_slice(&updated_inode.to_bytes());
 
         // Now we need to flush these updates to disk
-        // Open the disk where this lived.
-        let mut disk: StandardDisk = match FloppyDrive::open(self.block_origin.disk)? {
-            DiskType::Standard(standard_disk) => standard_disk,
-            _ => unreachable!("How did this inode block come from a non-standard disk?"),
-        };
 
-        // Update that block
         let raw = self.to_block(self.block_origin.block);
-        disk.checked_update(&raw)?;
+        BlockCache::update_block(&raw, self.block_origin.disk, JustDiskType::Standard)?;
 
         // All done!
         Ok(())

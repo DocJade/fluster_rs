@@ -12,7 +12,6 @@ use crate::{
     filesystem::filesystem_struct::{FilesystemOptions, FlusterFS},
     pool::{
         disk::{
-            generic::generic_structs::pointer_struct::DiskPointer,
             standard_disk::block::io::directory::types::NamedItem,
         },
         pool_actions::pool_struct::Pool,
@@ -28,7 +27,7 @@ fn add_directory() {
     // Use the filesystem starter to get everything in the right spots
     let _fs = get_filesystem();
     // Now try adding a directory to the pool
-    let block = Pool::root_directory(None).unwrap();
+    let block = Pool::root_directory().unwrap();
     block.make_directory("test".to_string(), None).unwrap();
     // We dont even check if its there, we just want to know if writing it failed.
 }
@@ -38,11 +37,11 @@ fn add_directory_and_list() {
     // Use the filesystem starter to get everything in the right spots
     let _fs = get_filesystem();
     // Now try adding a directory to the pool
-    let block = Pool::root_directory(None).unwrap();
+    let block = Pool::root_directory().unwrap();
     block.make_directory("test".to_string(), None).unwrap();
 
     // try to find it again
-    let new_block = Pool::root_directory(None).unwrap();
+    let new_block = Pool::root_directory().unwrap();
     assert!(
         new_block
             .find_item(&NamedItem::Directory("test".to_string()), None)
@@ -62,7 +61,7 @@ fn nested_directory_hell() {
     // Create random directories at random places.
     for _ in 0..10_000 {
         // Load in the root
-        let mut where_are_we = Pool::root_directory(None).unwrap();
+        let mut where_are_we = Pool::root_directory().unwrap();
         // We will open random directories a few times, if they exist.
         loop {
             // List the current directory
@@ -107,11 +106,11 @@ fn directories_switch_disks() -> Result<(), ()> {
     let _fs = get_filesystem();
     for i in 0..3000 {
         // There's only 2880 blocks on the first disk, assuming no overhead.
-        let root_dir = Pool::root_directory(None).unwrap();
+        let root_dir = Pool::root_directory().unwrap();
         root_dir.make_directory(i.to_string(), None).unwrap();
     }
     // Now make sure we actually have directories that claim to live on another disk
-    let root_dir_done = Pool::root_directory(None).unwrap();
+    let root_dir_done = Pool::root_directory().unwrap();
     for dir in root_dir_done.list(None).unwrap() {
         if dir.location.disk.unwrap() != 1 {
             // Made it to another disk.

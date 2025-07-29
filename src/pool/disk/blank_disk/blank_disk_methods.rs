@@ -3,12 +3,11 @@
 use std::fs::File;
 
 use crate::pool::disk::{
-    blank_disk::blank_disk_struct::BlankDisk,
-    generic::{
+    blank_disk::blank_disk_struct::BlankDisk, drive_struct::FloppyDriveError, generic::{
         block::{allocate::block_allocation::BlockAllocation, block_structs::{BlockError, RawBlock}},
         disk_trait::GenericDiskMethods,
         io::write::write_block_direct,
-    },
+    }
 };
 
 impl GenericDiskMethods for BlankDisk {
@@ -36,7 +35,7 @@ impl GenericDiskMethods for BlankDisk {
     }
 
     #[doc = " Set the number of this disk."]
-    fn set_disk_number(&mut self, disk_number: u16) -> () {
+    fn set_disk_number(&mut self, _disk_number: u16) -> () {
         // You cannot set the number of a blank disk.
         unreachable!()
     }
@@ -47,7 +46,7 @@ impl GenericDiskMethods for BlankDisk {
     }
 
     #[doc = " Sync all in-memory information to disk"]
-    fn flush(&mut self) -> Result<(), BlockError> {
+    fn flush(&mut self) -> Result<(), FloppyDriveError> {
         // There is no in-memory information for this disk.
         unreachable!()
     }
@@ -67,7 +66,7 @@ impl BlockAllocation for BlankDisk {
     }
     
     #[doc = " Update and flush the allocation table to disk."]
-    fn set_allocation_table(&mut self, _new_table: &[u8]) -> Result<(),BlockError> {
+    fn set_allocation_table(&mut self, _new_table: &[u8]) -> Result<(), FloppyDriveError> {
         panic!("Why are we allocating blocks on a blank disk?")
         
     }

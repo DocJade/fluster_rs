@@ -6,7 +6,7 @@ use std::fs::File;
 use enum_dispatch::enum_dispatch;
 
 use crate::pool::disk::{
-    drive_struct::DiskType,
+    drive_struct::{DiskType, FloppyDriveError},
     generic::block::block_structs::{BlockError, RawBlock},
 };
 
@@ -39,5 +39,5 @@ pub trait GenericDiskMethods {
 
     /// Sync all in-memory information to disk
     /// Headers and such.
-    fn flush(&mut self) -> Result<(), BlockError>;
+    fn flush(&mut self) -> Result<(), FloppyDriveError>;
 }

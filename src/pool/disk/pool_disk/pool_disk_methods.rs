@@ -7,7 +7,7 @@ use std::fs::File;
 use log::error;
 
 use crate::pool::disk::{
-    drive_struct::{DiskBootstrap, FloppyDriveError},
+    drive_struct::{DiskBootstrap, FloppyDriveError, JustDiskType},
     generic::{
         block::{
             allocate::block_allocation::BlockAllocation,
@@ -15,7 +15,7 @@ use crate::pool::disk::{
             crc::check_crc,
         },
         disk_trait::GenericDiskMethods,
-        io::{checked_io::CheckedIO, read::read_block_direct, write::write_block_direct},
+        io::{cache::BlockCache, read::read_block_direct, write::write_block_direct},
     },
     pool_disk::block::header::header_struct::PoolDiskHeader,
 };
@@ -30,7 +30,9 @@ impl PoolDisk {
 
 // Bootstrapping
 impl DiskBootstrap for PoolDisk {
-    fn bootstrap(file: File, disk_number: u16) -> Result<Self, FloppyDriveError> {
+    fn bootstrap(_file: File, _disk_number: u16) -> Result<Self, FloppyDriveError> {
+        // Annoyingly, we do bootstrapping of the pool disk from elsewhere, so this has to be here just
+        // to fill criteria for DiskBootstrap
         todo!()
     }
 
@@ -59,7 +61,7 @@ impl BlockAllocation for PoolDisk {
         &self.header.block_usage_map
     }
 
-    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), BlockError> {
+    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), FloppyDriveError> {
         self.header.block_usage_map = new_table
             .try_into()
             .expect("Incoming table should be the same as outgoing.");
@@ -101,7 +103,7 @@ impl GenericDiskMethods for PoolDisk {
     }
 
     #[doc = " Sync all in-memory information to disk"]
-    fn flush(&mut self) -> Result<(), BlockError> {
-        self.checked_update(&self.header.to_block())
+    fn flush(&mut self) -> Result<(), FloppyDriveError> {
+        BlockCache::update_block(&self.header.to_block(), self.number, JustDiskType::Pool)
     }
 }

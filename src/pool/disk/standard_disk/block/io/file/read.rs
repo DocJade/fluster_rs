@@ -2,7 +2,7 @@
 
 use log::{debug, trace};
 
-use crate::pool::disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::{generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::{block::{directory::directory_struct::{DirectoryFlags, DirectoryItem}, file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::{FileExtent, FileExtentBlock}}, inode::inode_struct::{InodeBlock, InodeFile}}, standard_disk_struct::StandardDisk}};
+use crate::pool::disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer, io::cache::BlockCache}, standard_disk::{block::{directory::directory_struct::{DirectoryFlags, DirectoryItem}, file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::{FileExtent, FileExtentBlock}}, inode::inode_struct::{InodeBlock, InodeFile}}, standard_disk_struct::StandardDisk}};
 
 impl InodeFile {
     // Local functions
@@ -51,14 +51,14 @@ impl DirectoryItem {
         assert!(self.location.disk.is_some());
         let location = &self.location;
 
-        // Open the disk that this file's inode lives at
-        let disk: StandardDisk = match FloppyDrive::open(location.disk.expect("Guarded"))? {
-            DiskType::Standard(standard_disk) => standard_disk,
-            _ => todo!(),
+        // Get the inode block
+        let pointer: DiskPointer = DiskPointer {
+            disk: location.disk.expect("Assumption 2"),
+            block: location.block,
         };
 
-        // Get the inode block
-        let inode_block: InodeBlock = InodeBlock::from_block(&disk.checked_read(location.block)?);
+        let raw_block: RawBlock = BlockCache::read_block(pointer, JustDiskType::Standard)?;
+        let inode_block: InodeBlock = InodeBlock::from_block(&raw_block);
 
         // Get the actual file
         let inode_file = inode_block.try_read_inode(location.offset).expect("Caller guarantee.");
@@ -145,13 +145,8 @@ fn go_to_extents(
 
         // Update what disk we're on
         current_disk = next_block.disk;
-
-        let disk = match FloppyDrive::open(next_block.disk)? {
-            DiskType::Standard(standard_disk) => standard_disk,
-            _ => unreachable!("Why did the block point to a non-standard disk?"),
-        };
-
-        current_dir_block = FileExtentBlock::from_block(&disk.checked_read(next_block.block)?);
+        let raw_block: RawBlock = BlockCache::read_block(next_block, JustDiskType::Standard)?;
+        current_dir_block = FileExtentBlock::from_block(&raw_block);
 
         // Onwards!
         continue;
@@ -170,15 +165,10 @@ fn go_to_extents(
 
 
 fn go_get_root_block(file: &InodeFile) -> Result<FileExtentBlock, FloppyDriveError> {
-
     // Make sure this actually goes somewhere
     assert!(!file.pointer.no_destination());
-
-    let disk = match FloppyDrive::open(file.pointer.disk)? {
-            DiskType::Standard(standard_disk) => standard_disk,
-            _ => unreachable!("Why did the block point to a non-standard disk?"),
-        };
-    let block = FileExtentBlock::from_block(&disk.checked_read(file.pointer.block)?);
+    let raw_block: RawBlock = BlockCache::read_block(file.pointer, JustDiskType::Standard)?;
+    let block = FileExtentBlock::from_block(&raw_block);
     Ok(block)
 }
 
@@ -266,11 +256,7 @@ fn read_bytes_from_block(block: DiskPointer, offset: u16, bytes_to_read: u32) ->
 
 
     // load the block
-    let disk = match FloppyDrive::open(block.disk)? {
-        crate::pool::disk::drive_struct::DiskType::Standard(standard_disk) => standard_disk,
-        _ => unreachable!("How are we reading a block from a non-standard disk?"),
-    };
-    let block_copy = disk.checked_read(block.block)?;
+    let block_copy: RawBlock = BlockCache::read_block(block, JustDiskType::Standard)?;
     
     // Read that sucker
     // Skip the first byte with the flag

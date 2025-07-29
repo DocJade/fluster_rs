@@ -3,8 +3,8 @@
 use log::info;
 
 use crate::pool::disk::{
-    drive_struct::{DiskType, FloppyDrive, FloppyDriveError},
-    generic::io::checked_io::CheckedIO,
+    drive_struct::{FloppyDrive, FloppyDriveError, JustDiskType},
+    generic::{generic_structs::pointer_struct::DiskPointer, io::cache::BlockCache},
     standard_disk::block::{
         directory::directory_struct::DirectoryBlock, inode::inode_struct::InodeBlock,
         io::directory::types::NamedItem,
@@ -51,20 +51,14 @@ impl DirectoryBlock {
         // already set for us. So we dont have to check.
 
         // Load!
-        let disk = match FloppyDrive::open(
-            final_destination
-                .disk
-                .expect("self.list should set the disk."),
-        )? {
-            DiskType::Standard(standard_disk) => standard_disk,
-            _ => {
-                unreachable!("Directory inode locations should NEVER point to a non-standard disk.")
-            }
-        };
-
         // Now this doesn't point to the next directory block, it points to the next _Inode_ block
         // that points to it.
-        let inode_block = InodeBlock::from_block(&disk.checked_read(final_destination.block)?);
+        let pointer: DiskPointer = DiskPointer {
+            disk: final_destination.disk.expect("Listing sets disk."),
+            block: final_destination.block,
+        };
+
+        let inode_block = InodeBlock::from_block(&BlockCache::read_block(pointer, JustDiskType::Standard)?);
 
         // Now read in the inode
         let inode = inode_block
@@ -79,12 +73,8 @@ impl DirectoryBlock {
         assert!(!actual_next_block.no_destination()); // Just in case...
 
         // Go go go!
-        let block_disk = match FloppyDrive::open(actual_next_block.disk)? {
-            DiskType::Standard(standard_disk) => standard_disk,
-            _ => unreachable!("Directory inodes should point to standard disks."),
-        };
         let new_dir_block: DirectoryBlock =
-            DirectoryBlock::from_block(&block_disk.checked_read(actual_next_block.block)?);
+            DirectoryBlock::from_block(&BlockCache::read_block(actual_next_block, JustDiskType::Standard)?);
 
         // Return to a disk if we need to
         if let Some(number) = return_to {

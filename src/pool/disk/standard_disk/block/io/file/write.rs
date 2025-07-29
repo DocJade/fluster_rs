@@ -5,7 +5,7 @@
 
 use std::{cmp::max, u16};
 
-use crate::pool::{disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::{block::{block_structs::RawBlock, crc::add_crc_to_block}, generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}, standard_disk::{block::{directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem}, file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::{ExtentFlags, FileExtent, FileExtentBlock, FileExtentBlockFlags}}, inode::inode_struct::{Inode, InodeBlock, InodeFile, InodeFlags, InodeLocation, InodeTimestamp}}, standard_disk_struct::StandardDisk}}, pool_actions::pool_struct::Pool};
+use crate::pool::{disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::{block_structs::RawBlock, crc::add_crc_to_block}, generic_structs::pointer_struct::DiskPointer, io::cache::BlockCache}, standard_disk::{block::{directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem}, file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::{ExtentFlags, FileExtent, FileExtentBlock}}, inode::inode_struct::{Inode, InodeBlock, InodeFile, InodeFlags, InodeTimestamp}}, standard_disk_struct::StandardDisk}}, pool_actions::pool_struct::Pool};
 
 impl InodeFile {
     /// Update the contents of a file starting at the provided seek point.
@@ -74,14 +74,14 @@ impl DirectoryItem {
         assert!(self.location.disk.is_some());
         let location = &self.location;
 
-        // Open the disk that this file's inode lives at
-        let disk: StandardDisk = match FloppyDrive::open(location.disk.expect("Guarded"))? {
-            DiskType::Standard(standard_disk) => standard_disk,
-            _ => todo!(),
+        // Get the inode block
+        let the_pointer_in_question: DiskPointer = DiskPointer {
+            disk: location.disk.expect("Guarded"),
+            block: location.block,
         };
 
-        // Get the inode block
-        let mut inode_block: InodeBlock = InodeBlock::from_block(&disk.checked_read(location.block)?);
+        let read: RawBlock = BlockCache::read_block(the_pointer_in_question, JustDiskType::Standard)?;
+        let mut inode_block: InodeBlock = InodeBlock::from_block(&read);
 
         // Get the actual file
         let inode_with_file = inode_block.try_read_inode(location.offset).expect("Caller guarantee.");
@@ -245,11 +245,7 @@ fn update_block(block: DiskPointer, bytes: &[u8], offset: u16) -> Result<usize, 
 
 
     // load the block
-    let mut disk = match FloppyDrive::open(block.disk)? {
-        crate::pool::disk::drive_struct::DiskType::Standard(standard_disk) => standard_disk,
-        _ => unreachable!("How are we reading a block from a non-standard disk?"),
-    };
-    let mut block_copy = disk.checked_read(block.block)?;
+    let mut block_copy: RawBlock = BlockCache::read_block(block, JustDiskType::Standard)?;
     
     // Modify that sucker
     // Skip the first byte with the flag
@@ -262,7 +258,7 @@ fn update_block(block: DiskPointer, bytes: &[u8], offset: u16) -> Result<usize, 
     add_crc_to_block(&mut block_copy.data);
 
     // Write that sucker
-    disk.checked_update(&block_copy)?;
+    BlockCache::update_block(&block_copy, block.disk, JustDiskType::Standard)?;
 
     // Return the number of bytes we wrote.
     Ok(bytes_to_write)
@@ -295,7 +291,7 @@ fn expand_file(inode_file: InodeFile, blocks: u16) -> Result<Vec<DiskPointer>, F
 /// Will swap disks to the location of the new block. Will not return to the disk the caller started on.
 /// 
 /// Sets the new destination in incoming block.
-fn expand_extent_block(block: &mut FileExtentBlock, current_disk: &mut StandardDisk) -> Result<(), FloppyDriveError> {
+fn expand_extent_block(block: &mut FileExtentBlock) -> Result<(), FloppyDriveError> {
     // Get a new block from the pool
     let the_finder = Pool::find_free_pool_blocks(1)?;
     let new_block_location = the_finder.last().expect("Asked for 1.");
@@ -303,21 +299,9 @@ fn expand_extent_block(block: &mut FileExtentBlock, current_disk: &mut StandardD
     // Put the a block there
     let new_block: RawBlock = FileExtentBlock::new().to_block(new_block_location.block);
 
-    // Are we already on the right disk?
-    let caller_disk: u16 = current_disk.number;
-    let new_location_disk: u16 = new_block_location.disk;
-    if caller_disk == new_location_disk {
-        // Need to move.
-        let new_disk = match FloppyDrive::open(new_location_disk)? {
-            DiskType::Standard(standard_disk) => standard_disk,
-            _ => unreachable!("Pool should never return a non-standard disk for new blocks."),
-        };
-        *current_disk = new_disk;
-    }
-
     // write the new block.
     // Write, since we looked for a free block, didn't reserve it yet.
-    current_disk.checked_write(&new_block)?;
+    BlockCache::write_block(&new_block, new_block_location.disk, JustDiskType::Standard)?;
 
     // Now update the block we came in here with
     block.next_block = *new_block_location;
@@ -340,36 +324,21 @@ fn expanding_add_extents(file: InodeFile, extents: &[FileExtent]) -> Result<(), 
 
     // Go get the extent block to add to.
     // We need the final one in the chain.
-    let mut current_disk = file.pointer.disk;
-    let mut current_block = file.pointer.block;
     let mut current_extent_block: FileExtentBlock;
-    let mut floppy_disk: StandardDisk;
-
-    // Load in the first block
-    floppy_disk = match FloppyDrive::open(current_disk)? {
-        DiskType::Standard(standard_disk) => standard_disk,
-        _ => unreachable!("We should never be given a block on a non-standard disk."),
-    };
-
-    current_extent_block = FileExtentBlock::from_block(&floppy_disk.checked_read(current_block)?);
+    let mut current_disk: u16 = u16::MAX;
+    
+    // Read in the initial block
+    let raw_read: RawBlock = BlockCache::read_block(file.pointer, JustDiskType::Standard)?;
+    current_extent_block = FileExtentBlock::from_block(&raw_read);
 
     loop {
         // Is this the final block?
         if !current_extent_block.next_block.no_destination() {
             // No it isn't. We need to load the next block.
-
-            // new disk?
-            if current_disk != current_extent_block.next_block.disk {
-                // Need to load in the new disk.
-                floppy_disk = match FloppyDrive::open(current_disk)? {
-                    DiskType::Standard(standard_disk) => standard_disk,
-                    _ => unreachable!("We should never be given a block on a non-standard disk."),
-                };
-                current_disk = current_extent_block.next_block.disk;
-            }
             // Get the block.
-            current_block = current_extent_block.next_block.block;
-            current_extent_block = FileExtentBlock::from_block(&floppy_disk.checked_read(current_block)?);
+            let reader_mc_deeder: RawBlock = BlockCache::read_block(current_extent_block.next_block, JustDiskType::Standard)?;
+            current_extent_block = FileExtentBlock::from_block(&reader_mc_deeder);
+            current_disk = current_extent_block.next_block.disk;
             // Try again.
             continue;
         }
@@ -412,17 +381,17 @@ fn expanding_add_extents(file: InodeFile, extents: &[FileExtent]) -> Result<(), 
         if new_extents.is_empty() {
             // We ran out of file extents to add. we are done.
             // Flush it
-            flush_to_disk(&current_extent_block, &mut floppy_disk)?;
+            flush_to_disk(&current_extent_block)?;
             // bye
             break
         }
 
         // We must've ran out of room.
         // Expand the block please.
-        expand_extent_block(&mut current_extent_block, &mut floppy_disk)?;
+        expand_extent_block(&mut current_extent_block)?;
         
         // Now we must write that extended block to disk.
-        flush_to_disk(&current_extent_block, &mut floppy_disk)?;
+        flush_to_disk(&current_extent_block)?;
 
         // The block has a new destination now, and has been flushed to disk. There is nothing
         // else left for us to do before just looping again, since the next loop
@@ -521,16 +490,9 @@ fn go_make_new_file(directory_block: DirectoryBlock, name: String, return_to: Op
     // No need to set the marker bit since this is a file ofc.
 
     // Now let's write that new block
-
-    let mut disk: StandardDisk = match FloppyDrive::open(reserved_block.disk)? {
-        DiskType::Standard(standard_disk) => standard_disk,
-        _ => unreachable!("We should always get a standard disk when we ask for a new block from the pool."),
-    };
-
-    // write that block
     let raw: RawBlock = new_block.to_block(reserved_block.block);
     // Block is not marked as reserved, so this is a write.
-    disk.checked_write(&raw)?;
+    BlockCache::write_block(&raw, reserved_block.disk, JustDiskType::Standard)?;
 
     // Construct the file that we'll be returning.
     let finished_new_file: InodeFile = InodeFile::new(reserved_block);
@@ -594,11 +556,11 @@ fn go_make_new_file(directory_block: DirectoryBlock, name: String, return_to: Op
 }
 
 /// Just flushes the current FileExtentBlock to disk, nice helper function
-fn flush_to_disk(block: &FileExtentBlock, current_disk: &mut StandardDisk) -> Result<(), FloppyDriveError> {
+fn flush_to_disk(block: &FileExtentBlock) -> Result<(), FloppyDriveError> {
     // Raw it
     let raw = block.to_block(block.block_origin.block);
     // Write it.
-    current_disk.checked_update(&raw)?;
+    BlockCache::update_block(&raw, block.block_origin.disk, JustDiskType::Standard)?;
     Ok(())
 }
 

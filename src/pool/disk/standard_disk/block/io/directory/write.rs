@@ -3,12 +3,11 @@
 use log::{debug, trace};
 
 use crate::pool::{
-    self,
     disk::{
-        drive_struct::{DiskType, FloppyDrive, FloppyDriveError},
+        drive_struct::{FloppyDrive, FloppyDriveError, JustDiskType},
         generic::{
             block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer,
-            io::checked_io::CheckedIO,
+            io::cache::BlockCache,
         },
         standard_disk::{
             block::{
@@ -16,7 +15,6 @@ use crate::pool::{
                 inode::inode_struct::{Inode, InodeDirectory, InodeFlags, InodeTimestamp},
                 io::directory::types::NamedItem,
             },
-            standard_disk_struct::StandardDisk,
         },
     },
     pool_actions::pool_struct::Pool,
@@ -161,14 +159,10 @@ fn go_make_new_directory_block() -> Result<DiskPointer, FloppyDriveError> {
     let new_directory_location = get_block.first().expect("1 = 1");
 
     // Open the new block and write that bastard
-    let mut new_blocks_disk: StandardDisk = match FloppyDrive::open(new_directory_location.disk)? {
-        pool::disk::drive_struct::DiskType::Standard(standard_disk) => standard_disk,
-        _ => unreachable!("Why did asking for a free block return a non standard disk?"),
-    };
-
     let new_directory_block: RawBlock =
         DirectoryBlock::new().to_block(new_directory_location.block);
-    new_blocks_disk.checked_write(&new_directory_block)?;
+
+    BlockCache::write_block(&new_directory_block, new_directory_location.disk, JustDiskType::Standard)?;
 
     // All done!
     Ok(*new_directory_location)
@@ -219,26 +213,17 @@ fn go_add_item(
         }
 
         // Load the new directory
-        let disk_for_loading = match FloppyDrive::open(new_block_origin.disk)? {
-            DiskType::Standard(standard_disk) => standard_disk,
-            _ => panic!("How are we reading directory info from a non-standard disk?"),
-        };
-        current_directory =
-            DirectoryBlock::from_block(&disk_for_loading.checked_read(new_block_origin.block)?);
+        let read_block: RawBlock = BlockCache::read_block(new_block_origin, JustDiskType::Standard)?;
+        current_directory = DirectoryBlock::from_block(&read_block);
 
         // Time to try again!
         continue;
     }
 
     // Now that the loop has ended, we need to write the block that we just updated.
-    let mut disk = match FloppyDrive::open(new_block_origin.disk)? {
-        DiskType::Standard(standard_disk) => standard_disk,
-        _ => panic!("How are we writing directory info to a non-standard disk?"),
-    };
-
     // We assume the block has already been reserved, we are simply updating it.
     let to_write: RawBlock = current_directory.to_block(new_block_origin.block);
-    disk.checked_update(&to_write)?;
+    BlockCache::update_block(&to_write, new_block_origin.disk, JustDiskType::Standard)?;
 
     // Go to a disk if the caller wants.
     if let Some(number) = return_to {
@@ -273,13 +258,8 @@ fn go_find_next_or_extend_block(
     let mut updated_directory = directory;
     updated_directory.next_block = block_to_load;
 
-    // Write that back.
-    let mut disk: StandardDisk = match FloppyDrive::open(block_origin.disk)? {
-        DiskType::Standard(standard_disk) => standard_disk,
-        _ => panic!("How did we get a non-standard disk?"),
-    };
-
-    disk.checked_update(&updated_directory.to_block(block_origin.block))?;
+    let raw_block: RawBlock = updated_directory.to_block(block_origin.block);
+    BlockCache::update_block(&raw_block, block_origin.disk, JustDiskType::Standard)?;
 
     // All done.
     Ok(block_to_load)

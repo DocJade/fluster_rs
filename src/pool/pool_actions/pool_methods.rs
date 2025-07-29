@@ -6,11 +6,13 @@ use super::pool_struct::GLOBAL_POOL;
 use super::pool_struct::Pool;
 use super::pool_struct::PoolStatistics;
 use crate::pool::disk::drive_struct::DiskBootstrap;
-use crate::pool::disk::drive_struct::DiskType;
 use crate::pool::disk::drive_struct::FloppyDrive;
 use crate::pool::disk::drive_struct::FloppyDriveError;
+use crate::pool::disk::drive_struct::JustDiskType;
+use crate::pool::disk::generic::block::block_structs::RawBlock;
 use crate::pool::disk::generic::disk_trait::GenericDiskMethods;
-use crate::pool::disk::generic::io::checked_io::CheckedIO;
+use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+use crate::pool::disk::generic::io::cache::BlockCache;
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolDiskHeader;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryBlock;
 use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
@@ -43,9 +45,9 @@ impl Pool {
     }
     /// Get the root inode block
     ///
-    /// Will swap disks, optionally returns to a specified disk.
-    pub fn root_directory(return_to: Option<u16>) -> Result<DirectoryBlock, FloppyDriveError> {
-        pool_get_root_directory(return_to)
+    /// May swap disks, but you should be working with enough abstractions to not care.
+    pub fn root_directory() -> Result<DirectoryBlock, FloppyDriveError> {
+        pool_get_root_directory()
     }
 }
 
@@ -57,13 +59,12 @@ impl PoolStatistics {
             total_bytes_read: 0,
             data_bytes_written: 0,
             total_bytes_written: 0,
-            cache_hit_rate: 0.0,
         }
     }
 }
 
 /// Sync information about the pool to disk
-pub(super) fn sync(pool: &Pool) -> Result<(), ()> {
+pub(super) fn sync(_pool: &Pool) -> Result<(), ()> {
     todo!()
 }
 
@@ -192,25 +193,19 @@ fn add_disk<T: DiskBootstrap>() -> Result<T, FloppyDriveError> {
 }
 
 /// Grabs the root inode block
-fn pool_get_root_directory(return_to: Option<u16>) -> Result<DirectoryBlock, FloppyDriveError> {
+fn pool_get_root_directory() -> Result<DirectoryBlock, FloppyDriveError> {
     // Root directory should always be at disk 1 block 2. We just assume that to be the case.
     // Why do we have a root inode that points to the root directory when its always in a static location?
     // Beats me, I forgot why I did that.
-    let disk: StandardDisk = match FloppyDrive::open(1)? {
-        DiskType::Standard(standard_disk) => standard_disk,
-        _ => {
-            // How is disk 1 not a standard disk?
-            error!("Disk 1 was not a standard disk. This should NEVER be possible.");
-            panic!();
-        }
+
+    let root_pointer: DiskPointer = DiskPointer {
+        disk: 1,
+        block: 2,
     };
 
-    let block = DirectoryBlock::from_block(&disk.checked_read(2)?);
-
-    // Swap disk if need be
-    if let Some(number) = return_to {
-        let _ = FloppyDrive::open(number)?;
-    }
+    // Get the root directory block
+    let block_reader: RawBlock = BlockCache::read_block(root_pointer, JustDiskType::Standard)?;
+    let block = DirectoryBlock::from_block(&block_reader);
 
     Ok(block)
 }

@@ -1,6 +1,6 @@
 // We need to go to seek points and such.
 
-use crate::pool::disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError}, generic::io::checked_io::CheckedIO, standard_disk::{block::{directory::directory_struct::{DirectoryFlags, DirectoryItem}, file_extents::file_extents_methods::DATA_BLOCK_OVERHEAD, inode::inode_struct::{Inode, InodeBlock, InodeFile}}, standard_disk_struct::StandardDisk}};
+use crate::pool::disk::{drive_struct::{FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer, io::{cache::BlockCache}}, standard_disk::{block::{directory::directory_struct::DirectoryItem, file_extents::file_extents_methods::DATA_BLOCK_OVERHEAD, inode::inode_struct::{Inode, InodeBlock, InodeFile}}}};
 
 impl InodeFile {
     /// Find where a seek lands.
@@ -28,15 +28,13 @@ impl InodeFile {
 // Get a file
 impl DirectoryItem {
     pub fn get_inode(&self) -> Result<Inode, FloppyDriveError> {
-
-        // get the block
-        let disk: StandardDisk = match FloppyDrive::open(self.location.disk.expect("Reading dir item should always give disk."))? {
-            DiskType::Standard(standard_disk) => standard_disk,
-            _ => unreachable!("Should never get a non-stand disk."),
-        };
-
         // read in that inode block
-        let block: InodeBlock = InodeBlock::from_block(&disk.checked_read(self.location.block)?);
+        let pointer: DiskPointer = DiskPointer {
+            disk: self.location.disk.expect("Read directory items should have an origin."),
+            block: self.location.block,
+        };
+        let raw_block: RawBlock = BlockCache::read_block(pointer, JustDiskType::Standard)?;
+        let block: InodeBlock = InodeBlock::from_block(&raw_block);
 
         // return the inode
         Ok(block.try_read_inode(self.location.offset).expect("Don't feed this invalid offsets! hehehe"))

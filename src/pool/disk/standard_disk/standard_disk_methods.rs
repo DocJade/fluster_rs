@@ -5,7 +5,7 @@ use log::debug;
 
 use crate::pool::{
     disk::{
-        drive_struct::{DiskBootstrap, FloppyDriveError},
+        drive_struct::{DiskBootstrap, DiskType, FloppyDrive, FloppyDriveError, JustDiskType},
         generic::{
             block::{
                 allocate::block_allocation::BlockAllocation,
@@ -13,7 +13,7 @@ use crate::pool::{
             },
             disk_trait::GenericDiskMethods,
             generic_structs::pointer_struct::DiskPointer,
-            io::{checked_io::CheckedIO, read::read_block_direct, write::write_block_direct},
+            io::{cache::BlockCache, read::read_block_direct, write::write_block_direct},
         },
         standard_disk::{
             block::{
@@ -26,7 +26,7 @@ use crate::pool::{
             standard_disk_struct::StandardDisk,
         },
     },
-    pool_actions::pool_struct::{GLOBAL_POOL, Pool},
+    pool_actions::pool_struct::{Pool, GLOBAL_POOL},
 };
 
 // Implementations
@@ -52,7 +52,7 @@ impl DiskBootstrap for StandardDisk {
 
         // Make the disk
         debug!("Running create...");
-        let mut disk = create(file, disk_number)?;
+        let disk = create(file, disk_number)?;
         // Now that we have a disk, we can use the safe IO.
 
         // if this is disk 1 then we need to add:
@@ -70,14 +70,15 @@ impl DiskBootstrap for StandardDisk {
         debug!("Writing inode block...");
         let inode_block = InodeBlock::new();
         let inode_writer = inode_block.to_block(1);
-        disk.checked_write(&inode_writer)?;
-
+        BlockCache::write_block(&inode_writer, disk_number, JustDiskType::Standard)?;
+        
         // Create the directory block
         let directory_block: DirectoryBlock = DirectoryBlock::new();
-
+        
         // Write that to the disk. It goes in block 2.
         debug!("Writing root directory block...");
-        disk.checked_write(&directory_block.to_block(2))?;
+        let the_directory_block: RawBlock = directory_block.to_block(2);
+        BlockCache::write_block(&the_directory_block, disk_number, JustDiskType::Standard)?;
 
         // Now we need to manually add the inode that points to it. Because the inode at the 0 index
         // of block 1 is the inode that points to the root directory
@@ -107,7 +108,12 @@ impl DiskBootstrap for StandardDisk {
 
         // All done!
         debug!("Done bootstrapping standard disk.");
-        Ok(disk)
+        // Since we wrote information to it, we need to read in that disk again before returning it
+        let finished_disk: StandardDisk = match FloppyDrive::open(disk_number)? {
+            DiskType::Standard(standard_disk) => standard_disk,
+            _ => unreachable!("I would eat my shoes if this happened."),
+        };
+        Ok(finished_disk)
     }
 
     fn from_header(block: RawBlock, file: File) -> Self {
@@ -128,7 +134,7 @@ impl BlockAllocation for StandardDisk {
         &self.header.block_usage_map
     }
 
-    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), BlockError> {
+    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), FloppyDriveError> {
         self.header.block_usage_map = new_table
             .try_into()
             .expect("Incoming table should be the same as outgoing.");
@@ -200,7 +206,10 @@ fn initialize_numbered(disk: &mut StandardDisk, disk_number: u16) -> Result<(), 
 
     // New disks do have a few pre-allocated blocks, namely the header and the first inode block
     // But they will be allocated during the creation process.
-    let block_usage_map: [u8; 360] = [0u8; 360];
+    let mut block_usage_map: [u8; 360] = [0u8; 360];
+    // We must mark the first block used, because we cant run the allocated without being able to update
+    // the header block (which needs to be allocated for the update)
+    block_usage_map[0] = 0b10000000;
 
     let header = StandardDiskHeader {
         flags,
@@ -214,10 +223,10 @@ fn initialize_numbered(disk: &mut StandardDisk, disk_number: u16) -> Result<(), 
     // Update the header on the provided disk, since it's currently spoofed.
     disk.header = header;
 
-    // Use the disk interface to write it safely
-    // This will allocate the header block
+    // Since this is a brand new disk without proper header information finalized, we have to do a direct write here
+
     debug!("Writing header...");
-    disk.checked_write(header_block)?;
+    BlockCache::forcibly_write_a_block(header_block, disk)?;
     debug!("Header written.");
 
     // All done!
@@ -260,9 +269,9 @@ impl GenericDiskMethods for StandardDisk {
 
     #[doc = " Sync all in-memory information to disk"]
     #[doc = " Headers and such."]
-    fn flush(&mut self) -> Result<(), BlockError> {
+    fn flush(&mut self) -> Result<(), FloppyDriveError> {
         // We need to write the header back to disk, since that is the only
         // information we can edit in memory without immediately writing.
-        self.checked_update(&self.header.to_block())
+        BlockCache::update_block(&self.header.to_block(), self.number, JustDiskType::Standard)
     }
 }

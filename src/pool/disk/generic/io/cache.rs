@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, sync::Mutex};
 
-use crate::pool::disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}};
+use crate::pool::disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO}};
 use lazy_static::lazy_static;
 use log::debug;
 
@@ -38,12 +38,13 @@ struct CachedBlock {
     data: Vec<u8>,
 }
 
+// TODO: a BlockCache::get_hoit
 /// Statistic information about the cache
 struct BlockCacheStatistics {
     /// Stats for calculating cache hit rates
     hits_and_misses: VecDeque<bool>, // we will track the last 1000 reads
-    /// How many disk swaps we've prevented
-    swaps_saved: u64
+    // How many disk swaps we've prevented
+    //swaps_saved: u64
 }
 
 // New cache
@@ -52,7 +53,7 @@ impl BlockCacheStatistics {
     fn new() -> Self {
         Self {
             hits_and_misses: VecDeque::with_capacity(1000),
-            swaps_saved: 0,
+            // swaps_saved: 0,
         }
     }
     fn get_hit_rate(&self) -> f32 {
@@ -81,6 +82,25 @@ pub struct BlockCache {
 
 // Cache methods
 impl BlockCache {
+    /// Sometimes you need to forcibly write a disk during initialization procedures, so we need a bypass.
+    /// 
+    /// !! == DANGER == !!
+    /// 
+    /// This function should ONLY be used when initializing disks, since this does not properly update the cache.
+    /// The information written with this function will not be written to cache, nor will the information about this
+    /// disk be flushed from the cache.
+    /// 
+    /// This function also does not update the allocation table.
+    /// 
+    /// You better know what you're doing.
+    /// 
+    /// !! == DANGER == !!
+    /// 
+    /// You must pass in the disk to write to.
+    pub fn forcibly_write_a_block<T: GenericDiskMethods>(raw_block: &RawBlock, disk_to_write_on: &mut T) -> Result<(), FloppyDriveError> {
+        go_force_write_block(raw_block, disk_to_write_on)
+    }
+
     /// Reads in a block from disk, attempts to read it from the cache first.
     /// 
     /// You must specify the type of disk the block is being read from, otherwise you cannot guarantee that you
@@ -92,14 +112,14 @@ impl BlockCache {
     /// 
     /// You must specify the type of disk the block is being written to, otherwise you cannot guarantee that you
     /// wrote to the correct disk.
-    pub fn write_block(raw_block: RawBlock, disk_number: u16, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
+    pub fn write_block(raw_block: &RawBlock, disk_number: u16, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
         go_write_cached_block(raw_block, disk_number, expected_disk_type)
     }
     /// Updates pre-existing block on disk, updates cache.
     /// 
     /// You must specify the type of disk the block is being written to, otherwise you cannot guarantee that you
     /// wrote to the correct disk.
-    pub fn update_block(raw_block: RawBlock, disk_number: u16, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
+    pub fn update_block(raw_block: &RawBlock, disk_number: u16, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
         go_update_cached_block(raw_block, disk_number, expected_disk_type)
     }
     /// Check if a block is in the cache.
@@ -107,9 +127,35 @@ impl BlockCache {
     /// Returns the index of the block, if it exists.
     /// 
     /// This function automatically swaps the blocks to move them up in the chain on read.
-    fn find_block(block: &DiskPointer, expected_disk_type: &JustDiskType) -> Option<usize> {
+    fn find_block(block_to_find: &DiskPointer, expected_disk_type: &JustDiskType) -> Option<usize> {
         // The most frequently wanted items will be at the front of the Vec, so a linear search is fine.
-        todo!()
+
+        // Grab a mutable reference to the cache, since if we find the block we are looking for, we will be
+        // updating it's index
+
+        debug!("Locking block cache...");
+        let borrowed_cache: &mut Vec<CachedBlock> = &mut BLOCK_CACHE.lock().expect("Single thread");
+        debug!("Unlocked.");
+
+        // Is it there?
+        let index: Option<usize> = borrowed_cache.iter().position(|cached| cached.block_origin == *block_to_find);
+
+        if let Some(found_index) = index {
+            // Found it! but before we return it, we should move it forwards in the vec
+            // Unless we are already at the front of the vec.
+            if found_index == 0 {
+                // Already at the top
+                return Some(0)
+            }
+            // If the index is not 0, there will always be an item higher than it
+            borrowed_cache.swap(found_index, found_index - 1);
+
+            // Now it's been moved up, so return that index
+            return Some(found_index - 1);
+        }
+        // No it was not there.
+        None
+
     }
     /// Updates the info inside of a block. Does not change block order.
     fn update_or_add_block(block_origin: DiskPointer, expected_disk_type: JustDiskType, data: Vec<u8>) {
@@ -145,6 +191,10 @@ impl BlockCache {
         borrowed_cache.push(new_block);
         return
     }
+    /// Get the hit rate of the cache
+    pub fn get_hit_rate() -> f32 {
+        CACHE_STATISTICS.lock().expect("Single threaded").get_hit_rate()
+    }
 }
 
 // This function also updates the block order after the read.
@@ -158,6 +208,9 @@ fn go_read_cached_block(block_location: DiskPointer, expected_disk_type: JustDis
             originating_disk: Some(cached.block_origin.disk),
             data: cached.data.clone().try_into().expect("This should be 512 bytes."),
         };
+        // Update the hit count
+        CACHE_STATISTICS.lock().expect("Single threaded").record_hit(true);
+
         return Ok(constructed);
     }
 
@@ -176,11 +229,14 @@ fn go_read_cached_block(block_location: DiskPointer, expected_disk_type: JustDis
     // Add it to the cache
     BlockCache::update_or_add_block(block_location, expected_disk_type, read_block.data.to_vec());
 
+    // Update the hit count
+    CACHE_STATISTICS.lock().expect("Single threaded").record_hit(false);
+
     // Return the block.
     return Ok(read_block);
 }
 
-fn go_write_cached_block(raw_block: RawBlock, disk_number: u16, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
+fn go_write_cached_block(raw_block: &RawBlock, disk_number: u16, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
     // Writing time!
     let mut disk = FloppyDrive::open(disk_number)?;
     
@@ -192,11 +248,20 @@ fn go_write_cached_block(raw_block: RawBlock, disk_number: u16, expected_disk_ty
     assert_ne!(disk, JustDiskType::Unknown);
 
     // Write the block.
-    disk.checked_write(&raw_block)?;
+    disk.checked_write(raw_block)?;
+
+    // Now update the cache with the updated block.
+    let extract: DiskPointer = DiskPointer {
+        disk: disk_number,
+        block: raw_block.block_index,
+    };
+
+    BlockCache::update_or_add_block(extract, expected_disk_type, raw_block.data.to_vec());
+
     Ok(())
 }
 
-fn go_update_cached_block(raw_block: RawBlock, disk_number: u16, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
+fn go_update_cached_block(raw_block: &RawBlock, disk_number: u16, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
     // Update like windows, but better idk this joke sucks
     let mut disk = FloppyDrive::open(disk_number)?;
     
@@ -208,6 +273,26 @@ fn go_update_cached_block(raw_block: RawBlock, disk_number: u16, expected_disk_t
     assert_ne!(disk, JustDiskType::Unknown);
 
     // Write the block.
-    disk.checked_update(&raw_block)?;
+    disk.checked_update(raw_block)?;
+
+    // Now update the cache with the updated block.
+    let extract: DiskPointer = DiskPointer {
+        disk: disk_number,
+        block: raw_block.block_index,
+    };
+
+    BlockCache::update_or_add_block(extract, expected_disk_type, raw_block.data.to_vec());
+    Ok(())
+}
+
+fn go_force_write_block<T: GenericDiskMethods>(raw_block: &RawBlock, disk_to_write_on: &mut T) -> Result<(), FloppyDriveError> {
+    // Since we are writing directly to this disk without being able to check if its the right disk, we must assume that the
+    // caller knows what they're doing and is handling loading in the correct disk for us. There aren't any safeguards we can put in at this point.
+    // Since we are force writing, we will invalidate all items in the cache from that disk. Chances are there won't be
+    // anything there in the first place, since this should only be used on disk initialization.
+
+    // This will fail on unknown and blank disks, you must first spoof the disk type before sending it in here.
+
+    disk_to_write_on.unchecked_write_block(raw_block)?;
     Ok(())
 }

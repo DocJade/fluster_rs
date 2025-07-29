@@ -4,23 +4,23 @@
 use log::trace;
 
 use crate::pool::{
-    disk::generic::{
+    disk::{drive_struct::FloppyDriveError, generic::{
         block::{
             allocate::block_allocation::BlockAllocation,
             block_structs::{BlockError, RawBlock},
         },
         disk_trait::GenericDiskMethods,
-    },
+    }},
     pool_actions::pool_struct::GLOBAL_POOL,
 };
 
 // A fancy new trait thats built out of other traits!
 // Automatically add it to all types that implement the subtypes we need.
 impl<T: BlockAllocation + GenericDiskMethods> CheckedIO for T {}
-pub trait CheckedIO: BlockAllocation + GenericDiskMethods {
+pub(super) trait CheckedIO: BlockAllocation + GenericDiskMethods {
     /// Read a block from the disk, ensuring it has already been allocated, as to not read junk.
     /// Panics if block was not allocated.
-    fn checked_read(&self, block_number: u16) -> Result<RawBlock, BlockError> {
+    fn checked_read(&self, block_number: u16) -> Result<RawBlock, FloppyDriveError> {
         trace!("Performing checked read on block {block_number}...",);
         // Block must be allocated
         assert!(self.is_block_allocated(block_number));
@@ -35,7 +35,7 @@ pub trait CheckedIO: BlockAllocation + GenericDiskMethods {
     /// Sets the block as used after writing.
     ///
     /// Panics if block was not free.
-    fn checked_write(&mut self, block: &RawBlock) -> Result<(), BlockError> {
+    fn checked_write(&mut self, block: &RawBlock) -> Result<(), FloppyDriveError> {
         trace!("Performing checked write on block {}...", block.block_index);
         // Make sure block is free
         assert!(!self.is_block_allocated(block.block_index));

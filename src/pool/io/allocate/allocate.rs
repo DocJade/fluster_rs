@@ -4,10 +4,10 @@ use log::debug;
 
 use crate::pool::{
     disk::{
-        drive_struct::{DiskType, FloppyDrive, FloppyDriveError},
+        drive_struct::{DiskType, FloppyDrive, FloppyDriveError, JustDiskType},
         generic::{
             block::{allocate::block_allocation::BlockAllocation, block_structs::RawBlock, crc::add_crc_to_block},
-            generic_structs::pointer_struct::DiskPointer, io::checked_io::CheckedIO,
+            generic_structs::pointer_struct::DiskPointer, io::cache::BlockCache,
         },
         standard_disk::standard_disk_struct::StandardDisk,
     },
@@ -147,7 +147,7 @@ fn go_find_free_pool_blocks(blocks: u16, mark: bool, add_crc: bool) -> Result<Ve
                 // Add crc to blocks if requested.
                 // You must have already marked the new block.
                 if add_crc && mark {
-                    write_empty_crc(&ok, &mut disk)?;
+                    write_empty_crc(&ok, disk.number)?;
                 }
 
                 break;
@@ -183,7 +183,7 @@ fn go_find_free_pool_blocks(blocks: u16, mark: bool, add_crc: bool) -> Result<Ve
                 // Add crc to blocks if requested
                 // You must have already marked the new block.
                 if add_crc && mark {
-                    write_empty_crc(&blockie_doos, &mut disk)?;
+                    write_empty_crc(&blockie_doos, disk.number)?;
                 }
 
                 // Waiter! Waiter! More disks please!
@@ -217,7 +217,9 @@ fn block_indexes_to_pointers(blocks: Vec<u16>, disk: u16) -> Vec<DiskPointer> {
 /// Assumes block are already marked.
 /// Will not swap disks.
 /// Assumes blocks are for the disk currently in the drive.
-fn write_empty_crc(blocks: &[u16], disk: &mut StandardDisk) -> Result<(), FloppyDriveError> {
+/// 
+/// This method only works on standard disks
+fn write_empty_crc(blocks: &[u16], disk: u16) -> Result<(), FloppyDriveError> {
     // These new blocks do not have their CRC set, we need to just write empty blocks to them to set the crc.
     let mut empty_data: [u8; 512] = [0_u8; 512];
     // CRC that sucker
@@ -232,7 +234,7 @@ fn write_empty_crc(blocks: &[u16], disk: &mut StandardDisk) -> Result<(), Floppy
 
     for block in blocks {
         empty_raw_block.block_index = *block;
-        disk.checked_update(&empty_raw_block)?;
+        BlockCache::update_block(&empty_raw_block, disk, JustDiskType::Standard)?;
     }
 
     // All of the blocks now have a empty block with a crc on it.

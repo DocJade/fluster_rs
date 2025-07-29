@@ -3,12 +3,10 @@
 use log::{debug, trace};
 
 use crate::pool::disk::{
-    drive_struct::{DiskType, FloppyDrive, FloppyDriveError},
-    generic::io::checked_io::CheckedIO,
-    standard_disk::block::{
+    drive_struct::{FloppyDrive, FloppyDriveError, JustDiskType}, generic::io::cache::BlockCache, standard_disk::block::{
         directory::directory_struct::{DirectoryBlock, DirectoryItem},
         io::directory::types::NamedItem,
-    },
+    }
 };
 
 impl DirectoryBlock {
@@ -105,12 +103,7 @@ fn go_list_directory(
         // Update what disk we're on
         current_disk = next_block.disk;
 
-        let disk = match FloppyDrive::open(next_block.disk)? {
-            DiskType::Standard(standard_disk) => standard_disk,
-            _ => unreachable!("Why did the block point to a non-standard disk?"),
-        };
-
-        current_dir_block = DirectoryBlock::from_block(&disk.checked_read(next_block.block)?);
+        current_dir_block = DirectoryBlock::from_block(&BlockCache::read_block(next_block, JustDiskType::Standard)?);
 
         // Onwards!
         continue;

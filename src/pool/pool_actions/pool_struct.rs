@@ -39,8 +39,6 @@ pub struct PoolStatistics {
     pub(crate) data_bytes_written: u64,
     /// Bytes we've read from the disk, including file overhead and such
     pub(crate) total_bytes_written: u64,
-    /// Rolling cache hit rate.
-    pub(crate) cache_hit_rate: f32,
 }
 
 /// Somebody peed in the pool.
