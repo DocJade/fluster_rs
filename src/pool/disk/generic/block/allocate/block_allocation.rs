@@ -6,11 +6,18 @@
 // allocate bytes that are already allocated
 // allocate past the end of the table
 
+use enum_dispatch::enum_dispatch;
+use crate::pool::disk::drive_struct::DiskType;
+use crate::pool::disk::pool_disk::pool_disk_struct::PoolDisk;
+use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
+use crate::pool::disk::unknown_disk::unknown_disk_struct::UnknownDisk;
+use crate::pool::disk::blank_disk::blank_disk_struct::BlankDisk;
 use log::{debug, trace};
 
 use crate::pool::{disk::generic::block::block_structs::BlockError, pool_actions::pool_struct::GLOBAL_POOL};
 
 // To be able to allocate blocks, we need a couple things
+#[enum_dispatch(DiskType)]
 pub trait BlockAllocation {
     /// Get the block allocation table
     fn get_allocation_table(&self) -> &[u8];

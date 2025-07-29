@@ -26,6 +26,7 @@ pub struct FloppyDrive {
 }
 
 /// The different types of disks contained within a pool.
+/// This contains disk info.
 #[enum_dispatch]
 #[derive(Debug)]
 pub enum DiskType {
@@ -33,6 +34,27 @@ pub enum DiskType {
     Standard(StandardDisk),
     Unknown(UnknownDisk),
     Blank(BlankDisk),
+}
+
+/// We also have another type that does not contain the disk info.
+#[derive(Debug, Clone, Copy)]
+pub enum JustDiskType {
+    Pool,
+    Standard,
+    Unknown,
+    Blank,
+}
+
+// Let us match the two
+impl PartialEq<JustDiskType> for DiskType {
+    fn eq(&self, other: &JustDiskType) -> bool {
+        match self {
+            DiskType::Pool(_) => matches!(other, JustDiskType::Pool),
+            DiskType::Standard(_) => matches!(other, JustDiskType::Standard),
+            DiskType::Unknown(_) => matches!(other, JustDiskType::Unknown),
+            DiskType::Blank(_) => matches!(other, JustDiskType::Blank),
+        }
+    }
 }
 
 #[derive(Debug, Error, PartialEq)]

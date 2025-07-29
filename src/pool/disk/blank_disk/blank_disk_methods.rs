@@ -5,7 +5,7 @@ use std::fs::File;
 use crate::pool::disk::{
     blank_disk::blank_disk_struct::BlankDisk,
     generic::{
-        block::block_structs::{BlockError, RawBlock},
+        block::{allocate::block_allocation::BlockAllocation, block_structs::{BlockError, RawBlock}},
         disk_trait::GenericDiskMethods,
         io::write::write_block_direct,
     },
@@ -57,5 +57,18 @@ impl GenericDiskMethods for BlankDisk {
 impl BlankDisk {
     pub fn new(file: File) -> Self {
         Self { disk_file: file }
+    }
+}
+
+impl BlockAllocation for BlankDisk {
+    #[doc = " Get the block allocation table"]
+    fn get_allocation_table(&self) ->  &[u8] {
+        panic!("Why are we allocating blocks on a blank disk?")
+    }
+    
+    #[doc = " Update and flush the allocation table to disk."]
+    fn set_allocation_table(&mut self, _new_table: &[u8]) -> Result<(),BlockError> {
+        panic!("Why are we allocating blocks on a blank disk?")
+        
     }
 }
