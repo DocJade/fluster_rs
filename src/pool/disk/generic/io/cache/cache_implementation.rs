@@ -77,6 +77,7 @@ struct TieredCache {
 
 /// The cached blocks
 /// Available in the cache folder to provide conversion methods.
+#[derive(Debug, Clone)]
 pub(super) struct CachedBlock {
     /// Where this block came from.
     block_origin: DiskPointer,
@@ -122,57 +123,83 @@ impl BlockCache {
     /// Add an item to the cache, or update it if the item is already present.
     /// 
     /// If the item is new, it will be placed in the lowest tier in the cache.
-    pub(super) fn add_or_update_item(block: CachedBlock) {
-        go_add_or_update_item_cache(block)
+    pub(super) fn add_or_update_item(item: CachedBlock) {
+        go_add_or_update_item_cache(item)
     }
 
     /// get the hit-rate of the cache
     pub(super) fn get_hit_rate() -> f32 {
         BlockCacheStatistics::get_hit_rate()
     }
+
+    // Promotes a tier 0 cache item upwards.
+    fn promote_item(&mut self, item: CachedBlock) {
+        go_promote_item_cache(self, item)
+    }
 }
 
 // Cache tiers
 impl TieredCache {
-    /// Create a new, empty cache of a set size
+    /// Create a new, empty tier of a set size
     fn new(size: usize) -> Self {
         go_make_new_tier(size)
     }
-    /// Check if an item is in this cache.
+    /// Check if an item is in this tier.
+    /// 
+    /// Adds a hit to the tier statistics if found, otherwise
+    /// leaves the statistics alone.
     /// 
     /// Returns the index of the item if it exists.
     /// 
-    /// Does not update cache order.
+    /// Does not update tier order.
     fn find_item(&self, pointer: &DiskPointer) -> Option<usize> {
         go_find_tier_item(self, pointer)
     }
-    /// Retrieves an item from this cache at the given index.
+    /// Retrieves an item from this tier at the given index.
     /// 
-    /// Will promote the item within this cache.
+    /// Will promote the item within this tier.
     /// 
-    /// Updates cache order.
+    /// Updates tier order.
     /// 
     /// Returns None if there is no item at the index.
-    fn get_item(&self, index: usize) -> Option<CachedBlock> {
+    fn get_item(&mut self, index: usize) -> Option<CachedBlock> {
         go_get_tier_item(self, index)
     }
-    /// Pops the best item of the cache.
+    /// Extracts an item at an index, removing it from the tier.
     /// 
-    /// Returns None if the cache is empty
+    /// Returns None if there is no item at the index.
+    fn extract_item(&mut self, index: usize) -> Option<CachedBlock> {
+        go_extract_tier_item(self, index)
+    }
+    /// Adds an item to this tier. Will be the new highest item in the tier.
+    /// 
+    /// Will panic if tier is already full.
+    fn add_item(&mut self, item: CachedBlock) {
+        go_add_tier_item(self, item)
+    }
+    /// Updates / replaces an item at a given index.
+    /// 
+    /// Will panic if index is empty / out of bounds.
+    fn update_item(&mut self, index: usize, new_item: CachedBlock) {
+        go_update_tier_item(self, index, new_item)
+    }
+    /// Pops the best item of the tier.
+    /// 
+    /// Returns None if the tier is empty
     fn get_best(&mut self) -> Option<CachedBlock> {
         go_get_tier_best(self)
     }
-    /// Pops the worst item of the cache.
+    /// Pops the worst item of the tier.
     /// 
-    /// Returns None if the cache is empty
+    /// Returns None if the tier is empty
     fn get_worst(&mut self) -> Option<CachedBlock> {
         go_get_tier_worst(self)
     }
-    /// Completely wipes a cache.
+    /// Completely wipes a tier.
     fn reset(&mut self) {
         go_reset_tier(self)
     }
-    /// Check if this cache is full
+    /// Check if this tier is full
     fn is_full(&self) -> bool {
         go_check_tier_full(self)
     }
@@ -228,14 +255,109 @@ fn go_try_find_cache(pointer: DiskPointer) -> Option<CachedBlock> {
     // To prevent callers from having to lock the global themselves, we will grab it here ourselves
     // and pass it downwards into any functions that require it.
     let cache = &mut CASHEW.lock().expect("Single threaded.");
-    todo!();
+
+    // Try from highest to lowest
+    // Tier 2
+    if let Some(found) = cache.tier_2.find_item(&pointer) {
+        // In the highest rank!
+        // Grab it, which will also update the order.
+        return cache.tier_2.get_item(found)
+    }
+
+    // Tier 1
+    if let Some(found) = cache.tier_1.find_item(&pointer) {
+        // Somewhat common it seems.
+        // Grab it, which will also update the order.
+        return cache.tier_1.get_item(found)
+    }
+
+    // Tier 0
+    if let Some(found) = cache.tier_0.find_item(&pointer) {
+        // Scraping the barrel, but at least it was there!
+        // Since this is the lowest tier, we need to immediately promote this
+        let item = cache.tier_0.extract_item(found).expect("Just checked.");
+        cache.promote_item(item.clone());
+
+        // Promotion done, return the item we got.
+        return Some(item)
+    }
+
+    // It wasn't in the cache. Record the miss.
+    BlockCacheStatistics::record_hit(false);
+
+    // All done.
+    None
+}
+
+fn go_promote_item_cache(cache: &mut BlockCache, t0_item: CachedBlock) {
+    // This is where the magic happens.
+
+    // Since tiers only change size or have new items added to them when tier 0 has a good read,
+    // we only have to implement a cache-wide promotion scheme for tier 0.
+
+    // See if there is room in tier 1
+    if !cache.tier_1.is_full() {
+        // There was room.
+        cache.tier_1.add_item(t0_item);
+        return
+    }
+
+    // There was not room, we need to move an item upwards.
+    let t1_best: CachedBlock = cache.tier_1.get_best().expect("How are we empty and full?");
+
+    if !cache.tier_2.is_full() {
+        // not full, directly add it.
+        cache.tier_2.add_item(t1_best);
+    } else {
+        // The best cache is full, discard the worst item to make space.
+        let _ = cache.tier_2.get_worst().expect("How are we empty and full?");
+        // Now there is room.
+        cache.tier_2.add_item(t1_best);
+    }
+
+    // Now that tier 1 has had room made, add the t0 to t1
+    cache.tier_1.add_item(t0_item);
+
+    // All done!
 }
 
 fn go_add_or_update_item_cache(block: CachedBlock) {
     // To prevent callers from having to lock the global themselves, we will grab it here ourselves
     // and pass it downwards into any functions that require it.
     let cache = &mut CASHEW.lock().expect("Single threaded.");
-    todo!();
+
+    // Top to bottom.
+
+    if let Some(index) = cache.tier_2.find_item(&block.block_origin) {
+        // Fancy block!
+        cache.tier_2.update_item(index, block);
+        return
+    }
+
+    if let Some(index) = cache.tier_1.find_item(&block.block_origin) {
+        // Useful!
+        cache.tier_1.update_item(index, block);
+        return
+    }
+
+    // Annoyingly, we still have to update the garbage, since reading presumes that stuff in tier 0 is up to date.
+
+    if let Some(index) = cache.tier_0.find_item(&block.block_origin) {
+        // Polished garbage.
+        cache.tier_0.update_item(index, block);
+        return
+    }
+
+    // It wasn't in any of the tiers, so we will add it to tier 0.
+    
+    // Make sure we have room first
+    if cache.tier_0.is_full() {
+        // We don't have room, so we need to wipe the cache.
+        cache.tier_0.reset();
+    }
+
+    // Put it in
+    cache.tier_0.add_item(block);
 }
 
 //
@@ -254,6 +376,18 @@ fn go_find_tier_item(tier: &TieredCache, pointer: &DiskPointer) -> Option<usize>
 }
 
 fn go_get_tier_item(tier: &TieredCache, index: usize) -> Option<CachedBlock> {
+    todo!()
+}
+
+fn go_extract_tier_item(tier: &mut TieredCache, index: usize) -> Option<CachedBlock> {
+    todo!()
+}
+
+fn go_add_tier_item(tier: &mut TieredCache, item: CachedBlock) {
+    todo!()
+}
+
+fn go_update_tier_item(tier: &mut TieredCache, index: usize, new_item: CachedBlock) {
     todo!()
 }
 
