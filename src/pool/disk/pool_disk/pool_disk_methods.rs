@@ -15,7 +15,7 @@ use crate::pool::disk::{
             crc::check_crc,
         },
         disk_trait::GenericDiskMethods,
-        io::{cache::BlockCache, read::read_block_direct, write::write_block_direct},
+        io::{cache::cache_io::CachedBlockIO, read::read_block_direct, write::write_block_direct},
     },
     pool_disk::block::header::header_struct::PoolDiskHeader,
 };
@@ -104,6 +104,6 @@ impl GenericDiskMethods for PoolDisk {
 
     #[doc = " Sync all in-memory information to disk"]
     fn flush(&mut self) -> Result<(), FloppyDriveError> {
-        BlockCache::update_block(&self.header.to_block(), self.number, JustDiskType::Pool)
+        CachedBlockIO::update_block(&self.header.to_block(), self.number, JustDiskType::Pool)
     }
 }

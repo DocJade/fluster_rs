@@ -13,7 +13,7 @@ use crate::pool::{
         drive_struct::{FloppyDriveError, JustDiskType},
         generic::{
             block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer,
-            io::cache::BlockCache,
+            io::cache::cache_io::CachedBlockIO,
         },
         standard_disk::{
             block::inode::inode_struct::{Inode, InodeBlock, InodeBlockError, InodeLocation}
@@ -48,7 +48,7 @@ impl Pool {
             .latest_inode_write;
 
         // load in that block
-        let da_reader: RawBlock = BlockCache::read_block(start_pointer, JustDiskType::Standard)?;
+        let da_reader: RawBlock = CachedBlockIO::read_block(start_pointer, JustDiskType::Standard)?;
         let start_block: InodeBlock = InodeBlock::from_block(&da_reader);
 
         let result = go_add_inode(inode, start_block)?;
@@ -87,7 +87,7 @@ impl Pool {
         // Start from the origin.
         let start_pointer: DiskPointer = DiskPointer { disk: 1, block: 1 };
 
-        let da_reader: RawBlock = BlockCache::read_block(start_pointer, JustDiskType::Standard)?;
+        let da_reader: RawBlock = CachedBlockIO::read_block(start_pointer, JustDiskType::Standard)?;
 
         let start_block: InodeBlock = InodeBlock::from_block(&da_reader);
 
@@ -150,7 +150,7 @@ fn go_add_inode(inode: Inode, start_block: InodeBlock) -> Result<InodeLocation, 
         // We always re-open the disk to get the freshest allocation table.
         current_disk = pointer_to_next_block.disk;
 
-        let reader: RawBlock = BlockCache::read_block(pointer_to_next_block, JustDiskType::Standard)?;
+        let reader: RawBlock = CachedBlockIO::read_block(pointer_to_next_block, JustDiskType::Standard)?;
         current_block = InodeBlock::from_block(&reader);
         current_block_number = pointer_to_next_block.block;
         // start over!
@@ -160,7 +160,7 @@ fn go_add_inode(inode: Inode, start_block: InodeBlock) -> Result<InodeLocation, 
     // The inode has now been added to the block, we must write this to disk before continuing.
     let block_to_write: RawBlock = current_block.to_block(current_block_number);
     // We are updating, because how would we be writing back to a block that was not allocated when we read it?
-    BlockCache::update_block(&block_to_write, current_disk, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&block_to_write, current_disk, JustDiskType::Standard)?;
 
     // All done! Now we can return where that inode eventually ended up
     Ok(InodeLocation {
@@ -188,7 +188,7 @@ fn get_next_block(current_block: InodeBlock) -> Result<DiskPointer, FloppyDriveE
     let please_let_me_hit = the_cooler_inode.to_block(the_cooler_inode.block_origin.block);
 
     // Update that block G
-    BlockCache::update_block(&please_let_me_hit, the_cooler_inode.block_origin.disk, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&please_let_me_hit, the_cooler_inode.block_origin.disk, JustDiskType::Standard)?;
 
     // return the pointer to the next block.
     Ok(new_block_location)
@@ -208,7 +208,7 @@ fn make_new_inode_block() -> Result<DiskPointer, FloppyDriveError> {
     // Write it Ralph!
     // I'm gonna write it!
     // New block, so standard write.
-    BlockCache::write_block(&but_raw, new_block_location.disk, JustDiskType::Standard)?;
+    CachedBlockIO::write_block(&but_raw, new_block_location.disk, JustDiskType::Standard)?;
 
     // Now throw it back, I mean the pointer
     Ok(*new_block_location)

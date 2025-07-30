@@ -7,7 +7,7 @@ use crate::pool::{
         drive_struct::{FloppyDrive, FloppyDriveError, JustDiskType},
         generic::{
             block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer,
-            io::cache::BlockCache,
+            io::cache::cache_io::CachedBlockIO,
         },
         standard_disk::{
             block::{
@@ -162,7 +162,7 @@ fn go_make_new_directory_block() -> Result<DiskPointer, FloppyDriveError> {
     let new_directory_block: RawBlock =
         DirectoryBlock::new().to_block(new_directory_location.block);
 
-    BlockCache::write_block(&new_directory_block, new_directory_location.disk, JustDiskType::Standard)?;
+    CachedBlockIO::write_block(&new_directory_block, new_directory_location.disk, JustDiskType::Standard)?;
 
     // All done!
     Ok(*new_directory_location)
@@ -213,7 +213,7 @@ fn go_add_item(
         }
 
         // Load the new directory
-        let read_block: RawBlock = BlockCache::read_block(new_block_origin, JustDiskType::Standard)?;
+        let read_block: RawBlock = CachedBlockIO::read_block(new_block_origin, JustDiskType::Standard)?;
         current_directory = DirectoryBlock::from_block(&read_block);
 
         // Time to try again!
@@ -223,7 +223,7 @@ fn go_add_item(
     // Now that the loop has ended, we need to write the block that we just updated.
     // We assume the block has already been reserved, we are simply updating it.
     let to_write: RawBlock = current_directory.to_block(new_block_origin.block);
-    BlockCache::update_block(&to_write, new_block_origin.disk, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&to_write, new_block_origin.disk, JustDiskType::Standard)?;
 
     // Go to a disk if the caller wants.
     if let Some(number) = return_to {
@@ -259,7 +259,7 @@ fn go_find_next_or_extend_block(
     updated_directory.next_block = block_to_load;
 
     let raw_block: RawBlock = updated_directory.to_block(block_origin.block);
-    BlockCache::update_block(&raw_block, block_origin.disk, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&raw_block, block_origin.disk, JustDiskType::Standard)?;
 
     // All done.
     Ok(block_to_load)

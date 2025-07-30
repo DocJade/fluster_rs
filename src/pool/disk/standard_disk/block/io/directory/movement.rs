@@ -4,7 +4,7 @@ use log::info;
 
 use crate::pool::disk::{
     drive_struct::{FloppyDrive, FloppyDriveError, JustDiskType},
-    generic::{generic_structs::pointer_struct::DiskPointer, io::cache::BlockCache},
+    generic::{generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO},
     standard_disk::block::{
         directory::directory_struct::DirectoryBlock, inode::inode_struct::InodeBlock,
         io::directory::types::NamedItem,
@@ -58,7 +58,7 @@ impl DirectoryBlock {
             block: final_destination.block,
         };
 
-        let inode_block = InodeBlock::from_block(&BlockCache::read_block(pointer, JustDiskType::Standard)?);
+        let inode_block = InodeBlock::from_block(&CachedBlockIO::read_block(pointer, JustDiskType::Standard)?);
 
         // Now read in the inode
         let inode = inode_block
@@ -74,7 +74,7 @@ impl DirectoryBlock {
 
         // Go go go!
         let new_dir_block: DirectoryBlock =
-            DirectoryBlock::from_block(&BlockCache::read_block(actual_next_block, JustDiskType::Standard)?);
+            DirectoryBlock::from_block(&CachedBlockIO::read_block(actual_next_block, JustDiskType::Standard)?);
 
         // Return to a disk if we need to
         if let Some(number) = return_to {

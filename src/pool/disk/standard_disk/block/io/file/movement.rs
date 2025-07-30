@@ -1,6 +1,6 @@
 // We need to go to seek points and such.
 
-use crate::pool::disk::{drive_struct::{FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer, io::{cache::BlockCache}}, standard_disk::{block::{directory::directory_struct::DirectoryItem, file_extents::file_extents_methods::DATA_BLOCK_OVERHEAD, inode::inode_struct::{Inode, InodeBlock, InodeFile}}}};
+use crate::pool::disk::{drive_struct::{FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO}, standard_disk::{block::{directory::directory_struct::DirectoryItem, file_extents::file_extents_methods::DATA_BLOCK_OVERHEAD, inode::inode_struct::{Inode, InodeBlock, InodeFile}}}};
 
 impl InodeFile {
     /// Find where a seek lands.
@@ -33,7 +33,7 @@ impl DirectoryItem {
             disk: self.location.disk.expect("Read directory items should have an origin."),
             block: self.location.block,
         };
-        let raw_block: RawBlock = BlockCache::read_block(pointer, JustDiskType::Standard)?;
+        let raw_block: RawBlock = CachedBlockIO::read_block(pointer, JustDiskType::Standard)?;
         let block: InodeBlock = InodeBlock::from_block(&raw_block);
 
         // return the inode

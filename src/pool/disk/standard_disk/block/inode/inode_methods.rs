@@ -18,7 +18,7 @@ use crate::pool::disk::drive_struct::JustDiskType;
 use crate::pool::disk::generic::block::crc::add_crc_to_block;
 use crate::pool::disk::generic::generic_structs::find_space::find_free_space;
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
-use crate::pool::disk::generic::io::cache::BlockCache;
+use crate::pool::disk::generic::io::cache::cache_io::CachedBlockIO;
 use crate::pool::disk::generic::{
     block::block_structs::RawBlock, generic_structs::find_space::BytePingPong,
 };
@@ -121,7 +121,7 @@ impl InodeBlock {
         // Now we need to flush these updates to disk
 
         let raw = self.to_block(self.block_origin.block);
-        BlockCache::update_block(&raw, self.block_origin.disk, JustDiskType::Standard)?;
+        CachedBlockIO::update_block(&raw, self.block_origin.disk, JustDiskType::Standard)?;
 
         // All done!
         Ok(())

@@ -12,7 +12,7 @@ use crate::pool::disk::drive_struct::JustDiskType;
 use crate::pool::disk::generic::block::block_structs::RawBlock;
 use crate::pool::disk::generic::disk_trait::GenericDiskMethods;
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
-use crate::pool::disk::generic::io::cache::BlockCache;
+use crate::pool::disk::generic::io::cache::cache_io::CachedBlockIO;
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolDiskHeader;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryBlock;
 use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
@@ -204,7 +204,7 @@ fn pool_get_root_directory() -> Result<DirectoryBlock, FloppyDriveError> {
     };
 
     // Get the root directory block
-    let block_reader: RawBlock = BlockCache::read_block(root_pointer, JustDiskType::Standard)?;
+    let block_reader: RawBlock = CachedBlockIO::read_block(root_pointer, JustDiskType::Standard)?;
     let block = DirectoryBlock::from_block(&block_reader);
 
     Ok(block)

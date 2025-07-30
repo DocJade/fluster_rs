@@ -2,7 +2,7 @@
 
 use log::{debug, trace};
 
-use crate::pool::disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer, io::cache::BlockCache}, standard_disk::{block::{directory::directory_struct::{DirectoryFlags, DirectoryItem}, file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::{FileExtent, FileExtentBlock}}, inode::inode_struct::{InodeBlock, InodeFile}}, standard_disk_struct::StandardDisk}};
+use crate::pool::disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO}, standard_disk::{block::{directory::directory_struct::{DirectoryFlags, DirectoryItem}, file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::{FileExtent, FileExtentBlock}}, inode::inode_struct::{InodeBlock, InodeFile}}, standard_disk_struct::StandardDisk}};
 
 impl InodeFile {
     // Local functions
@@ -57,7 +57,7 @@ impl DirectoryItem {
             block: location.block,
         };
 
-        let raw_block: RawBlock = BlockCache::read_block(pointer, JustDiskType::Standard)?;
+        let raw_block: RawBlock = CachedBlockIO::read_block(pointer, JustDiskType::Standard)?;
         let inode_block: InodeBlock = InodeBlock::from_block(&raw_block);
 
         // Get the actual file
@@ -145,7 +145,7 @@ fn go_to_extents(
 
         // Update what disk we're on
         current_disk = next_block.disk;
-        let raw_block: RawBlock = BlockCache::read_block(next_block, JustDiskType::Standard)?;
+        let raw_block: RawBlock = CachedBlockIO::read_block(next_block, JustDiskType::Standard)?;
         current_dir_block = FileExtentBlock::from_block(&raw_block);
 
         // Onwards!
@@ -167,7 +167,7 @@ fn go_to_extents(
 fn go_get_root_block(file: &InodeFile) -> Result<FileExtentBlock, FloppyDriveError> {
     // Make sure this actually goes somewhere
     assert!(!file.pointer.no_destination());
-    let raw_block: RawBlock = BlockCache::read_block(file.pointer, JustDiskType::Standard)?;
+    let raw_block: RawBlock = CachedBlockIO::read_block(file.pointer, JustDiskType::Standard)?;
     let block = FileExtentBlock::from_block(&raw_block);
     Ok(block)
 }
@@ -256,7 +256,7 @@ fn read_bytes_from_block(block: DiskPointer, offset: u16, bytes_to_read: u32) ->
 
 
     // load the block
-    let block_copy: RawBlock = BlockCache::read_block(block, JustDiskType::Standard)?;
+    let block_copy: RawBlock = CachedBlockIO::read_block(block, JustDiskType::Standard)?;
     
     // Read that sucker
     // Skip the first byte with the flag

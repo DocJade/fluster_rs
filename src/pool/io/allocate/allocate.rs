@@ -7,7 +7,7 @@ use crate::pool::{
         drive_struct::{DiskType, FloppyDrive, FloppyDriveError, JustDiskType},
         generic::{
             block::{allocate::block_allocation::BlockAllocation, block_structs::RawBlock, crc::add_crc_to_block},
-            generic_structs::pointer_struct::DiskPointer, io::cache::BlockCache,
+            generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO,
         },
         standard_disk::standard_disk_struct::StandardDisk,
     },
@@ -234,7 +234,7 @@ fn write_empty_crc(blocks: &[u16], disk: u16) -> Result<(), FloppyDriveError> {
 
     for block in blocks {
         empty_raw_block.block_index = *block;
-        BlockCache::update_block(&empty_raw_block, disk, JustDiskType::Standard)?;
+        CachedBlockIO::update_block(&empty_raw_block, disk, JustDiskType::Standard)?;
     }
 
     // All of the blocks now have a empty block with a crc on it.

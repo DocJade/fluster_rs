@@ -3,7 +3,7 @@
 use log::{debug, trace};
 
 use crate::pool::disk::{
-    drive_struct::{FloppyDrive, FloppyDriveError, JustDiskType}, generic::io::cache::BlockCache, standard_disk::block::{
+    drive_struct::{FloppyDrive, FloppyDriveError, JustDiskType}, generic::io::cache::cache_io::CachedBlockIO, standard_disk::block::{
         directory::directory_struct::{DirectoryBlock, DirectoryItem},
         io::directory::types::NamedItem,
     }
@@ -103,7 +103,7 @@ fn go_list_directory(
         // Update what disk we're on
         current_disk = next_block.disk;
 
-        current_dir_block = DirectoryBlock::from_block(&BlockCache::read_block(next_block, JustDiskType::Standard)?);
+        current_dir_block = DirectoryBlock::from_block(&CachedBlockIO::read_block(next_block, JustDiskType::Standard)?);
 
         // Onwards!
         continue;

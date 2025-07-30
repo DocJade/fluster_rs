@@ -13,7 +13,7 @@ use crate::pool::{
             },
             disk_trait::GenericDiskMethods,
             generic_structs::pointer_struct::DiskPointer,
-            io::{cache::BlockCache, read::read_block_direct, write::write_block_direct},
+            io::{cache::cache_io::CachedBlockIO, read::read_block_direct, write::write_block_direct},
         },
         standard_disk::{
             block::{
@@ -70,7 +70,7 @@ impl DiskBootstrap for StandardDisk {
         debug!("Writing inode block...");
         let inode_block = InodeBlock::new();
         let inode_writer = inode_block.to_block(1);
-        BlockCache::write_block(&inode_writer, disk_number, JustDiskType::Standard)?;
+        CachedBlockIO::write_block(&inode_writer, disk_number, JustDiskType::Standard)?;
         
         // Create the directory block
         let directory_block: DirectoryBlock = DirectoryBlock::new();
@@ -78,7 +78,7 @@ impl DiskBootstrap for StandardDisk {
         // Write that to the disk. It goes in block 2.
         debug!("Writing root directory block...");
         let the_directory_block: RawBlock = directory_block.to_block(2);
-        BlockCache::write_block(&the_directory_block, disk_number, JustDiskType::Standard)?;
+        CachedBlockIO::write_block(&the_directory_block, disk_number, JustDiskType::Standard)?;
 
         // Now we need to manually add the inode that points to it. Because the inode at the 0 index
         // of block 1 is the inode that points to the root directory
@@ -226,7 +226,7 @@ fn initialize_numbered(disk: &mut StandardDisk, disk_number: u16) -> Result<(), 
     // Since this is a brand new disk without proper header information finalized, we have to do a direct write here
 
     debug!("Writing header...");
-    BlockCache::forcibly_write_a_block(header_block, disk)?;
+    CachedBlockIO::forcibly_write_a_block(header_block, disk)?;
     debug!("Header written.");
 
     // All done!
@@ -272,6 +272,6 @@ impl GenericDiskMethods for StandardDisk {
     fn flush(&mut self) -> Result<(), FloppyDriveError> {
         // We need to write the header back to disk, since that is the only
         // information we can edit in memory without immediately writing.
-        BlockCache::update_block(&self.header.to_block(), self.number, JustDiskType::Standard)
+        CachedBlockIO::update_block(&self.header.to_block(), self.number, JustDiskType::Standard)
     }
 }

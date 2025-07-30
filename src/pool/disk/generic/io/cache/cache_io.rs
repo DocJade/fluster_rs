@@ -1,6 +1,6 @@
 // External interaction with the block cache
 
-use crate::pool::disk::{drive_struct::{FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer}};
+use crate::pool::disk::{drive_struct::{FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::{cache::cache_implementation::{BlockCache, CachedBlock}, checked_io::CheckedIO}}};
 
 //
 // =========
@@ -57,6 +57,10 @@ impl CachedBlockIO {
     pub fn update_block(raw_block: &RawBlock, disk_number: u16, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
         go_update_cached_block(raw_block, disk_number, expected_disk_type)
     }
+    /// Get the hit-rate of the underlying cache
+    pub fn get_hit_rate() -> f32 {
+        BlockCache::get_hit_rate()
+    }
 }
 
 //
@@ -70,18 +74,9 @@ impl CachedBlockIO {
 fn go_read_cached_block(block_location: DiskPointer, expected_disk_type: JustDiskType) -> Result<RawBlock, FloppyDriveError> {
     // Grab the block from the cache if it exists.
     
-    if let Some(index) = BlockCache::find_block(&block_location, &expected_disk_type) {
+    if let Some(found_block) = BlockCache::try_find(block_location) {
         // It was in the cache! Return the block...
-        let cached = &BLOCK_CACHE.lock().expect("Single thread")[index];
-        let constructed: RawBlock = RawBlock {
-            block_index: cached.block_origin.block,
-            originating_disk: Some(cached.block_origin.disk),
-            data: cached.data.clone().try_into().expect("This should be 512 bytes."),
-        };
-        // Update the hit count
-        CACHE_STATISTICS.lock().expect("Single threaded").record_hit(true);
-
-        return Ok(constructed);
+        return Ok(found_block.to_raw());
     }
 
     // The block was not in the cache, we need to go get it old-school style.
@@ -97,11 +92,7 @@ fn go_read_cached_block(block_location: DiskPointer, expected_disk_type: JustDis
     let read_block = disk.checked_read(block_location.block)?;
     
     // Add it to the cache
-    todo!();
-    BlockCache::update_or_add_block(block_location, expected_disk_type, read_block.data.to_vec());
-
-    // Update the hit count
-    CACHE_STATISTICS.lock().expect("Single threaded").record_hit(false);
+    BlockCache::add_or_update_item(CachedBlock::from_raw(&read_block, expected_disk_type));
 
     // Return the block.
     return Ok(read_block);
@@ -122,13 +113,7 @@ fn go_write_cached_block(raw_block: &RawBlock, disk_number: u16, expected_disk_t
     disk.checked_write(raw_block)?;
 
     // Now update the cache with the updated block.
-    todo!();
-    let extract: DiskPointer = DiskPointer {
-        disk: disk_number,
-        block: raw_block.block_index,
-    };
-
-    BlockCache::update_or_add_block(extract, expected_disk_type, raw_block.data.to_vec());
+    BlockCache::add_or_update_item(CachedBlock::from_raw(raw_block, expected_disk_type));
 
     Ok(())
 }
@@ -148,13 +133,8 @@ fn go_update_cached_block(raw_block: &RawBlock, disk_number: u16, expected_disk_
     disk.checked_update(raw_block)?;
 
     // Now update the cache with the updated block.
-    todo!();
-    let extract: DiskPointer = DiskPointer {
-        disk: disk_number,
-        block: raw_block.block_index,
-    };
+    BlockCache::add_or_update_item(CachedBlock::from_raw(raw_block, expected_disk_type));
 
-    BlockCache::update_or_add_block(extract, expected_disk_type, raw_block.data.to_vec());
     Ok(())
 }
 

@@ -4,7 +4,7 @@
 use rand::{rngs::ThreadRng, Rng, RngCore};
 use test_log::test;
 
-use crate::pool::{disk::{generic::io::cache::BlockCache, standard_disk::block::{directory::directory_struct::DirectoryItem, io::directory::{tests::get_filesystem, types::NamedItem}}}, pool_actions::pool_struct::Pool}; // We want to see logs while testing.
+use crate::pool::{disk::{generic::io::cache::cache_io::CachedBlockIO, standard_disk::block::{directory::directory_struct::DirectoryItem, io::directory::{tests::get_filesystem, types::NamedItem}}}, pool_actions::pool_struct::Pool}; // We want to see logs while testing.
 
 /// Can we make a new file?
 #[test]
@@ -251,6 +251,6 @@ fn read_and_write_random_files() {
         current_file += 1;
     }
     let stats = fs.pool.lock().unwrap();
-    let cache_hit_rate = BlockCache::get_hit_rate();
+    let cache_hit_rate = CachedBlockIO::get_hit_rate();
     panic!("test");
 }
