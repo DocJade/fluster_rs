@@ -25,7 +25,7 @@
 //  very quickly replaced if they became stale, since the constant read hits that are
 //  expected of these items would move stale items to the lowest positions very quickly.
 
-use std::sync::Mutex;
+use std::{collections::VecDeque, sync::Mutex};
 
 use lazy_static::lazy_static;
 
@@ -72,7 +72,7 @@ struct TieredCache {
     /// How big this cache is.
     size: usize,
     /// The items currently in the cache.
-    items: Vec<CachedBlock>
+    items: VecDeque<CachedBlock>
 }
 
 /// The cached blocks
@@ -162,7 +162,7 @@ impl TieredCache {
     /// Updates tier order.
     /// 
     /// Returns None if there is no item at the index.
-    fn get_item(&mut self, index: usize) -> Option<CachedBlock> {
+    fn get_item(&mut self, index: usize) -> Option<&CachedBlock> {
         go_get_tier_item(self, index)
     }
     /// Extracts an item at an index, removing it from the tier.
@@ -211,7 +211,7 @@ impl CachedBlock {
     pub(super) fn to_raw(&self) -> RawBlock {
         RawBlock {
             block_index: self.block_origin.block,
-            originating_disk: Some(self.block_origin.disk),
+            originating_disk: self.block_origin.disk,
             data: self.data.clone().try_into().expect("Should be 512 bytes."),
         }
     }
@@ -231,17 +231,12 @@ impl CachedBlock {
 // Easier RawBlock to DiskPointer conversions
 impl RawBlock {
     /// Convert this block to a disk pointer.
-    /// Will be none if there was not a disk specified
     fn to_pointer(&self) -> Option<DiskPointer> {
-        if self.originating_disk.is_none() {
-            // Can't make a pointer.
-            return None;
-        }
         let point = DiskPointer {
             disk: self.block_index,
-            block: self.originating_disk.expect("Guarded."),
+            block: self.originating_disk,
         };
-        return Some(point);
+        Some(point)
     }
 }
 
@@ -252,6 +247,10 @@ impl RawBlock {
 //
 
 fn go_try_find_cache(pointer: DiskPointer) -> Option<CachedBlock> {
+
+    // Make sure this is a valid disk pointer, otherwise something is horribly wrong.
+    assert!(!pointer.no_destination());
+
     // To prevent callers from having to lock the global themselves, we will grab it here ourselves
     // and pass it downwards into any functions that require it.
     let cache = &mut CASHEW.lock().expect("Single threaded.");
@@ -261,14 +260,14 @@ fn go_try_find_cache(pointer: DiskPointer) -> Option<CachedBlock> {
     if let Some(found) = cache.tier_2.find_item(&pointer) {
         // In the highest rank!
         // Grab it, which will also update the order.
-        return cache.tier_2.get_item(found)
+        return cache.tier_2.get_item(found).cloned()
     }
 
     // Tier 1
     if let Some(found) = cache.tier_1.find_item(&pointer) {
         // Somewhat common it seems.
         // Grab it, which will also update the order.
-        return cache.tier_1.get_item(found)
+        return cache.tier_1.get_item(found).cloned()
     }
 
     // Tier 0
@@ -322,6 +321,10 @@ fn go_promote_item_cache(cache: &mut BlockCache, t0_item: CachedBlock) {
 }
 
 fn go_add_or_update_item_cache(block: CachedBlock) {
+
+    // Make sure the block has a valid location
+    assert!(!block.block_origin.no_destination());
+
     // To prevent callers from having to lock the global themselves, we will grab it here ourselves
     // and pass it downwards into any functions that require it.
     let cache = &mut CASHEW.lock().expect("Single threaded.");
@@ -368,41 +371,66 @@ fn go_add_or_update_item_cache(block: CachedBlock) {
 
 
 fn go_make_new_tier(size: usize) -> TieredCache {
-    todo!()
+    // New tiers are obviously empty.
+    let mut new_vec: VecDeque<CachedBlock> = VecDeque::new();
+    new_vec.reserve_exact(size);
+    TieredCache {
+        size,
+        items: new_vec,
+    }
 }
 
 fn go_find_tier_item(tier: &TieredCache, pointer: &DiskPointer) -> Option<usize> {
-    todo!()
+    // Does not update order
+    // Just see if it exists.
+    tier.items.iter().position(|x| x.block_origin == *pointer)
 }
 
-fn go_get_tier_item(tier: &TieredCache, index: usize) -> Option<CachedBlock> {
-    todo!()
+fn go_get_tier_item(tier: &mut TieredCache, index: usize) -> Option<&CachedBlock> {
+    // Updates order
+    // First do the swap if needed
+    if index == 0 {
+        // No need to swap, already at the top.
+        return tier.items.get(index)
+    }
+    
+    // Do the swap
+    tier.items.swap(index - 1, index);
+    // return the item, the index has changed.
+    tier.items.get(index - 1)
 }
 
 fn go_extract_tier_item(tier: &mut TieredCache, index: usize) -> Option<CachedBlock> {
-    todo!()
+    // Pops an item from any index, preserves order of other items
+    tier.items.remove(index)
 }
 
 fn go_add_tier_item(tier: &mut TieredCache, item: CachedBlock) {
-    todo!()
+    // New tier items go at the front, since they are the freshest.
+    assert!(!tier.is_full());
+    tier.items.push_front(item);
 }
 
 fn go_update_tier_item(tier: &mut TieredCache, index: usize, new_item: CachedBlock) {
-    todo!()
+    // Replace the item
+    tier.items[index] = new_item
 }
 
 fn go_get_tier_best(tier: &mut TieredCache) -> Option<CachedBlock> {
-    todo!()
+    // Best is at the front
+    tier.items.pop_front()
 }
 
 fn go_get_tier_worst(tier: &mut TieredCache) -> Option<CachedBlock> {
-    todo!()
+    // The worst item is at the end of the vec
+    tier.items.pop_back()
 }
 
 fn go_reset_tier(tier: &mut TieredCache) {
-    todo!()
+    // Completely empties the tier
+    tier.items.clear();
 }
 
 fn go_check_tier_full(tier: &TieredCache) -> bool {
-    todo!()
+    tier.items.len() == tier.size
 }
