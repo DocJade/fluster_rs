@@ -3,6 +3,8 @@
 // Imports
 use thiserror::Error;
 
+use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+
 // Structs, Enums, Flags
 
 /// A raw data block
@@ -11,11 +13,7 @@ use thiserror::Error;
 #[derive(Debug)]
 pub struct RawBlock {
     /// Which block on the disk this is
-    pub block_index: u16,
-    /// Which disk this block is from.
-    /// Does not need to be set when writing blocks,
-    /// but must be set when reading them.
-    pub originating_disk: Option<u16>,
+    pub block_origin: DiskPointer,
     /// The block in its entirety.
     pub data: [u8; 512],
 }

@@ -106,9 +106,6 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, FloppyDriveError> {
                 continue;
             }
         }
-
-        // One of the branch arms has to be hit.
-        unreachable!();
     }
 }
 
@@ -251,10 +248,14 @@ fn pool_header_to_raw_block(header: PoolDiskHeader) -> RawBlock {
     add_crc_to_block(&mut buffer);
 
     // This needs to always go at block 0
+    let block_origin: DiskPointer = DiskPointer {
+        disk: 0, // Pool disk is always disk 0
+        block: 0, // Header is always at block 0
+    };
+
     RawBlock {
-        block_index: 0,
+        block_origin,
         data: buffer,
-        originating_disk: None, // This is on its way to be written.
     }
 }
 

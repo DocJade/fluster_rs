@@ -61,6 +61,10 @@ impl CachedBlockIO {
     pub fn get_hit_rate() -> f32 {
         BlockCache::get_hit_rate()
     }
+    /// Sometimes you just need to remove a block from the cache, not even set it to zeros.
+    pub fn remove_block(block_origin: &DiskPointer) {
+        BlockCache::remove_item(block_origin)
+    }
 }
 
 //

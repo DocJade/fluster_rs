@@ -19,18 +19,13 @@ use test_log::test; // We want to see logs while testing.
 
 #[test]
 fn blank_directory_block_serialization() {
-    let mut test_block: DirectoryBlock = DirectoryBlock::new();
-    // For our equal check to work, we need to set the block to come from the same
-    // disk that we're pretending to read it from.
-    test_block.block_origin = DiskPointer {
+    // We need a origin for the block, even if nonsensical.
+    let block_origin = DiskPointer {
         disk: 420,
         block: 69,
     };
-    let mut serialized = test_block.to_block(69);
-    // Directory blocks assume they are written to disk before being
-    // deserialized, because they must know where they came from.
-    // We'll pretend this came from disk 420...
-    serialized.originating_disk = Some(420);
+    let test_block: DirectoryBlock = DirectoryBlock::new(block_origin);
+    let serialized = test_block.to_block();
     let deserialized = DirectoryBlock::from_block(&serialized);
     assert_eq!(test_block, deserialized)
 }
@@ -48,13 +43,12 @@ fn directory_item_serialization() {
 #[test]
 fn filled_directory_block_serialization() {
     for _ in 0..1000 {
-        let mut test_block: DirectoryBlock = DirectoryBlock::new();
-        // For our equal check to work, we need to set the block to come from the same
-        // disk that we're pretending to read it from.
-        test_block.block_origin = DiskPointer {
+        // We need a origin for the block, even if nonsensical.
+        let block_origin = DiskPointer {
             disk: 420,
             block: 69,
         };
+        let mut test_block: DirectoryBlock = DirectoryBlock::new(block_origin);
         // Fill with random inodes until we run out of room.
         loop {
             match test_block.try_add_item(&DirectoryItem::get_random()) {
@@ -70,11 +64,7 @@ fn filled_directory_block_serialization() {
         }
 
         // Check serialization
-        let mut serialized = test_block.to_block(69);
-        // Directory blocks assume they are written to disk before being
-        // deserialized, because they must know where they came from.
-        // We'll pretend this came from disk 420...
-        serialized.originating_disk = Some(420);
+        let serialized = test_block.to_block();
         let deserialized = DirectoryBlock::from_block(&serialized);
         assert_eq!(test_block, deserialized)
     }
@@ -83,7 +73,12 @@ fn filled_directory_block_serialization() {
 #[test]
 fn add_and_remove_to_directory_block() {
     for _ in 0..1000 {
-        let mut test_block: DirectoryBlock = DirectoryBlock::new();
+        // We need a origin for the block, even if nonsensical.
+        let block_origin = DiskPointer {
+            disk: 420,
+            block: 69,
+        };
+        let mut test_block: DirectoryBlock = DirectoryBlock::new(block_origin);
         // Fill with random inodes until we run out of room.
         let random_item: DirectoryItem = DirectoryItem::get_random();
         test_block.try_add_item(&random_item.clone()).unwrap();
@@ -98,7 +93,12 @@ fn add_and_remove_to_directory_block() {
 #[test]
 fn adding_and_removing_updates_size() {
     for _ in 0..1000 {
-        let mut test_block: DirectoryBlock = DirectoryBlock::new();
+        // We need a origin for the block, even if nonsensical.
+        let block_origin = DiskPointer {
+            disk: 420,
+            block: 69,
+        };
+        let mut test_block: DirectoryBlock = DirectoryBlock::new(block_origin);
         let random_item: DirectoryItem = DirectoryItem::get_random();
         let new_free = test_block.bytes_free;
 

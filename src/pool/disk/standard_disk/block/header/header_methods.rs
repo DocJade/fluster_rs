@@ -2,7 +2,7 @@
 
 use crate::pool::disk::{
     drive_struct::FloppyDriveError,
-    generic::block::{block_structs::RawBlock, crc::add_crc_to_block},
+    generic::{block::{block_structs::RawBlock, crc::add_crc_to_block}, generic_structs::pointer_struct::DiskPointer},
     standard_disk::block::header::header_struct::{StandardDiskHeader, StandardHeaderFlags},
 };
 
@@ -83,10 +83,14 @@ fn to_disk_block(header: &StandardDiskHeader) -> RawBlock {
 
     // Make the RawBlock
     // Disk headers are always block 0.
+    let block_origin = DiskPointer {
+        disk: header.disk_number,
+        block: 0,
+    };
+    
     let finished_block: RawBlock = RawBlock {
-        block_index: 0,
+        block_origin,
         data: buffer,
-        originating_disk: None, // Headers are for writing.
     };
 
     // All done!

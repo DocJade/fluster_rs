@@ -226,15 +226,17 @@ fn write_empty_crc(blocks: &[u16], disk: u16) -> Result<(), FloppyDriveError> {
     add_crc_to_block(&mut empty_data);
 
     // Make block to write, must update inside of loop.
-    let mut empty_raw_block: RawBlock = RawBlock {
-        block_index: u16::MAX,
-        originating_disk: None, // We are writing.
-        data: empty_data,
-    };
-
     for block in blocks {
-        empty_raw_block.block_index = *block;
-        CachedBlockIO::update_block(&empty_raw_block, disk, JustDiskType::Standard)?;
+        let block_origin: DiskPointer = DiskPointer {
+            disk,
+            block: *block,
+        };
+        let empty_raw_block: RawBlock = RawBlock {
+            block_origin,
+            data: empty_data,
+        };
+
+        CachedBlockIO::update_block(&empty_raw_block, empty_raw_block.block_origin.disk, JustDiskType::Standard)?;
     }
 
     // All of the blocks now have a empty block with a crc on it.

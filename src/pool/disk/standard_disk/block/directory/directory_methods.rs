@@ -26,8 +26,8 @@ impl From<RawBlock> for DirectoryBlock {
 
 impl DirectoryBlock {
     /// Block number must be known at creation time for safe writing.
-    pub fn to_block(&self, block_number: u16) -> RawBlock {
-        directory_block_to_bytes(self, block_number)
+    pub fn to_block(&self) -> RawBlock {
+        directory_block_to_bytes(self)
     }
     pub fn from_block(block: &RawBlock) -> Self {
         directory_block_from_bytes(block)
@@ -49,12 +49,14 @@ impl DirectoryBlock {
         directory_block_try_remove_item(self, item)
     }
     /// Create a new directory block.
+    /// 
+    /// Requires the location/destination of this block.
     ///
     /// New directory blocks are the new final block on the disk.
     /// New directory blocks do not point to the next block (as none exists).
     /// Caller is responsible with updating previous block to point to this new block if needed.
-    pub fn new() -> Self {
-        new_directory_block()
+    pub fn new(origin: DiskPointer) -> Self {
+        new_directory_block(origin)
     }
     /// Get the items located within this block.
     /// This function is just to obscure the items by default, so higher up callers
@@ -118,7 +120,7 @@ fn directory_block_try_add_item(
     Ok(())
 }
 
-fn new_directory_block() -> DirectoryBlock {
+fn new_directory_block(origin: DiskPointer) -> DirectoryBlock {
     // New block!
 
     // Flags
@@ -143,15 +145,12 @@ fn new_directory_block() -> DirectoryBlock {
         flags,
         bytes_free,
         next_block,
-        // Expectation: You shouldn't be writing to a DirectoryBlock
-        // that has no location on a disk. You must read a block from disk to
-        // get its origin.
-        block_origin: DiskPointer::new_final_pointer(),
+        block_origin: origin,
         directory_items,
     }
 }
 
-fn directory_block_to_bytes(block: &DirectoryBlock, block_number: u16) -> RawBlock {
+fn directory_block_to_bytes(block: &DirectoryBlock) -> RawBlock {
     // Deconstruct the bock
     let DirectoryBlock {
         flags,
@@ -159,7 +158,6 @@ fn directory_block_to_bytes(block: &DirectoryBlock, block_number: u16) -> RawBlo
         next_block,
         #[allow(unused_variables)] // The items are extracted in a different way
         directory_items,
-        #[allow(unused_variables)] // Block origins are not written to disk.
         block_origin,
     } = block;
 
@@ -183,9 +181,8 @@ fn directory_block_to_bytes(block: &DirectoryBlock, block_number: u16) -> RawBlo
     // All done!
     // This block is going to be written, thus does not need disk information.
     RawBlock {
-        block_index: block_number,
+        block_origin: *block_origin,
         data: buffer,
-        originating_disk: None,
     }
 }
 
@@ -204,8 +201,7 @@ fn directory_block_from_bytes(block: &RawBlock) -> DirectoryBlock {
     let directory_items: Vec<DirectoryItem> =
         DirectoryBlock::item_vec_from_bytes(&block.data[7..7 + 501]);
 
-    // This is from_bytes, meaning we have read this block from disk.
-    let block_origin = DiskPointer::from(block);
+    let block_origin = block.block_origin;
 
     // All done
     DirectoryBlock {

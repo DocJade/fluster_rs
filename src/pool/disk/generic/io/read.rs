@@ -6,6 +6,8 @@
 
 // Imports
 
+use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+
 use super::super::block::block_structs::BlockError;
 use super::super::block::block_structs::RawBlock;
 use super::super::block::crc::check_crc;
@@ -45,9 +47,13 @@ pub(crate) fn read_block_direct(
     }
 
     // send it.
+    let block_origin: DiskPointer = DiskPointer {
+        disk: originating_disk,
+        block: block_index,
+    };
+    
     Ok(RawBlock {
-        block_index,
+        block_origin,
         data: read_buffer,
-        originating_disk: Some(originating_disk),
     })
 }

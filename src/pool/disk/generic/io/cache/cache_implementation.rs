@@ -136,6 +136,13 @@ impl BlockCache {
     fn promote_item(&mut self, item: CachedBlock) {
         go_promote_item_cache(self, item)
     }
+
+    /// Removes an item from the cache if it exists.
+    /// 
+    /// Returns nothing.
+    pub(super) fn remove_item(pointer: &DiskPointer) {
+        go_remove_item_cache(pointer)
+    }
 }
 
 // Cache tiers
@@ -210,8 +217,7 @@ impl CachedBlock {
     /// Turn a CachedBlock into a RawBlock
     pub(super) fn to_raw(&self) -> RawBlock {
         RawBlock {
-            block_index: self.block_origin.block,
-            originating_disk: self.block_origin.disk,
+            block_origin: self.block_origin,
             data: self.data.clone().try_into().expect("Should be 512 bytes."),
         }
     }
@@ -219,24 +225,11 @@ impl CachedBlock {
     /// 
     /// Expects the raw block to already have a disk set.
     pub(super) fn from_raw(block: &RawBlock, disk_type: JustDiskType) -> Self {
-        let pointer = block.to_pointer().expect("Disk should be set before conversion.");
         Self {
-            block_origin: pointer,
+            block_origin: block.block_origin,
             disk_type,
             data: block.data.to_vec(),
         }
-    }
-}
-
-// Easier RawBlock to DiskPointer conversions
-impl RawBlock {
-    /// Convert this block to a disk pointer.
-    fn to_pointer(&self) -> Option<DiskPointer> {
-        let point = DiskPointer {
-            disk: self.block_index,
-            block: self.originating_disk,
-        };
-        Some(point)
     }
 }
 
@@ -329,6 +322,8 @@ fn go_add_or_update_item_cache(block: CachedBlock) {
     // and pass it downwards into any functions that require it.
     let cache = &mut CASHEW.lock().expect("Single threaded.");
 
+    // Since we search for the item in every tier before adding, this prevents duplicates.
+
     // Top to bottom.
 
     if let Some(index) = cache.tier_2.find_item(&block.block_origin) {
@@ -361,6 +356,33 @@ fn go_add_or_update_item_cache(block: CachedBlock) {
 
     // Put it in
     cache.tier_0.add_item(block);
+}
+
+fn go_remove_item_cache(pointer: &DiskPointer) {
+    // If we just find and extract on every tier, that works
+    // Slow? Maybe...
+    // To prevent callers from having to lock the global themselves, we will grab it here ourselves
+    // and pass it downwards into any functions that require it.
+    let cache = &mut CASHEW.lock().expect("Single threaded.");
+
+    // Since we are clearing just one item, not a whole disk, we only need to check each tier once, since there
+    // cant be any duplicates, and we can return as soon as we see a matching item.
+
+    if let Some(index) = cache.tier_2.find_item(pointer) {
+        let _ = cache.tier_2.extract_item(index);
+        return
+    }
+
+    if let Some(index) = cache.tier_1.find_item(pointer) {
+        let _ = cache.tier_2.extract_item(index);
+        return
+    }
+
+    if let Some(index) = cache.tier_0.find_item(pointer) {
+        let _ = cache.tier_2.extract_item(index);
+        return
+    }
+
 }
 
 //

@@ -158,7 +158,7 @@ fn go_add_inode(inode: Inode, start_block: InodeBlock) -> Result<InodeLocation, 
     }
 
     // The inode has now been added to the block, we must write this to disk before continuing.
-    let block_to_write: RawBlock = current_block.to_block(current_block_number);
+    let block_to_write: RawBlock = current_block.to_block();
     // We are updating, because how would we be writing back to a block that was not allocated when we read it?
     CachedBlockIO::update_block(&block_to_write, current_disk, JustDiskType::Standard)?;
 
@@ -185,10 +185,10 @@ fn get_next_block(current_block: InodeBlock) -> Result<DiskPointer, FloppyDriveE
     // Now we just need to update the block we were called on.
     let mut the_cooler_inode = current_block;
     the_cooler_inode.new_destination(new_block_location);
-    let please_let_me_hit = the_cooler_inode.to_block(the_cooler_inode.block_origin.block);
+    let please_let_me_hit = the_cooler_inode.to_block();
 
     // Update that block G
-    CachedBlockIO::update_block(&please_let_me_hit, the_cooler_inode.block_origin.disk, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&please_let_me_hit, please_let_me_hit.block_origin.disk, JustDiskType::Standard)?;
 
     // return the pointer to the next block.
     Ok(new_block_location)
@@ -202,13 +202,13 @@ fn make_new_inode_block() -> Result<DiskPointer, FloppyDriveError> {
     let new_block_location = ask_nicely.first().expect("Asked for 1.");
 
     // New block to throw there
-    let new_block: InodeBlock = InodeBlock::new();
-    let but_raw: RawBlock = new_block.to_block(new_block_location.block);
+    let new_block: InodeBlock = InodeBlock::new(*new_block_location);
+    let but_raw: RawBlock = new_block.to_block();
 
     // Write it Ralph!
     // I'm gonna write it!
     // New block, so standard write.
-    CachedBlockIO::write_block(&but_raw, new_block_location.disk, JustDiskType::Standard)?;
+    CachedBlockIO::write_block(&but_raw, but_raw.block_origin.disk, JustDiskType::Standard)?;
 
     // Now throw it back, I mean the pointer
     Ok(*new_block_location)

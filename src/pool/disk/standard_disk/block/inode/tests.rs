@@ -21,25 +21,24 @@ use rand::rngs::ThreadRng;
 use test_log::test; // We want to see logs while testing.
 #[test]
 fn blank_inode_block_serialization() {
-    let mut test_block: InodeBlock = InodeBlock::new();
     // Just like the directory blocks, we must spoof the disk read.
-    test_block.block_origin = DiskPointer {
+    let block_origin = DiskPointer {
         disk: 420,
         block: 69,
     };
-    let mut serialized = test_block.to_block(69);
-    serialized.originating_disk = Some(420);
+    let test_block: InodeBlock = InodeBlock::new(block_origin);
+    let serialized = test_block.to_block();
     let deserialized = InodeBlock::from_block(&serialized);
     assert_eq!(test_block, deserialized)
 }
 
 #[test]
 fn fill_inode_block() {
-    let mut test_block: InodeBlock = InodeBlock::new();
-    test_block.block_origin = DiskPointer {
+    let block_origin = DiskPointer {
         disk: 420,
         block: 69,
     };
+    let mut test_block: InodeBlock = InodeBlock::new(block_origin);
     let mut added_inodes: Vec<Inode> = Vec::new();
     let mut inode_offsets: Vec<u16> = Vec::new();
     loop {
@@ -66,11 +65,11 @@ fn fill_inode_block() {
 #[test]
 fn filled_inode_block_serialization() {
     for _ in 0..1000 {
-        let mut test_block: InodeBlock = InodeBlock::new();
-        test_block.block_origin = DiskPointer {
+        let block_origin = DiskPointer {
             disk: 420,
             block: 69,
         };
+        let mut test_block: InodeBlock = InodeBlock::new(block_origin);
         // Fill with random inodes until we run out of room.
         loop {
             let add_result = test_block.try_add_inode(Inode::get_random());
@@ -82,8 +81,7 @@ fn filled_inode_block_serialization() {
         }
 
         // Check serialization
-        let mut serialized = test_block.to_block(69);
-        serialized.originating_disk = Some(420);
+        let serialized = test_block.to_block();
         let deserialized = InodeBlock::from_block(&serialized);
         assert_eq!(test_block, deserialized)
     }
@@ -93,11 +91,11 @@ fn filled_inode_block_serialization() {
 /// Checks if we can detect a fragmented block.
 fn inode_block_fragmentation() {
     let mut random: ThreadRng = rand::rng();
-    let mut test_block: InodeBlock = InodeBlock::new();
-    test_block.block_origin = DiskPointer {
+    let block_origin = DiskPointer {
         disk: 420,
         block: 69,
     };
+    let mut test_block: InodeBlock = InodeBlock::new(block_origin);
     let mut inode_offsets: Vec<u16> = Vec::new();
     // now we will repeatedly add and remove blocks at random, at some point there should be enough fragmentation for
     // adding a new block to fail
@@ -137,11 +135,11 @@ fn inode_block_fragmentation() {
 #[test]
 fn add_and_read_inode() {
     for _ in 0..1000 {
-        let mut test_block: InodeBlock = InodeBlock::new();
-        test_block.block_origin = DiskPointer {
+        let block_origin = DiskPointer {
             disk: 420,
             block: 69,
         };
+        let mut test_block: InodeBlock = InodeBlock::new(block_origin);
         let inode: Inode = Inode::get_random();
         let offset = test_block.try_add_inode(inode).unwrap();
         let read_inode = test_block.try_read_inode(offset).unwrap();

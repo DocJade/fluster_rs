@@ -35,8 +35,8 @@ impl FileExtentBlock {
         from_bytes(block)
     }
     /// The destination block must be known when calling.
-    pub(crate) fn to_block(&self, block_number: u16) -> RawBlock {
-        to_bytes(self, block_number)
+    pub(crate) fn to_block(&self) -> RawBlock {
+        to_block(self)
     }
     /// Attempts to add a file extent to this block.
     /// 
@@ -47,18 +47,19 @@ impl FileExtentBlock {
         extent_block_add_extent(self, extent)
     }
     /// Create a new extent block.
+    /// 
+    /// Requires a destination for the block.
     ///
     /// New Extent blocks are the new final block on the disk.
     /// New Extent blocks do not point to the next block (as none exists).
     /// Caller is responsible with updating previous block to point to this new block.
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(block_origin: DiskPointer) -> Self {
         FileExtentBlock {
             flags: FileExtentBlockFlags::default(),
             bytes_free: 501, // new blocks have 501 free bytes
             next_block: DiskPointer::new_final_pointer(),
             extents: Vec::new(),
-            // This is for writing, not reading, so there is no origin.
-            block_origin: DiskPointer::new_final_pointer(),
+            block_origin,
         }
     }
     /// Reterieves all extents within this block.
@@ -146,11 +147,11 @@ fn from_bytes(block: &RawBlock) -> FileExtentBlock {
         bytes_free,
         next_block,
         extents,
-        block_origin: DiskPointer::from(block),
+        block_origin: block.block_origin,
     }
 }
 
-fn to_bytes(extent_block: &FileExtentBlock, block_number: u16) -> RawBlock {
+fn to_block(extent_block: &FileExtentBlock) -> RawBlock {
     let FileExtentBlock {
         flags,
         next_block,
@@ -181,9 +182,8 @@ fn to_bytes(extent_block: &FileExtentBlock, block_number: u16) -> RawBlock {
     add_crc_to_block(&mut buffer);
 
     let finished_block: RawBlock = RawBlock {
-        block_index: block_number,
+        block_origin: extent_block.block_origin,
         data: buffer,
-        originating_disk: None, // We only write this.
     };
 
     finished_block

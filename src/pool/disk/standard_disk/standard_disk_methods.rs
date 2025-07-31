@@ -68,16 +68,24 @@ impl DiskBootstrap for StandardDisk {
 
         // Write the inode block
         debug!("Writing inode block...");
-        let inode_block = InodeBlock::new();
-        let inode_writer = inode_block.to_block(1);
+        let inode_block_origin: DiskPointer = DiskPointer {
+            disk: disk_number,
+            block: 1,
+        };
+        let inode_block = InodeBlock::new(inode_block_origin);
+        let inode_writer = inode_block.to_block();
         CachedBlockIO::write_block(&inode_writer, disk_number, JustDiskType::Standard)?;
         
         // Create the directory block
-        let directory_block: DirectoryBlock = DirectoryBlock::new();
         
         // Write that to the disk. It goes in block 2.
         debug!("Writing root directory block...");
-        let the_directory_block: RawBlock = directory_block.to_block(2);
+        let directory_block_origin: DiskPointer = DiskPointer {
+            disk: disk_number,
+            block: 2,
+        };
+        let directory_block: DirectoryBlock = DirectoryBlock::new(directory_block_origin);
+        let the_directory_block: RawBlock = directory_block.to_block();
         CachedBlockIO::write_block(&the_directory_block, disk_number, JustDiskType::Standard)?;
 
         // Now we need to manually add the inode that points to it. Because the inode at the 0 index

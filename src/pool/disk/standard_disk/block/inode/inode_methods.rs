@@ -45,8 +45,8 @@ impl BytePingPong for Inode {
 }
 
 impl InodeBlock {
-    pub fn to_block(&self, block_number: u16) -> RawBlock {
-        to_raw_bytes(self, block_number)
+    pub fn to_block(&self) -> RawBlock {
+        to_raw_bytes(self)
     }
     pub fn from_block(block: &RawBlock) -> Self {
         from_raw_block(&block)
@@ -56,8 +56,8 @@ impl InodeBlock {
     /// New Inode blocks are the new final block on the disk.
     /// New Inode blocks do not point to the next block (as none exists).
     /// Caller is responsible with updating previous block to point to this new block.
-    pub fn new() -> Self {
-        new_inode_block()
+    pub fn new(block_origin: DiskPointer) -> Self {
+        new_inode_block(block_origin)
     }
     /// Try to add an Inode to this block.
     /// Updates the byte usage counter.
@@ -120,7 +120,7 @@ impl InodeBlock {
 
         // Now we need to flush these updates to disk
 
-        let raw = self.to_block(self.block_origin.block);
+        let raw = self.to_block();
         CachedBlockIO::update_block(&raw, self.block_origin.disk, JustDiskType::Standard)?;
 
         // All done!
@@ -234,7 +234,7 @@ fn inode_block_try_add_inode(
     Ok(offset.try_into().expect("max of 501 is < u16"))
 }
 
-fn new_inode_block() -> InodeBlock {
+fn new_inode_block(block_origin: DiskPointer) -> InodeBlock {
     // Create the flags
     // No default flags are required.
     let flags: InodeBlockFlags = InodeBlockFlags::empty();
@@ -258,7 +258,7 @@ fn new_inode_block() -> InodeBlock {
         bytes_free,
         next_inode_block,
         inodes_data,
-        block_origin: DiskPointer::new_final_pointer(), // This block is to be immediately written, not followed.
+        block_origin,
     }
 }
 
@@ -277,12 +277,7 @@ fn from_raw_block(block: &RawBlock) -> InodeBlock {
     let inodes_data: [u8; 501] = block.data[7..7 + 501].try_into().expect("501 into 501");
 
     // From dust we came
-    let block_origin: DiskPointer = DiskPointer {
-        disk: block
-            .originating_disk
-            .expect("Read blocks should have their origin."),
-        block: block.block_index,
-    };
+    let block_origin: DiskPointer = block.block_origin;
 
     // All done
     InodeBlock {
@@ -294,13 +289,13 @@ fn from_raw_block(block: &RawBlock) -> InodeBlock {
     }
 }
 
-fn to_raw_bytes(block: &InodeBlock, block_number: u16) -> RawBlock {
+fn to_raw_bytes(block: &InodeBlock) -> RawBlock {
     let InodeBlock {
         flags,
         bytes_free,
         next_inode_block,
         inodes_data,
-        block_origin: _, // And to dust we shall return.
+        block_origin, // And to dust we shall return.
     } = block;
 
     let mut buffer: [u8; 512] = [0u8; 512];
@@ -322,9 +317,8 @@ fn to_raw_bytes(block: &InodeBlock, block_number: u16) -> RawBlock {
 
     // Make the block
     let final_block: RawBlock = RawBlock {
-        block_index: block_number,
+        block_origin: *block_origin,
         data: buffer,
-        originating_disk: None, // On its way to be written.
     };
 
     final_block

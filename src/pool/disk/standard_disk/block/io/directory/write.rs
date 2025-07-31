@@ -159,8 +159,7 @@ fn go_make_new_directory_block() -> Result<DiskPointer, FloppyDriveError> {
     let new_directory_location = get_block.first().expect("1 = 1");
 
     // Open the new block and write that bastard
-    let new_directory_block: RawBlock =
-        DirectoryBlock::new().to_block(new_directory_location.block);
+    let new_directory_block: RawBlock = DirectoryBlock::new(*new_directory_location).to_block();
 
     CachedBlockIO::write_block(&new_directory_block, new_directory_location.disk, JustDiskType::Standard)?;
 
@@ -196,7 +195,7 @@ fn go_add_item(
             break;
         }
         // There was not enough room in that block, we need to find the next one.
-        new_block_origin = go_find_next_or_extend_block(current_directory, new_block_origin)?;
+        new_block_origin = go_find_next_or_extend_block(current_directory)?;
 
         // If we moved to a new disk, we need to update the item if it was local.
         if original_location.disk != new_block_origin.disk {
@@ -222,8 +221,8 @@ fn go_add_item(
 
     // Now that the loop has ended, we need to write the block that we just updated.
     // We assume the block has already been reserved, we are simply updating it.
-    let to_write: RawBlock = current_directory.to_block(new_block_origin.block);
-    CachedBlockIO::update_block(&to_write, new_block_origin.disk, JustDiskType::Standard)?;
+    let to_write: RawBlock = current_directory.to_block();
+    CachedBlockIO::update_block(&to_write, to_write.block_origin.disk, JustDiskType::Standard)?;
 
     // Go to a disk if the caller wants.
     if let Some(number) = return_to {
@@ -240,7 +239,6 @@ fn go_add_item(
 /// May swap disks, will return to original disk.
 fn go_find_next_or_extend_block(
     directory: DirectoryBlock,
-    block_origin: DiskPointer,
 ) -> Result<DiskPointer, FloppyDriveError> {
     let mut block_to_load: DiskPointer = directory.next_block;
 
@@ -258,8 +256,8 @@ fn go_find_next_or_extend_block(
     let mut updated_directory = directory;
     updated_directory.next_block = block_to_load;
 
-    let raw_block: RawBlock = updated_directory.to_block(block_origin.block);
-    CachedBlockIO::update_block(&raw_block, block_origin.disk, JustDiskType::Standard)?;
+    let raw_block: RawBlock = updated_directory.to_block();
+    CachedBlockIO::update_block(&raw_block, raw_block.block_origin.disk, JustDiskType::Standard)?;
 
     // All done.
     Ok(block_to_load)

@@ -297,11 +297,10 @@ fn expand_extent_block(block: &mut FileExtentBlock) -> Result<(), FloppyDriveErr
     let new_block_location = the_finder.last().expect("Asked for 1.");
 
     // Put the a block there
-    let new_block: RawBlock = FileExtentBlock::new().to_block(new_block_location.block);
+    let new_block: RawBlock = FileExtentBlock::new(*new_block_location).to_block();
 
-    // write the new block.
     // Write, since we looked for a free block, didn't reserve it yet.
-    CachedBlockIO::write_block(&new_block, new_block_location.disk, JustDiskType::Standard)?;
+    CachedBlockIO::write_block(&new_block, new_block.block_origin.disk, JustDiskType::Standard)?;
 
     // Now update the block we came in here with
     block.next_block = *new_block_location;
@@ -484,13 +483,12 @@ fn go_make_new_file(directory_block: DirectoryBlock, name: String, return_to: Op
     let reserved_block: DiskPointer = *in_progress.last().expect("Only asked for one block.");
     
     // Now that we have the new block we need a FileExtentBlock to write into it.
-    let mut new_block: FileExtentBlock = FileExtentBlock::new();
-    new_block.block_origin = reserved_block;
+    let new_block: FileExtentBlock = FileExtentBlock::new(reserved_block);
 
     // No need to set the marker bit since this is a file ofc.
 
     // Now let's write that new block
-    let raw: RawBlock = new_block.to_block(reserved_block.block);
+    let raw: RawBlock = new_block.to_block();
     // Block is not marked as reserved, so this is a write.
     CachedBlockIO::write_block(&raw, reserved_block.disk, JustDiskType::Standard)?;
 
@@ -558,9 +556,9 @@ fn go_make_new_file(directory_block: DirectoryBlock, name: String, return_to: Op
 /// Just flushes the current FileExtentBlock to disk, nice helper function
 fn flush_to_disk(block: &FileExtentBlock) -> Result<(), FloppyDriveError> {
     // Raw it
-    let raw = block.to_block(block.block_origin.block);
+    let raw = block.to_block();
     // Write it.
-    CachedBlockIO::update_block(&raw, block.block_origin.disk, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&raw, raw.block_origin.disk, JustDiskType::Standard)?;
     Ok(())
 }
 

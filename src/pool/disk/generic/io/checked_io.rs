@@ -36,14 +36,14 @@ pub(super) trait CheckedIO: BlockAllocation + GenericDiskMethods {
     ///
     /// Panics if block was not free.
     fn checked_write(&mut self, block: &RawBlock) -> Result<(), FloppyDriveError> {
-        trace!("Performing checked write on block {}...", block.block_index);
+        trace!("Performing checked write on block {}...", block.block_origin.block);
         // Make sure block is free
-        assert!(!self.is_block_allocated(block.block_index));
+        assert!(!self.is_block_allocated(block.block_origin.block));
         trace!("Block was not already allocated, writing...");
         self.unchecked_write_block(block)?;
         // Now mark the block as allocated.
         trace!("Marking block as allocated...");
-        let blocks_allocated = self.allocate_blocks(&[block.block_index].to_vec())?;
+        let blocks_allocated = self.allocate_blocks(&[block.block_origin.block].to_vec())?;
         // Make sure it was actually allocated.
         assert_eq!(blocks_allocated, 1);
         // Now decrement the pool header
@@ -66,10 +66,10 @@ pub(super) trait CheckedIO: BlockAllocation + GenericDiskMethods {
     fn checked_update(&mut self, block: &RawBlock) -> Result<(), BlockError> {
         trace!(
             "Performing checked update on block {}...",
-            block.block_index
+            block.block_origin.block
         );
         // Make sure block is allocated already
-        assert!(self.is_block_allocated(block.block_index));
+        assert!(self.is_block_allocated(block.block_origin.block));
         self.unchecked_write_block(block)?;
         trace!("Block updated successfully.");
         Ok(())

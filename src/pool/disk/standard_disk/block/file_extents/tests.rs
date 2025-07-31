@@ -29,20 +29,23 @@ fn random_extents_serialization() {
 
 #[test]
 fn empty_extent_block_serialization() {
-    let mut test_block = FileExtentBlock::new();
-    test_block.block_origin = DiskPointer {
-            disk: 420,
-            block: 69,
-        };
-    let mut serialized = test_block.to_block(69);
-    serialized.originating_disk = Some(420);
+    let block_origin = DiskPointer {
+        disk: 420,
+        block: 69,
+    };
+    let test_block = FileExtentBlock::new(block_origin);
+    let serialized = test_block.to_block();
     let deserialized = FileExtentBlock::from_block(&serialized);
     assert_eq!(test_block, deserialized);
 }
 
 #[test]
 fn full_extent_block() {
-    let mut test_block = FileExtentBlock::new();
+    let block_origin = DiskPointer {
+        disk: 420,
+        block: 69,
+    };
+    let mut test_block = FileExtentBlock::new(block_origin);
     let mut extents: Vec<FileExtent> = Vec::new();
     loop {
         let new_extent: FileExtent = FileExtent::random();
@@ -66,15 +69,13 @@ fn full_extent_block() {
 #[test]
 fn random_block_serialization() {
     for _ in 0..1000 {
-        let mut test_block = FileExtentBlock::get_random();
-        // For our equal check to work, we need to set the block to come from the same
-        // disk that we're pretending to read it from.
-        test_block.block_origin = DiskPointer {
+        // We need a origin for the block, even if nonsensical.
+        let block_origin = DiskPointer {
             disk: 420,
             block: 69,
         };
-        let mut serialized = test_block.to_block(69);
-        serialized.originating_disk = Some(420);
+        let test_block = FileExtentBlock::get_random(block_origin);
+        let serialized = test_block.to_block();
         let deserialized = FileExtentBlock::from_block(&serialized);
         assert_eq!(test_block, deserialized)
     }
@@ -84,8 +85,8 @@ fn random_block_serialization() {
 
 #[cfg(test)]
 impl FileExtentBlock {
-    fn get_random() -> Self {
-        let mut test_block = FileExtentBlock::new();
+    fn get_random(block_origin: DiskPointer) -> Self {
+        let mut test_block = FileExtentBlock::new(block_origin);
         let mut random: ThreadRng = rand::rng();
         // Fill with a random amount of items.
         loop {
