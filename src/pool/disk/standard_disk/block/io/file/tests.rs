@@ -233,6 +233,11 @@ fn read_and_write_random_files() {
         total_bytes_written += bytes_written;
         current_filename_number += 1;
     }
+    let stats = fs.pool.lock().unwrap();
+    let cache_hit_rate = CachedBlockIO::get_hit_rate();
+    drop(stats);
+    drop(cache_hit_rate);
+
     // Now we need to read all of the files back out
     let mut current_file: usize = 0;
     let root_block = Pool::root_directory().unwrap();

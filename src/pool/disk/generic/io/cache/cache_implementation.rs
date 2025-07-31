@@ -25,6 +25,11 @@
 //  very quickly replaced if they became stale, since the constant read hits that are
 //  expected of these items would move stale items to the lowest positions very quickly.
 
+// Promotion within tiers always moves the item from whatever index it's currently at, to
+//  the very top of the tier. This should ensure that the hottest items stay close to the
+//  top, previously I used bubble sort, which could lead to slightly less used items to
+//  not promote away from the bottom of the queue fast enough.
+
 use std::{collections::VecDeque, sync::Mutex};
 
 use lazy_static::lazy_static;
@@ -186,6 +191,8 @@ impl TieredCache {
     }
     /// Updates / replaces an item at a given index.
     /// 
+    /// Updates order.
+    /// 
     /// Will panic if index is empty / out of bounds.
     fn update_item(&mut self, index: usize, new_item: CachedBlock) {
         go_update_tier_item(self, index, new_item)
@@ -252,6 +259,7 @@ fn go_try_find_cache(pointer: DiskPointer) -> Option<CachedBlock> {
     // Tier 2
     if let Some(found) = cache.tier_2.find_item(&pointer) {
         // In the highest rank!
+        BlockCacheStatistics::record_hit(true);
         // Grab it, which will also update the order.
         return cache.tier_2.get_item(found).cloned()
     }
@@ -259,6 +267,7 @@ fn go_try_find_cache(pointer: DiskPointer) -> Option<CachedBlock> {
     // Tier 1
     if let Some(found) = cache.tier_1.find_item(&pointer) {
         // Somewhat common it seems.
+        BlockCacheStatistics::record_hit(true);
         // Grab it, which will also update the order.
         return cache.tier_1.get_item(found).cloned()
     }
@@ -266,6 +275,7 @@ fn go_try_find_cache(pointer: DiskPointer) -> Option<CachedBlock> {
     // Tier 0
     if let Some(found) = cache.tier_0.find_item(&pointer) {
         // Scraping the barrel, but at least it was there!
+        BlockCacheStatistics::record_hit(true);
         // Since this is the lowest tier, we need to immediately promote this
         let item = cache.tier_0.extract_item(found).expect("Just checked.");
         cache.promote_item(item.clone());
@@ -317,6 +327,8 @@ fn go_add_or_update_item_cache(block: CachedBlock) {
 
     // Make sure the block has a valid location
     assert!(!block.block_origin.no_destination());
+
+    // We don't update the cache statistics in here, since a hit while updating makes no sense.
 
     // To prevent callers from having to lock the global themselves, we will grab it here ourselves
     // and pass it downwards into any functions that require it.
@@ -374,12 +386,12 @@ fn go_remove_item_cache(pointer: &DiskPointer) {
     }
 
     if let Some(index) = cache.tier_1.find_item(pointer) {
-        let _ = cache.tier_2.extract_item(index);
+        let _ = cache.tier_1.extract_item(index);
         return
     }
 
     if let Some(index) = cache.tier_0.find_item(pointer) {
-        let _ = cache.tier_2.extract_item(index);
+        let _ = cache.tier_0.extract_item(index);
         return
     }
 
@@ -410,16 +422,18 @@ fn go_find_tier_item(tier: &TieredCache, pointer: &DiskPointer) -> Option<usize>
 
 fn go_get_tier_item(tier: &mut TieredCache, index: usize) -> Option<&CachedBlock> {
     // Updates order
-    // First do the swap if needed
-    if index == 0 {
-        // No need to swap, already at the top.
-        return tier.items.get(index)
-    }
     
-    // Do the swap
-    tier.items.swap(index - 1, index);
-    // return the item, the index has changed.
-    tier.items.get(index - 1)
+    // Grab the item from wherever it is and push it to the top.
+    if let Some(item) = tier.items.remove(index) {
+        // There was an item
+        // Push to front
+        tier.items.push_front(item);
+        // return it
+        return tier.items.front()
+    }
+
+    // No item at this index? Weird, caller can deal with it.
+    None
 }
 
 fn go_extract_tier_item(tier: &mut TieredCache, index: usize) -> Option<CachedBlock> {
@@ -435,7 +449,9 @@ fn go_add_tier_item(tier: &mut TieredCache, item: CachedBlock) {
 
 fn go_update_tier_item(tier: &mut TieredCache, index: usize, new_item: CachedBlock) {
     // Replace the item
-    tier.items[index] = new_item
+    // Updating is an access after all... so we will promote it.
+    tier.items.remove(index);
+    tier.items.push_front(new_item);
 }
 
 fn go_get_tier_best(tier: &mut TieredCache) -> Option<CachedBlock> {
