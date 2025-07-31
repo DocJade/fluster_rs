@@ -85,7 +85,7 @@ fn directory_block_try_remove_item(
         block.bytes_free += incoming_item.to_bytes().len() as u16;
 
         // We can use swap_remove here since the ordering of items does not matter.
-        block.directory_items.swap_remove(index);
+        let _ = block.directory_items.swap_remove(index);
         Ok(())
     } else {
         Err(DirectoryBlockError::NoSuchItem)

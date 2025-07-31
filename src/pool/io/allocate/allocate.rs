@@ -130,7 +130,7 @@ fn go_find_free_pool_blocks(blocks: u16, mark: bool, add_crc: bool) -> Result<Ve
 
                 // Allocate those blocks if needed.
                 if mark {
-                    disk.allocate_blocks(&ok)?;
+                    let _ = disk.allocate_blocks(&ok)?;
                     // We also need to update the global pool to say these were marked as used, otherwise we would never know.
                     // Trust me I found out the hard way.
                     debug!("Updating the pool's free block count...");
@@ -167,7 +167,7 @@ fn go_find_free_pool_blocks(blocks: u16, mark: bool, add_crc: bool) -> Result<Ve
 
                 // Allocate those blocks if needed.
                 if mark {
-                    disk.allocate_blocks(&blockie_doos)?;
+                    let _ = disk.allocate_blocks(&blockie_doos)?;
                     // We also need to update the global pool to say these were marked as used, otherwise we would never know.
                     // Trust me I found out the hard way.
                     debug!("Updating the pool's free block count...");
@@ -236,7 +236,7 @@ fn write_empty_crc(blocks: &[u16], disk: u16) -> Result<(), FloppyDriveError> {
             data: empty_data,
         };
 
-        CachedBlockIO::update_block(&empty_raw_block, empty_raw_block.block_origin.disk, JustDiskType::Standard)?;
+        CachedBlockIO::update_block(&empty_raw_block, JustDiskType::Standard)?;
     }
 
     // All of the blocks now have a empty block with a crc on it.

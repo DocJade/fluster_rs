@@ -37,7 +37,7 @@ pub enum DiskType {
 }
 
 /// We also have another type that does not contain the disk info.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JustDiskType {
     Pool,
     Standard,

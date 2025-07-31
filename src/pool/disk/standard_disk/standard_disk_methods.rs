@@ -74,7 +74,7 @@ impl DiskBootstrap for StandardDisk {
         };
         let inode_block = InodeBlock::new(inode_block_origin);
         let inode_writer = inode_block.to_block();
-        CachedBlockIO::write_block(&inode_writer, disk_number, JustDiskType::Standard)?;
+        CachedBlockIO::write_block(&inode_writer, JustDiskType::Standard)?;
         
         // Create the directory block
         
@@ -86,7 +86,7 @@ impl DiskBootstrap for StandardDisk {
         };
         let directory_block: DirectoryBlock = DirectoryBlock::new(directory_block_origin);
         let the_directory_block: RawBlock = directory_block.to_block();
-        CachedBlockIO::write_block(&the_directory_block, disk_number, JustDiskType::Standard)?;
+        CachedBlockIO::write_block(&the_directory_block, JustDiskType::Standard)?;
 
         // Now we need to manually add the inode that points to it. Because the inode at the 0 index
         // of block 1 is the inode that points to the root directory
@@ -278,8 +278,7 @@ impl GenericDiskMethods for StandardDisk {
     #[doc = " Sync all in-memory information to disk"]
     #[doc = " Headers and such."]
     fn flush(&mut self) -> Result<(), FloppyDriveError> {
-        // We need to write the header back to disk, since that is the only
-        // information we can edit in memory without immediately writing.
-        CachedBlockIO::update_block(&self.header.to_block(), self.number, JustDiskType::Standard)
+        // Not really to disk, but if nobody is looking...
+        CachedBlockIO::update_block(&self.header.to_block(), JustDiskType::Standard)
     }
 }

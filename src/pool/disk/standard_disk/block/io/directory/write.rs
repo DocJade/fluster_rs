@@ -161,7 +161,7 @@ fn go_make_new_directory_block() -> Result<DiskPointer, FloppyDriveError> {
     // Open the new block and write that bastard
     let new_directory_block: RawBlock = DirectoryBlock::new(*new_directory_location).to_block();
 
-    CachedBlockIO::write_block(&new_directory_block, new_directory_location.disk, JustDiskType::Standard)?;
+    CachedBlockIO::write_block(&new_directory_block,JustDiskType::Standard)?;
 
     // All done!
     Ok(*new_directory_location)
@@ -222,7 +222,7 @@ fn go_add_item(
     // Now that the loop has ended, we need to write the block that we just updated.
     // We assume the block has already been reserved, we are simply updating it.
     let to_write: RawBlock = current_directory.to_block();
-    CachedBlockIO::update_block(&to_write, to_write.block_origin.disk, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&to_write, JustDiskType::Standard)?;
 
     // Go to a disk if the caller wants.
     if let Some(number) = return_to {
@@ -257,7 +257,7 @@ fn go_find_next_or_extend_block(
     updated_directory.next_block = block_to_load;
 
     let raw_block: RawBlock = updated_directory.to_block();
-    CachedBlockIO::update_block(&raw_block, raw_block.block_origin.disk, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&raw_block, JustDiskType::Standard)?;
 
     // All done.
     Ok(block_to_load)

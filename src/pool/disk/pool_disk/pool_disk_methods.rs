@@ -104,6 +104,6 @@ impl GenericDiskMethods for PoolDisk {
 
     #[doc = " Sync all in-memory information to disk"]
     fn flush(&mut self) -> Result<(), FloppyDriveError> {
-        CachedBlockIO::update_block(&self.header.to_block(), self.number, JustDiskType::Pool)
+        CachedBlockIO::update_block(&self.header.to_block(), JustDiskType::Pool)
     }
 }

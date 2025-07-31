@@ -107,7 +107,7 @@ impl FuseHandler<PathBuf> for FlusterFS {
         // write size of 1MB.
         // 
         // This value is in bytes.
-        config.set_max_write(1024 * 1024).expect("Max write size of 1MB is invalid?");
+        let _ = config.set_max_write(1024 * 1024).expect("Max write size of 1MB is invalid?");
 
         // The Linux kernel (and others) has this cool feature where it expects (reasonably) that when you read
         // from a disk, chances are, you will want to keep reading more of it.
@@ -123,7 +123,7 @@ impl FuseHandler<PathBuf> for FlusterFS {
         // all kernel side caching.
         //
         // This cannot be set to zero, and I cannot even find what unit this is, it might be KB?
-        config.set_max_readahead(1).expect("Checked the implementation, this requires at least 1.");
+        let _ = config.set_max_readahead(1).expect("Checked the implementation, this requires at least 1.");
 
         Ok(())
     }

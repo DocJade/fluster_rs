@@ -73,6 +73,11 @@ fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, Fl
     // Now we must get the 0th block
     // We need to read a block before we have an actual disk, so we need
     // to call this function directly as a workaround.
+
+    // This also must be called directly, since we cannot use the cache here.
+    // The cache expects to not be accessed while doing flushes, which requires all
+    // calls that load information about disks to not access the cache.
+
     // We must ignore the CRC here, since we know nothing about the disk.
     trace!("Reading in the header at block 0...");
     let header_block = read_block_direct(&disk_file, disk_number, 0, true)?;

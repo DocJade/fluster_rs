@@ -121,7 +121,7 @@ impl InodeBlock {
         // Now we need to flush these updates to disk
 
         let raw = self.to_block();
-        CachedBlockIO::update_block(&raw, self.block_origin.disk, JustDiskType::Standard)?;
+        CachedBlockIO::update_block(&raw, JustDiskType::Standard)?;
 
         // All done!
         Ok(())

@@ -47,15 +47,15 @@ impl CachedBlockIO {
     /// 
     /// You must specify the type of disk the block is being written to, otherwise you cannot guarantee that you
     /// wrote to the correct disk.
-    pub fn write_block(raw_block: &RawBlock, disk_number: u16, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
-        go_write_cached_block(raw_block, disk_number, expected_disk_type)
+    pub fn write_block(raw_block: &RawBlock, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
+        go_write_cached_block(raw_block, expected_disk_type)
     }
     /// Updates pre-existing block on disk, updates cache.
     /// 
     /// You must specify the type of disk the block is being written to, otherwise you cannot guarantee that you
     /// wrote to the correct disk.
-    pub fn update_block(raw_block: &RawBlock, disk_number: u16, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
-        go_update_cached_block(raw_block, disk_number, expected_disk_type)
+    pub fn update_block(raw_block: &RawBlock, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
+        go_update_cached_block(raw_block, expected_disk_type)
     }
     /// Get the hit-rate of the underlying cache
     pub fn get_hit_rate() -> f32 {
@@ -96,49 +96,35 @@ fn go_read_cached_block(block_location: DiskPointer, expected_disk_type: JustDis
     let read_block = disk.checked_read(block_location.block)?;
     
     // Add it to the cache
-    BlockCache::add_or_update_item(CachedBlock::from_raw(&read_block, expected_disk_type));
+    BlockCache::add_or_update_item(CachedBlock::from_raw(&read_block, expected_disk_type))?;
 
     // Return the block.
-    return Ok(read_block);
+    Ok(read_block)
 }
 
-fn go_write_cached_block(raw_block: &RawBlock, disk_number: u16, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
+fn go_write_cached_block(raw_block: &RawBlock, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
     // Write a block to the disk, also updating the cache with the block (or adding it if it does not yet exist.)
-    let mut disk = FloppyDrive::open(disk_number)?;
-    
-    // Make sure this is the write one...
-    assert_eq!(disk, expected_disk_type);
 
-    // Just in case...
-    assert_ne!(disk, JustDiskType::Blank);
-    assert_ne!(disk, JustDiskType::Unknown);
+    // The cache expects the block's destination to be allocated already, so we will allocate it here.
+    // We want to use the cache for this allocation if at all possible.
+    BlockCache::cached_block_allocation(raw_block, expected_disk_type)?;
 
-    // Write the block.
-    disk.checked_write(raw_block)?;
+    // Update the cache with the updated block.
+    BlockCache::add_or_update_item(CachedBlock::from_raw(raw_block, expected_disk_type))?;
 
-    // Now update the cache with the updated block.
-    BlockCache::add_or_update_item(CachedBlock::from_raw(raw_block, expected_disk_type));
-
+    // We don't need to write, since the cache will do it for us.
     Ok(())
 }
 
-fn go_update_cached_block(raw_block: &RawBlock, disk_number: u16, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
-    // Update like windows, but better idk this joke sucks
-    let mut disk = FloppyDrive::open(disk_number)?;
-    
-    // Make sure this is the write one...
-    assert_eq!(disk, expected_disk_type);
+fn go_update_cached_block(raw_block: &RawBlock, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
+    // Update like windows, but better idk this joke sucks lmao
 
-    // Just in case...
-    assert_ne!(disk, JustDiskType::Blank);
-    assert_ne!(disk, JustDiskType::Unknown);
+    // No block allocations, since this is an update.
 
-    // Write the block.
-    disk.checked_update(raw_block)?;
+    // Update the cache with the updated block.
+    BlockCache::add_or_update_item(CachedBlock::from_raw(raw_block, expected_disk_type))?;
 
-    // Now update the cache with the updated block.
-    BlockCache::add_or_update_item(CachedBlock::from_raw(raw_block, expected_disk_type));
-
+    // We don't need to write, since the cache will do it for us.
     Ok(())
 }
 

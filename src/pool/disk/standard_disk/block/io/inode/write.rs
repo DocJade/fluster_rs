@@ -160,7 +160,7 @@ fn go_add_inode(inode: Inode, start_block: InodeBlock) -> Result<InodeLocation, 
     // The inode has now been added to the block, we must write this to disk before continuing.
     let block_to_write: RawBlock = current_block.to_block();
     // We are updating, because how would we be writing back to a block that was not allocated when we read it?
-    CachedBlockIO::update_block(&block_to_write, current_disk, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&block_to_write, JustDiskType::Standard)?;
 
     // All done! Now we can return where that inode eventually ended up
     Ok(InodeLocation {
@@ -188,7 +188,7 @@ fn get_next_block(current_block: InodeBlock) -> Result<DiskPointer, FloppyDriveE
     let please_let_me_hit = the_cooler_inode.to_block();
 
     // Update that block G
-    CachedBlockIO::update_block(&please_let_me_hit, please_let_me_hit.block_origin.disk, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&please_let_me_hit,  JustDiskType::Standard)?;
 
     // return the pointer to the next block.
     Ok(new_block_location)
@@ -208,7 +208,7 @@ fn make_new_inode_block() -> Result<DiskPointer, FloppyDriveError> {
     // Write it Ralph!
     // I'm gonna write it!
     // New block, so standard write.
-    CachedBlockIO::write_block(&but_raw, but_raw.block_origin.disk, JustDiskType::Standard)?;
+    CachedBlockIO::write_block(&but_raw, JustDiskType::Standard)?;
 
     // Now throw it back, I mean the pointer
     Ok(*new_block_location)

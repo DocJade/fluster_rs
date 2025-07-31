@@ -54,7 +54,7 @@ lazy_static! {
 // =========
 //
 
-use crate::pool::disk::{drive_struct::JustDiskType, generic::{block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer, io::cache::statistics::BlockCacheStatistics}};
+use crate::pool::disk::{drive_struct::{FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::cache::statistics::BlockCacheStatistics}};
 
 /// The wrapper around all the cache tiers
 /// Only avalible within the cache folder,
@@ -128,7 +128,7 @@ impl BlockCache {
     /// Add an item to the cache, or update it if the item is already present.
     /// 
     /// If the item is new, it will be placed in the lowest tier in the cache.
-    pub(super) fn add_or_update_item(item: CachedBlock) {
+    pub(super) fn add_or_update_item(item: CachedBlock) -> Result<(), FloppyDriveError> {
         go_add_or_update_item_cache(item)
     }
 
@@ -147,6 +147,14 @@ impl BlockCache {
     /// Returns nothing.
     pub(super) fn remove_item(pointer: &DiskPointer) {
         go_remove_item_cache(pointer)
+    }
+
+    /// Reserve a block on a disk, skipping the disk if possible.
+    /// 
+    /// Panics if block was already allocated.
+    pub(super) fn cached_block_allocation(raw_block: &RawBlock, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
+        // Another level of indirection, how fun
+        super::cached_allocation::cached_allocation(raw_block, expected_disk_type)
     }
 }
 
@@ -209,9 +217,9 @@ impl TieredCache {
     fn get_worst(&mut self) -> Option<CachedBlock> {
         go_get_tier_worst(self)
     }
-    /// Completely wipes a tier.
-    fn reset(&mut self) {
-        go_reset_tier(self)
+    /// Flushes all information in this tier to disk.
+    fn flush(&mut self) -> Result<(), FloppyDriveError> {
+        go_flush_tier(self)
     }
     /// Check if this tier is full
     fn is_full(&self) -> bool {
@@ -311,9 +319,18 @@ fn go_promote_item_cache(cache: &mut BlockCache, t0_item: CachedBlock) {
         // not full, directly add it.
         cache.tier_2.add_item(t1_best);
     } else {
-        // The best cache is full, discard the worst item to make space.
-        let _ = cache.tier_2.get_worst().expect("How are we empty and full?");
-        // Now there is room.
+        // The best cache is full.
+        // We will have to move the worst tier 2 item to tier 0. If we discarded it
+        // outright, the block it contains would never get flushed to disk.
+        let worst_of_2 = cache.tier_2.get_worst().expect("How are we empty and full?");
+
+        // Since we popped an item from t0 to call this function, it must now have at least
+        // one slot open, so we can add to it.
+        cache.tier_0.add_item(worst_of_2);
+
+
+        // Now put that tier 1 item in tier 2 to make room for the new tier 1 item from tier 0.
+        // Confused yet?
         cache.tier_2.add_item(t1_best);
     }
 
@@ -323,7 +340,7 @@ fn go_promote_item_cache(cache: &mut BlockCache, t0_item: CachedBlock) {
     // All done!
 }
 
-fn go_add_or_update_item_cache(block: CachedBlock) {
+fn go_add_or_update_item_cache(block: CachedBlock) -> Result<(), FloppyDriveError> {
 
     // Make sure the block has a valid location
     assert!(!block.block_origin.no_destination());
@@ -341,13 +358,13 @@ fn go_add_or_update_item_cache(block: CachedBlock) {
     if let Some(index) = cache.tier_2.find_item(&block.block_origin) {
         // Fancy block!
         cache.tier_2.update_item(index, block);
-        return
+        return Ok(())
     }
 
     if let Some(index) = cache.tier_1.find_item(&block.block_origin) {
         // Useful!
         cache.tier_1.update_item(index, block);
-        return
+        return Ok(())
     }
 
     // Annoyingly, we still have to update the garbage, since reading presumes that stuff in tier 0 is up to date.
@@ -355,7 +372,7 @@ fn go_add_or_update_item_cache(block: CachedBlock) {
     if let Some(index) = cache.tier_0.find_item(&block.block_origin) {
         // Polished garbage.
         cache.tier_0.update_item(index, block);
-        return
+        return Ok(())
     }
 
     // It wasn't in any of the tiers, so we will add it to tier 0.
@@ -363,11 +380,12 @@ fn go_add_or_update_item_cache(block: CachedBlock) {
     // Make sure we have room first
     if cache.tier_0.is_full() {
         // We don't have room, so we need to wipe the cache.
-        cache.tier_0.reset();
+        cache.tier_0.flush()?;
     }
 
     // Put it in
     cache.tier_0.add_item(block);
+    Ok(())
 }
 
 fn go_remove_item_cache(pointer: &DiskPointer) {
@@ -379,6 +397,12 @@ fn go_remove_item_cache(pointer: &DiskPointer) {
 
     // Since we are clearing just one item, not a whole disk, we only need to check each tier once, since there
     // cant be any duplicates, and we can return as soon as we see a matching item.
+
+    // TODO: Need to make sure caller cannot call this without first flushing the item to disk,
+    // or it must be documented that the caller must know that they are possibly discarding
+    // unwritten information.
+
+    todo!(); // This isnt used yet, so todo it until above doc is written
 
     if let Some(index) = cache.tier_2.find_item(pointer) {
         let _ = cache.tier_2.extract_item(index);
@@ -392,7 +416,6 @@ fn go_remove_item_cache(pointer: &DiskPointer) {
 
     if let Some(index) = cache.tier_0.find_item(pointer) {
         let _ = cache.tier_0.extract_item(index);
-        return
     }
 
 }
@@ -450,7 +473,7 @@ fn go_add_tier_item(tier: &mut TieredCache, item: CachedBlock) {
 fn go_update_tier_item(tier: &mut TieredCache, index: usize, new_item: CachedBlock) {
     // Replace the item
     // Updating is an access after all... so we will promote it.
-    tier.items.remove(index);
+    let _ = tier.items.remove(index).expect("Should have a index to a valid item.");
     tier.items.push_front(new_item);
 }
 
@@ -464,9 +487,70 @@ fn go_get_tier_worst(tier: &mut TieredCache) -> Option<CachedBlock> {
     tier.items.pop_back()
 }
 
-fn go_reset_tier(tier: &mut TieredCache) {
-    // Completely empties the tier
+fn go_flush_tier(tier: &mut TieredCache) -> Result<(), FloppyDriveError> {
+    // We will be flushing all data from this tier of the cache to disk.
+    // This can be used on any tier, but will usually be called on tier 0.
+
+    // Assume the tier is not already empty.
+    assert!(!tier.items.is_empty(), "Cannot flush an empty tier!");
+
+    // first we grab all of the items and sort them by disk, low to high, and also sort the blocks
+    // within those disks to be in order. Since if the blocks are in order, the head doesn't have to move around
+    // the disk as much.
+
+    let items = tier.items.make_contiguous();
+    items.sort_unstable_by_key(|item| (item.block_origin.disk, item.block_origin.block));
+    
+    // Now to reduce head movement even further, we don't want to check the allocation table
+    // while making our writes. Since that would require seeking to block 0 after each write.
+
+    // You might be thinking, "Why can't we use the cache for the allocation tables?", darn good idea,
+    // but we cannot access the cache from down here, since that would require locking the entire cache
+    // a second time. Also we might be out of room in the cache for the read required to get the table,
+    // which would cause us to flush the tier again, which we are already doing. Bad news.
+
+    // But there are some assumptions we can make about the items we are flushing:
+    // - We assume the items within the cache are valid. (A given, but can't hurt to mention)
+    // - If an item is contained within a cache tier, the block it came from must
+    //    be allocated, and moreover, unchanged since the last time we flushed to it.
+    // - We currently have full control over the floppy disk. Since all high-level
+    //    IO happens on the cache itself, we can swap disks and even finish on a
+    //    completely different disk without worrying about other callers.
+    // - - Furthermore, since we have full control over the disk, the allocation tables
+    //      cannot be changing.
+    // - When an item is removed from the cache manually, it must have been flushed to disk.
+    // - Invalidated items on cache levels higher than 0 will put their invalidated item into
+    //    tier zero, thus they will be flushed to disk when it is cleared.
+
+    // Basically, we don't have to care about the allocation table AT ALL down here. If
+    // we have a block, we know it is allocated. When a block is freed, it must be removed
+    // from the cache entirely.
+
+    // Therefore, we can make all of our writes in one pass per disk, and never have to look at
+    // the allocation table at all!
+
+    // Open the first disk to write to
+    let mut current_disk = FloppyDrive::open(items.first().expect("Guarded.").block_origin.disk)?;
+
+    for block in items {
+        // Right disk?
+        if current_disk.get_disk_number() != block.block_origin.disk {
+            // Sanity check, invalid disk would be very silly this low down but whatever
+            assert!(!block.block_origin.no_destination());
+            // Load new disk
+            current_disk = FloppyDrive::open(block.block_origin.disk)?;
+        }
+        // Sanity check, correct disk type
+        assert_eq!(current_disk, block.disk_type);
+        // Write the block
+        current_disk.unchecked_write_block(&block.to_raw())?;
+    }
+
+    // All done, don't need to do any cleanup for previously stated reasons
+
+    // Actually clear the cache.
     tier.items.clear();
+    Ok(())
 }
 
 fn go_check_tier_full(tier: &TieredCache) -> bool {

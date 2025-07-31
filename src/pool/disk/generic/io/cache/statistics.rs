@@ -5,7 +5,6 @@ use std::{collections::VecDeque, sync::Mutex};
 use lazy_static::lazy_static;
 
 // Holds the cache
-const CACHE_SIZE: usize = 2880; // One floppy worth of blocks.
 const HIT_MEMORY: usize = 10_000; // How many of the last reads we keep track of to calculate hit rate.
 lazy_static! {
     // Where the stats are stored
@@ -58,7 +57,7 @@ impl BlockCacheStatistics {
 
         // Need to pop the oldest hit if we're out of room.
         if stats.hits_and_misses.len() >= 1000 {
-            stats.hits_and_misses.pop_back();
+            let _ = stats.hits_and_misses.pop_back();
         }
         stats.hits_and_misses.push_front(hit);
     }

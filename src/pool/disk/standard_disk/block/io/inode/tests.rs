@@ -25,14 +25,14 @@ fn add_inode() {
     // Use the filesystem starter to get everything in the right spots
     let _fs = get_filesystem();
     // Now try adding a directory to the pool
-    Pool::add_inode(Inode::get_random()).unwrap();
+    let _ = Pool::add_inode(Inode::get_random()).unwrap();
 }
 
 #[test]
 fn add_many_inode() {
     let _fs = get_filesystem();
     for _ in 0..1000 {
-        Pool::add_inode(Inode::get_random()).unwrap();
+        let _ = Pool::add_inode(Inode::get_random()).unwrap();
     }
 }
 

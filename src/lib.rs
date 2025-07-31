@@ -1,5 +1,7 @@
 // The library/filesystem cannot use unwraps.
 #![deny(clippy::unwrap_used)]
+// Gotta use all the results.
+#![deny(unused_results)]
 
 // Only use the filesystem in main.rs
 pub mod filesystem;
