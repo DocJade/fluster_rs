@@ -257,5 +257,4 @@ fn read_and_write_random_files() {
     }
     let stats = fs.pool.lock().unwrap();
     let cache_hit_rate = CachedBlockIO::get_hit_rate();
-    panic!("test");
 }
