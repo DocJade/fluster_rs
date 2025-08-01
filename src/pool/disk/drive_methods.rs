@@ -37,7 +37,7 @@ use std::sync::atomic::Ordering;
 // Disk tracking global.
 
 // To better count disk swaps, we need to know what the most recently opened disk was
-static CURRENT_DISK_IN_DRIVE: AtomicU16 = AtomicU16::new(0);
+static CURRENT_DISK_IN_DRIVE: AtomicU16 = AtomicU16::new(u16::MAX);
 
 // Implementations
 
@@ -59,6 +59,11 @@ impl FloppyDrive {
     /// Prompts the user for a blank floppy disk.
     pub fn get_blank_disk(disk_number: u16) -> Result<BlankDisk, FloppyDriveError> {
         prompt_for_blank_disk(disk_number)
+    }
+
+    /// Find out what disk is currently in the drive.
+    pub fn currently_inserted_disk_number() -> u16 {
+        CURRENT_DISK_IN_DRIVE.load(Ordering::SeqCst)
     }
 }
 

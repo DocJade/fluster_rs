@@ -165,15 +165,8 @@ fn go_write(inode: &mut InodeFile, bytes: &[u8], seek_point: u64, return_to: Opt
     // Now we know we have enough space for this write, let's get started.
 
     let mut bytes_written: usize = 0;
-    let mut floppy_disk: StandardDisk;
     // Since the write can start un-aligned, we need to use an offset until its aligned again.
     let mut byte_write_index: u16 = byte_index;
-
-    // Load in the first block
-    floppy_disk = match FloppyDrive::open(blocks[block_index].disk)? {
-        DiskType::Standard(standard_disk) => standard_disk,
-        _ => unreachable!("We should never be given a block on a non-standard disk."),
-    };
 
     // Now we will loop through the blocks starting at the current index
     for block in &blocks[block_index..] {
@@ -181,15 +174,6 @@ fn go_write(inode: &mut InodeFile, bytes: &[u8], seek_point: u64, return_to: Opt
         if bytes_written == bytes.len() {
             // All done!
             break
-        }
-        // Do we need to switch disks?
-        if block.disk != floppy_disk.number {
-            // Need to swap.
-            let new_disk = match FloppyDrive::open(block.disk)? {
-                DiskType::Standard(standard_disk) => standard_disk,
-                _ => unreachable!("Pool should never return a non-standard disk for new blocks."),
-            };
-            floppy_disk = new_disk;
         }
         // Update the block
         let written = update_block(*block, &bytes[bytes_written..], byte_write_index)?;

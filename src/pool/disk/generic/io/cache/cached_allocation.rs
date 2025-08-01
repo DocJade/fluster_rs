@@ -14,6 +14,28 @@ pub(super) fn cached_allocation(raw_block: &RawBlock, expected_disk_type: JustDi
     // You can only use the allocator on standard disks.
     assert_eq!(expected_disk_type, JustDiskType::Standard);
 
+    // If the disk we are attempting the allocation is already inserted, there's no point in
+    // trying to cache it, since the disk would just get out of sync immediately.
+    if FloppyDrive::currently_inserted_disk_number() == raw_block.block_origin.disk {
+
+        // The disk is currently in the drive. We'll update it normally.
+
+        // This will actually check the cache for the header block again,
+        // which is fine, all that matters is that we don't need to swap the disk.
+
+        let mut disk: StandardDisk = match FloppyDrive::open(raw_block.block_origin.disk)? {
+            DiskType::Standard(standard_disk) => standard_disk,
+            _ => unreachable!("No allocations on non-standard disks."),
+        };
+
+        let allocated = disk.allocate_blocks(&[raw_block.block_origin.block].to_vec())?;
+        
+        // Make sure that worked
+        assert_eq!(allocated, 1);
+        return Ok(());
+    }
+
+
     // Now, is the header in the cache?
     // The header is block 0 of the disk that this new block wants to allocate
     let header: DiskPointer = DiskPointer {
@@ -23,7 +45,16 @@ pub(super) fn cached_allocation(raw_block: &RawBlock, expected_disk_type: JustDi
 
     if let Some(header_block) = BlockCache::try_find(header) {
         // Header is cached! We can sneak around the disk access.
-        return the_sidestep(raw_block, &header_block)
+        the_sidestep(raw_block, &header_block)?;
+
+        // Now that we have that spoofed disk, we need to update the real disks table, otherwise
+        // it would be out of sync immediately after this function.
+
+        // BUT! That only needs to happen if the disk is currently inserted.
+        // Otherwise the disk will load in the new header when it gets inserted later.
+
+        // Since we already know the disk isn't inserted, we don't have to do anything.
+        return Ok(());
     }
 
     // Well, the block was not in the cache, we need to do the allocation normally.
@@ -40,11 +71,14 @@ pub(super) fn cached_allocation(raw_block: &RawBlock, expected_disk_type: JustDi
     // make sure we did allocate the block
     assert_eq!(blocks_allocated, 1);
 
+    // We did the allocation on the actual disk, so we dont need to do any further updates.
+
     // All done.
     Ok(())
 
 }
 
+// Returns the spoofed standard disk
 fn the_sidestep(block_to_allocate: &RawBlock, header_block: &CachedBlock) -> Result<(), FloppyDriveError> {
     // We will spoof the disk.
     // This is super risky, maybe,
@@ -75,6 +109,6 @@ fn the_sidestep(block_to_allocate: &RawBlock, header_block: &CachedBlock) -> Res
     // make sure we did allocate the block
     assert_eq!(blocks_allocated, 1);
 
-    // This flushes to disk for us already. We are done!
+    // This flushes to cache for us already, we are done!
     Ok(())
 }

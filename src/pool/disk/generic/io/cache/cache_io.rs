@@ -36,6 +36,18 @@ impl CachedBlockIO {
         go_force_write_block(raw_block, disk_to_write_on)
     }
 
+    /// Attempts to read a block from the cache, does not load from disk if not present.
+    /// 
+    /// Returns the block if present, or None if absent.
+    pub fn try_read(block_origin: DiskPointer) -> Option<RawBlock> {
+        if let Some(cached) = BlockCache::try_find(block_origin) {
+            // Was there!
+            return Some(cached.to_raw())
+        }
+        // Missing.
+        None
+    }
+
     /// Reads in a block from disk, attempts to read it from the cache first.
     /// 
     /// You must specify the type of disk the block is being read from, otherwise you cannot guarantee that you

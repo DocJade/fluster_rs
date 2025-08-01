@@ -54,7 +54,7 @@ lazy_static! {
 // =========
 //
 
-use crate::pool::disk::{drive_struct::{FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::cache::statistics::BlockCacheStatistics}};
+use crate::pool::disk::{drive_struct::{FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::cache::statistics::BlockCacheStatistics}, standard_disk::standard_disk_struct::StandardDisk};
 
 /// The wrapper around all the cache tiers
 /// Only avalible within the cache folder,
@@ -73,6 +73,7 @@ pub(super) struct BlockCache {
 }
 
 /// The actual caches
+#[derive(Clone)]
 struct TieredCache {
     /// How big this cache is.
     size: usize,
@@ -151,10 +152,20 @@ impl BlockCache {
 
     /// Reserve a block on a disk, skipping the disk if possible.
     /// 
+    /// You must provide the actual disk to allocate to, but reading in the disk may be cached, so
+    /// even if you have to call FloppyDrive::Open() to get it, this could still save swaps.
+    /// 
     /// Panics if block was already allocated.
     pub(super) fn cached_block_allocation(raw_block: &RawBlock, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
         // Another level of indirection, how fun
         super::cached_allocation::cached_allocation(raw_block, expected_disk_type)
+    }
+    
+    /// Flushes all information in a tier to disk.
+    /// 
+    /// Caller must drop all references to cache before calling this.
+    fn flush(tier_number: usize) -> Result<(), FloppyDriveError> {
+        go_flush_tier(tier_number)
     }
 }
 
@@ -217,10 +228,6 @@ impl TieredCache {
     fn get_worst(&mut self) -> Option<CachedBlock> {
         go_get_tier_worst(self)
     }
-    /// Flushes all information in this tier to disk.
-    fn flush(&mut self) -> Result<(), FloppyDriveError> {
-        go_flush_tier(self)
-    }
     /// Check if this tier is full
     fn is_full(&self) -> bool {
         go_check_tier_full(self)
@@ -261,7 +268,7 @@ fn go_try_find_cache(pointer: DiskPointer) -> Option<CachedBlock> {
 
     // To prevent callers from having to lock the global themselves, we will grab it here ourselves
     // and pass it downwards into any functions that require it.
-    let cache = &mut CASHEW.lock().expect("Single threaded.");
+    let cache = &mut CASHEW.try_lock().expect("Single threaded.");
 
     // Try from highest to lowest
     // Tier 2
@@ -349,7 +356,7 @@ fn go_add_or_update_item_cache(block: CachedBlock) -> Result<(), FloppyDriveErro
 
     // To prevent callers from having to lock the global themselves, we will grab it here ourselves
     // and pass it downwards into any functions that require it.
-    let cache = &mut CASHEW.lock().expect("Single threaded.");
+    let mut cache = CASHEW.try_lock().expect("Single threaded.");
 
     // Since we search for the item in every tier before adding, this prevents duplicates.
 
@@ -380,7 +387,11 @@ fn go_add_or_update_item_cache(block: CachedBlock) -> Result<(), FloppyDriveErro
     // Make sure we have room first
     if cache.tier_0.is_full() {
         // We don't have room, so we need to wipe the cache.
-        cache.tier_0.flush()?;
+        drop(cache);
+        BlockCache::flush(0)?;
+        let cache = &mut CASHEW.try_lock().expect("Single threaded.");
+        cache.tier_0.add_item(block);
+        return Ok(());
     }
 
     // Put it in
@@ -393,7 +404,7 @@ fn go_remove_item_cache(pointer: &DiskPointer) {
     // Slow? Maybe...
     // To prevent callers from having to lock the global themselves, we will grab it here ourselves
     // and pass it downwards into any functions that require it.
-    let cache = &mut CASHEW.lock().expect("Single threaded.");
+    let cache = &mut CASHEW.try_lock().expect("Single threaded.");
 
     // Since we are clearing just one item, not a whole disk, we only need to check each tier once, since there
     // cant be any duplicates, and we can return as soon as we see a matching item.
@@ -487,18 +498,46 @@ fn go_get_tier_worst(tier: &mut TieredCache) -> Option<CachedBlock> {
     tier.items.pop_back()
 }
 
-fn go_flush_tier(tier: &mut TieredCache) -> Result<(), FloppyDriveError> {
+fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
     // We will be flushing all data from this tier of the cache to disk.
     // This can be used on any tier, but will usually be called on tier 0.
 
-    // Assume the tier is not already empty.
-    assert!(!tier.items.is_empty(), "Cannot flush an empty tier!");
+    // We will extract all of the cache items at once, leaving the tier empty.
+    let mut items_to_flush: VecDeque<CachedBlock>;
+
+    // Keep the cache locked within just this area.
+    {
+        // Get the block cache
+        let mut cache = CASHEW.try_lock().expect("Single threaded.");
+        
+        // find the tier we need to flush
+        let tier_to_flush: &mut TieredCache = match tier_number {
+            0 => &mut cache.tier_0,
+            1 => &mut cache.tier_1,
+            2 => &mut cache.tier_2,
+            _ => panic!("Bro there are only 3 cache tiers"),
+        };
+
+        // If the tier is empty, there's nothing to do. We should not be
+        // flushing empty tiers
+        assert!(!tier_to_flush.items.is_empty(), "Cannot flush an empty tier!");
+
+        // Move all items from the tier into our local variable,
+        // leaving the cache's tier empty.
+
+        // In theory, if the flush fails, we would now lose data...
+        // just dont fail lol, good luck
+
+        items_to_flush = std::mem::take(&mut tier_to_flush.items);
+    }
+
+    // Cache is now unlocked
 
     // first we grab all of the items and sort them by disk, low to high, and also sort the blocks
     // within those disks to be in order. Since if the blocks are in order, the head doesn't have to move around
     // the disk as much.
 
-    let items = tier.items.make_contiguous();
+    let items = items_to_flush.make_contiguous();
     items.sort_unstable_by_key(|item| (item.block_origin.disk, item.block_origin.block));
     
     // Now to reduce head movement even further, we don't want to check the allocation table
@@ -543,13 +582,14 @@ fn go_flush_tier(tier: &mut TieredCache) -> Result<(), FloppyDriveError> {
         // Sanity check, correct disk type
         assert_eq!(current_disk, block.disk_type);
         // Write the block
+        // Make sure block is not empty
+        assert!(!&block.to_raw().data.iter().all(|byte| *byte == 0));
         current_disk.unchecked_write_block(&block.to_raw())?;
     }
 
     // All done, don't need to do any cleanup for previously stated reasons
 
-    // Actually clear the cache.
-    tier.items.clear();
+
     Ok(())
 }
 

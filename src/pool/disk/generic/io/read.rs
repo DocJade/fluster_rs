@@ -7,6 +7,7 @@
 // Imports
 
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+use crate::pool::disk::generic::io::cache::cache_io::CachedBlockIO;
 
 use super::super::block::block_structs::BlockError;
 use super::super::block::block_structs::RawBlock;
@@ -35,8 +36,23 @@ pub(crate) fn read_block_direct(
     // Calculate the offset into the disk
     let read_offset: u64 = block_index as u64 * 512;
 
-    // Seek to the requested block and read 512 bytes from it
-    disk_file.read_exact_at(&mut read_buffer, read_offset)?;
+    // Skip reading the disk if the block happens to be in the cache already
+    let disk_pointer: DiskPointer = DiskPointer {
+        disk: originating_disk,
+        block: block_index,
+    };
+
+    
+    if let Some(block) = CachedBlockIO::try_read(disk_pointer) {
+        // The block was already in the cache!
+        read_buffer = block.data;
+    } else {
+        // The block was not in the cache, hit the disk as usual
+
+        // Seek to the requested block and read 512 bytes from it
+        disk_file.read_exact_at(&mut read_buffer, read_offset)?;
+    }
+
 
     // Check the CRC, unless the user disabled it on this call.
     // CRC checks should only be disabled when absolutely needed, such as

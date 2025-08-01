@@ -128,11 +128,25 @@ impl DiskBootstrap for StandardDisk {
         // load in the header
         let header: StandardDiskHeader =
             StandardDiskHeader::from_block(&block).expect("Already checked type.");
-        StandardDisk {
+        let mut in_progress = StandardDisk {
             number: header.disk_number,
             disk_file: file,
             header,
+        };
+
+        // Need to swoop in here due to cache magic, its possible that this disk had its allocations
+        // updated while it was not in the drive, so we must see if it's in the cache.
+
+        // Yes we already read the block from disk anyways, but we have to do that regardless
+        // to check if the disk number is correct.
+
+        if let Some(cached_header_block) = CachedBlockIO::try_read(block.block_origin) {
+            // There is info about this disk in the cache! Snag that.
+            in_progress.header = StandardDiskHeader::from_block(&cached_header_block).expect("This actually can't fail. Check the function lol");
         }
+
+        in_progress
+
     }
 }
 
