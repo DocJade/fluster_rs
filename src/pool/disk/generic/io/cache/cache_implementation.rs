@@ -41,7 +41,7 @@ use lazy_static::lazy_static;
 //
 
 // The maximum amount of blocks all caches can store
-const CACHE_SIZE: usize = 2880;
+const CACHE_SIZE: usize = 2880 * 2;
 
 // The actual cached data
 lazy_static! {

@@ -66,6 +66,17 @@ impl Pool {
         // the function it calls is the same as find_free_pool_blocks()
         go_find_free_pool_blocks(blocks, true, add_crc)
     }
+
+    /// Frees a block from a disk in the pool.
+    /// 
+    /// All blocks must come from same disk.
+    /// 
+    /// Returns how many blocks were freed.
+    /// 
+    /// Will destroy any data currently in that block.
+    pub fn free_pool_block_from_disk(blocks: &[DiskPointer]) -> Result<u16, FloppyDriveError> {
+        go_deallocate_pool_block(blocks)
+    }
 }
 
 fn go_find_free_pool_blocks(blocks: u16, mark: bool, add_crc: bool) -> Result<Vec<DiskPointer>, FloppyDriveError> {
@@ -193,6 +204,15 @@ fn go_find_free_pool_blocks(blocks: u16, mark: bool, add_crc: bool) -> Result<Ve
         }
     }
 
+    // Now that we have allocated, the most probable disk is the last disk we got blocks from
+    GLOBAL_POOL
+        .get()
+        .expect("Single threaded")
+        .try_lock()
+        .expect("Single threaded")
+        .header
+        .disk_with_next_free_block = disk_to_check;
+
 
 
     // We will sort the resulting vector to make to group the disks together, this will
@@ -241,4 +261,48 @@ fn write_empty_crc(blocks: &[u16], disk: u16) -> Result<(), FloppyDriveError> {
 
     // All of the blocks now have a empty block with a crc on it.
     Ok(())
+}
+
+fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, FloppyDriveError> {
+    // Make sure all of the blocks came from the same disk
+    let starter: DiskPointer = *blocks.first().expect("Why are we getting 0 blocks?");
+    let mut extracted_blocks: Vec<u16> = Vec::new();
+    for block in blocks {
+        assert_eq!(starter.disk, block.disk);
+        extracted_blocks.push(block.block);
+    }
+
+    // Now go to that disk and free the blocks
+    let mut disk: StandardDisk = match FloppyDrive::open(starter.disk)? {
+        DiskType::Standard(standard_disk) => standard_disk,
+        _ => unreachable!("Block allocations must be on standard disks!"),
+    };
+    
+    let blocks_freed = disk.free_blocks(&extracted_blocks)?;
+
+    // If the current disk in the pool is higher than the blocks we just freed, we need to move back
+    // the search start for finding new free blocks.
+
+    let probable_disk = GLOBAL_POOL
+        .get()
+        .expect("Single threaded")
+        .try_lock()
+        .expect("Single threaded")
+        .header
+        .disk_with_next_free_block;
+
+    if probable_disk > disk.number {
+        // It's higher, we need to move the pool back.
+        GLOBAL_POOL
+            .get()
+            .expect("Single threaded")
+            .try_lock()
+            .expect("Single threaded")
+            .header
+            .disk_with_next_free_block = disk.number;
+    }
+
+    // Return the number of blocks freed.
+    Ok(blocks_freed)
+    
 }
