@@ -271,6 +271,9 @@ fn create_new_pool_disk(mut disk: BlankDisk) -> Result<(), FloppyDriveError> {
     // Write it to the disk!
     // This is unchecked because the disk header does not exist yet, we cannot allocate space
     // for the header without the header.
+
+    // We dont use cached IO here, since pool disks cannot have any caching on them.
+    
     disk.unchecked_write_block(&writeable_block)?;
 
     // Done!

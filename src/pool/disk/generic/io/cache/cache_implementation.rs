@@ -54,7 +54,7 @@ lazy_static! {
 // =========
 //
 
-use crate::pool::disk::{drive_struct::{FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::cache::statistics::BlockCacheStatistics}, standard_disk::standard_disk_struct::StandardDisk};
+use crate::pool::disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::{cache::{cache_io::CachedBlockIO, statistics::BlockCacheStatistics}, checked_io::CheckedIO}}, standard_disk::standard_disk_struct::StandardDisk};
 
 /// The wrapper around all the cache tiers
 /// Only avalible within the cache folder,
@@ -144,6 +144,8 @@ impl BlockCache {
     }
 
     /// Removes an item from the cache if it exists.
+    /// 
+    /// You must flush this item to disk yourself (if needed), or you will lose data!
     /// 
     /// Returns nothing.
     pub(super) fn remove_item(pointer: &DiskPointer) {
@@ -409,13 +411,9 @@ fn go_remove_item_cache(pointer: &DiskPointer) {
     // Since we are clearing just one item, not a whole disk, we only need to check each tier once, since there
     // cant be any duplicates, and we can return as soon as we see a matching item.
 
-    // TODO: Need to make sure caller cannot call this without first flushing the item to disk,
-    // or it must be documented that the caller must know that they are possibly discarding
-    // unwritten information.
-
-    todo!(); // This isnt used yet, so todo it until above doc is written
-
     if let Some(index) = cache.tier_2.find_item(pointer) {
+        // We discard the removed item. We assume the caller already
+        // grabbed their own copy if they needed it.
         let _ = cache.tier_2.extract_item(index);
         return
     }
@@ -451,6 +449,12 @@ fn go_make_new_tier(size: usize) -> TieredCache {
 fn go_find_tier_item(tier: &TieredCache, pointer: &DiskPointer) -> Option<usize> {
     // Does not update order
     // Just see if it exists.
+
+    // Skip if the tier is empty
+    if tier.items.is_empty() {
+        return None;
+    }
+
     tier.items.iter().position(|x| x.block_origin == *pointer)
 }
 
@@ -568,8 +572,21 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
     // Therefore, we can make all of our writes in one pass per disk, and never have to look at
     // the allocation table at all!
 
+
+    // To properly allow lazy-loading disks into the drive, we allow the disk loading routine to use cached blocks
+    // if they exist.
+
+    // The problem is, this causes the disk check to always return true if the header is in the cache, meaning
+    // in theory, an incorrect disk can be in the drive.
+
+    // To solve this, down here we must grab the header from the cache if it is there, then 
+    // we hold onto that, load the disk (which now has to do a proper block read to check if its the right disk), then
+    // update the disk if its the correct one.
+
     // Open the first disk to write to
-    let mut current_disk = FloppyDrive::open(items.first().expect("Guarded.").block_origin.disk)?;
+
+    let mut current_disk: StandardDisk = disk_load_header_invalidation(items.first().expect("We know we have at least 1 item").block_origin.disk)?;
+    
 
     for block in items {
         // Right disk?
@@ -577,10 +594,8 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
             // Sanity check, invalid disk would be very silly this low down but whatever
             assert!(!block.block_origin.no_destination());
             // Load new disk
-            current_disk = FloppyDrive::open(block.block_origin.disk)?;
+            current_disk = disk_load_header_invalidation(block.block_origin.disk)?;
         }
-        // Sanity check, correct disk type
-        assert_eq!(current_disk, block.disk_type);
         // Write the block
         // Make sure block is not empty
         assert!(!&block.to_raw().data.iter().all(|byte| *byte == 0));
@@ -589,10 +604,52 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
 
     // All done, don't need to do any cleanup for previously stated reasons
 
-
     Ok(())
 }
 
 fn go_check_tier_full(tier: &TieredCache) -> bool {
     tier.items.len() == tier.size
+}
+
+// Function for handling the possibility of cached disk headers
+pub(super) fn disk_load_header_invalidation(disk_number: u16) -> Result<StandardDisk, FloppyDriveError> {
+    // Try to find the header for this disk in the cache
+
+    let header_pointer: DiskPointer = DiskPointer {
+        disk: disk_number,
+        block: 0,
+    };
+
+    let possibly_cached: Option<RawBlock>;
+    if let Some(cached) = CachedBlockIO::try_read(header_pointer) {
+        // block is in the cache, hold onto it
+        possibly_cached = Some(cached);
+        // And remove it from the cache
+        CachedBlockIO::remove_block(&header_pointer);
+    } else {
+        // it isnt there
+        possibly_cached = None;
+    }
+
+    // Now we can load in the disk without worrying about the header being cached already.
+
+    let mut disk = match FloppyDrive::open(disk_number)? {
+        DiskType::Standard(standard_disk) => standard_disk,
+        _ => unreachable!("Cache does not happen on non-standard disks."),
+    };
+
+    // Update the header on the disk if needed.
+    if let Some(cached_block) = possibly_cached {
+        // There was a header in the cache, so we now need to update the disk again
+        disk.checked_update(&cached_block)?;
+
+        // Now the disk is out of sync, we need to load it in _again_
+        disk = match FloppyDrive::open(disk_number)? {
+            DiskType::Standard(standard_disk) => standard_disk,
+            _ => unreachable!("Cache does not happen on non-standard disks."),
+        };
+    }
+
+    // The header on the disk is now up to date.
+    Ok(disk)
 }

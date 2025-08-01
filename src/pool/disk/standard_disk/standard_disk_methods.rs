@@ -248,7 +248,7 @@ fn initialize_numbered(disk: &mut StandardDisk, disk_number: u16) -> Result<(), 
     // Since this is a brand new disk without proper header information finalized, we have to do a direct write here
 
     debug!("Writing header...");
-    CachedBlockIO::forcibly_write_a_block(header_block, disk)?;
+    disk.unchecked_write_block(header_block)?;
     debug!("Header written.");
 
     // All done!

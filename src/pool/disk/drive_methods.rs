@@ -14,6 +14,8 @@ use crate::pool::disk::blank_disk::blank_disk_struct::BlankDisk;
 use crate::pool::disk::drive_struct::DiskBootstrap;
 use crate::pool::disk::generic::block::block_structs::BlockError;
 use crate::pool::disk::generic::disk_trait::GenericDiskMethods;
+use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+use crate::pool::disk::generic::io::cache::cache_io::CachedBlockIO;
 use crate::pool::disk::generic::io::read::read_block_direct;
 
 use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
@@ -224,17 +226,33 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
                 // Update the current disk if needed
                 let previous_disk = CURRENT_DISK_IN_DRIVE.load(Ordering::SeqCst);
                 if new_disk_number != previous_disk {
-                    // We have swapped disks.
-                    CURRENT_DISK_IN_DRIVE.store(new_disk_number, Ordering::SeqCst);
-                    // Update the swap count
-                    trace!("Locking GLOBAL_POOL, updating disk swap count.");
-                    GLOBAL_POOL
-                        .get()
-                        .expect("single threaded")
-                        .try_lock()
-                        .expect("single threaded")
-                        .statistics
-                        .swaps += 1;
+                    // But we dont update the swap count unless we know this wasn't a cached disk.
+                    // We can check if this is the case by seeing if the header block is in the cache.
+
+                    // Since reading in the header in open_and_deduce_disk does not cache the read it does.
+                    let header_location: DiskPointer = DiskPointer {
+                        disk: new_disk_number,
+                        block: 0,
+                    };
+
+                    if let Some(cached) = CachedBlockIO::try_read(header_location) {
+                        // This block was read from the cache, we did not actually swap disks.
+                        // Do nothing.
+                    } else {
+                        // We have actually swapped disks, there is a new disk in the drive.
+                        CURRENT_DISK_IN_DRIVE.store(new_disk_number, Ordering::SeqCst);
+
+
+                        // Update the swap count
+                        trace!("Locking GLOBAL_POOL, updating disk swap count.");
+                        GLOBAL_POOL
+                            .get()
+                            .expect("single threaded")
+                            .try_lock()
+                            .expect("single threaded")
+                            .statistics
+                            .swaps += 1;
+                    }
                 }
 
                 // Check if this is the right disk number

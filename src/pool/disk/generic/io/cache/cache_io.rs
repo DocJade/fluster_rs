@@ -1,6 +1,6 @@
 // External interaction with the block cache
 
-use crate::pool::disk::{drive_struct::{FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::{cache::cache_implementation::{BlockCache, CachedBlock}, checked_io::CheckedIO}}};
+use crate::pool::disk::{drive_struct::{FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::{cache::cache_implementation::{BlockCache, CachedBlock}, checked_io::CheckedIO}}, standard_disk::standard_disk_struct::StandardDisk};
 
 //
 // =========
@@ -19,6 +19,9 @@ pub struct CachedBlockIO {
 impl CachedBlockIO {
     /// Sometimes you need to forcibly write a disk during initialization procedures, so we need a bypass.
     /// 
+    /// This will ensure the correct disk is in the drive, and the header is properly up to date before
+    /// writing anything.
+    /// 
     /// !! == DANGER == !!
     /// 
     /// This function should ONLY be used when initializing disks, since this does not properly update the cache.
@@ -32,8 +35,8 @@ impl CachedBlockIO {
     /// !! == DANGER == !!
     /// 
     /// You must pass in the disk to write to.
-    pub fn forcibly_write_a_block<T: GenericDiskMethods>(raw_block: &RawBlock, disk_to_write_on: &mut T) -> Result<(), FloppyDriveError> {
-        go_force_write_block(raw_block, disk_to_write_on)
+    pub fn forcibly_write_a_block(raw_block: &RawBlock) -> Result<(), FloppyDriveError> {
+        go_force_write_block(raw_block)
     }
 
     /// Attempts to read a block from the cache, does not load from disk if not present.
@@ -140,14 +143,11 @@ fn go_update_cached_block(raw_block: &RawBlock, expected_disk_type: JustDiskType
     Ok(())
 }
 
-fn go_force_write_block<T: GenericDiskMethods>(raw_block: &RawBlock, disk_to_write_on: &mut T) -> Result<(), FloppyDriveError> {
-    // Since we are writing directly to this disk without being able to check if its the right disk, we must assume that the
-    // caller knows what they're doing and is handling loading in the correct disk for us. There aren't any safeguards we can put in at this point.
-    // Since we are force writing, we will invalidate all items in the cache from that disk. Chances are there won't be
-    // anything there in the first place, since this should only be used on disk initialization.
+fn go_force_write_block(raw_block: &RawBlock) -> Result<(), FloppyDriveError> {
+    // Load in the disk to write to, ensuring that the header is up to date.
 
-    // This will fail on unknown and blank disks, you must first spoof the disk type before sending it in here.
+    let mut disk: StandardDisk = super::cache_implementation::disk_load_header_invalidation(raw_block.block_origin.disk)?;
 
-    disk_to_write_on.unchecked_write_block(raw_block)?;
+    disk.unchecked_write_block(raw_block)?;
     Ok(())
 }
