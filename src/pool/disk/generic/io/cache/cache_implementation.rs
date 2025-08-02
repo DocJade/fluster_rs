@@ -30,7 +30,7 @@
 //  top, previously I used bubble sort, which could lead to slightly less used items to
 //  not promote away from the bottom of the queue fast enough.
 
-use std::{collections::VecDeque, sync::Mutex};
+use std::{collections::{HashMap, VecDeque}, hash::Hash, sync::Mutex};
 
 use lazy_static::lazy_static;
 
@@ -77,8 +77,10 @@ pub(super) struct BlockCache {
 struct TieredCache {
     /// How big this cache is.
     size: usize,
-    /// The items currently in the cache.
-    items: VecDeque<CachedBlock>
+    /// The items currently in the cache, hashmap pair
+    items_map: HashMap<DiskPointer, CachedBlock>,
+    /// Keep track of the order of items in the cache
+    order: VecDeque<DiskPointer>
 }
 
 /// The cached blocks
@@ -239,10 +241,10 @@ impl TieredCache {
 // Nice to haves for the CachedBlocks
 impl CachedBlock {
     /// Turn a CachedBlock into a RawBlock
-    pub(super) fn to_raw(&self) -> RawBlock {
+    pub(super) fn to_raw(self) -> RawBlock {
         RawBlock {
             block_origin: self.block_origin,
-            data: self.data.clone().try_into().expect("Should be 512 bytes."),
+            data: self.data.try_into().expect("Should be 512 bytes."),
         }
     }
     /// Turn a RawBlock into a CachedBlock
@@ -438,11 +440,14 @@ fn go_remove_item_cache(pointer: &DiskPointer) {
 
 fn go_make_new_tier(size: usize) -> TieredCache {
     // New tiers are obviously empty.
-    let mut new_vec: VecDeque<CachedBlock> = VecDeque::new();
-    new_vec.reserve_exact(size);
+    let mut new_hashmap: HashMap<DiskPointer, CachedBlock> = HashMap::with_capacity(size);
+    new_hashmap.shrink_to(size);
+    let mut new_order: VecDeque<DiskPointer> = VecDeque::new();
+    new_order.reserve_exact(size);
     TieredCache {
         size,
-        items: new_vec,
+        items_map: new_hashmap,
+        order: new_order
     }
 }
 
@@ -451,55 +456,88 @@ fn go_find_tier_item(tier: &TieredCache, pointer: &DiskPointer) -> Option<usize>
     // Just see if it exists.
 
     // Skip if the tier is empty
-    if tier.items.is_empty() {
+    if tier.order.is_empty() {
         return None;
     }
 
-    tier.items.iter().position(|x| x.block_origin == *pointer)
+    // We check the order, because we care about index here, not the actual block.
+    tier.order.iter().position(|x| x == pointer)
 }
 
 fn go_get_tier_item(tier: &mut TieredCache, index: usize) -> Option<&CachedBlock> {
     // Updates order
-    
-    // Grab the item from wherever it is and push it to the top.
-    if let Some(item) = tier.items.remove(index) {
-        // There was an item
-        // Push to front
-        tier.items.push_front(item);
-        // return it
-        return tier.items.front()
-    }
 
-    // No item at this index? Weird, caller can deal with it.
-    None
+    // Find what item the index refers to
+    let wanted_block_pointer: DiskPointer = tier.order.remove(index)?;
+
+    // Now get that item
+    let the_block = tier.items_map.get(&wanted_block_pointer)?;
+
+    // Now move the item to the front of the tier, since we have read it
+    tier.order.push_front(wanted_block_pointer);
+
+    Some(the_block)
 }
 
 fn go_extract_tier_item(tier: &mut TieredCache, index: usize) -> Option<CachedBlock> {
     // Pops an item from any index, preserves order of other items
-    tier.items.remove(index)
+
+    // Find the item
+    let wanted_block_pointer: DiskPointer = tier.order.remove(index)?;
+
+    // Go get it
+    tier.items_map.remove(&wanted_block_pointer)
 }
 
 fn go_add_tier_item(tier: &mut TieredCache, item: CachedBlock) {
     // New tier items go at the front, since they are the freshest.
     assert!(!tier.is_full());
-    tier.items.push_front(item);
+
+    // Put the pointer into the ordering
+    tier.order.push_front(item.block_origin);
+
+    // Add to the hashmap
+    let already_existed = tier.items_map.insert(item.block_origin, item);
+
+    // Make sure that did not already exist
+    assert!(already_existed.is_none());
 }
 
 fn go_update_tier_item(tier: &mut TieredCache, index: usize, new_item: CachedBlock) {
     // Replace the item
     // Updating is an access after all... so we will promote it.
-    let _ = tier.items.remove(index).expect("Should have a index to a valid item.");
-    tier.items.push_front(new_item);
+
+    // Update the order
+    let to_move = tier.order.remove(index).expect("Should exist.");
+    tier.order.push_front(to_move);
+
+    // Now replace the item in the hashmap at the index.
+    let replaced = tier.items_map.insert(to_move, new_item);
+    
+    // Make sure we actually replaced it. Not adding here!
+    assert!(replaced.is_some());
 }
 
 fn go_get_tier_best(tier: &mut TieredCache) -> Option<CachedBlock> {
     // Best is at the front
-    tier.items.pop_front()
+
+    // Get the pointer
+    let front_pointer = tier.order.pop_front()?;
+
+    // Get the block
+    // This will return an option, its the callers fault if this item does not exist.
+    tier.items_map.remove(&front_pointer)
 }
 
 fn go_get_tier_worst(tier: &mut TieredCache) -> Option<CachedBlock> {
     // The worst item is at the end of the vec
-    tier.items.pop_back()
+    
+    // Get the pointer
+    let front_pointer = tier.order.pop_back()?;
+
+    // Get the block
+    // This will return an option, its the callers fault if this item does not exist.
+    tier.items_map.remove(&front_pointer)
 }
 
 fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
@@ -507,7 +545,9 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
     // This can be used on any tier, but will usually be called on tier 0.
 
     // We will extract all of the cache items at once, leaving the tier empty.
-    let mut items_to_flush: VecDeque<CachedBlock>;
+    let items_map_to_flush: HashMap<DiskPointer, CachedBlock>;
+    let items_order_to_flush: VecDeque<DiskPointer>;
+    // We only get the order just to discard it.
 
     // Keep the cache locked within just this area.
     {
@@ -524,7 +564,7 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
 
         // If the tier is empty, there's nothing to do. We should not be
         // flushing empty tiers
-        assert!(!tier_to_flush.items.is_empty(), "Cannot flush an empty tier!");
+        assert!(!tier_to_flush.order.is_empty(), "Cannot flush an empty tier!");
 
         // Move all items from the tier into our local variable,
         // leaving the cache's tier empty.
@@ -532,8 +572,11 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
         // In theory, if the flush fails, we would now lose data...
         // just dont fail lol, good luck
 
-        items_to_flush = std::mem::take(&mut tier_to_flush.items);
+        items_map_to_flush = std::mem::take(&mut tier_to_flush.items_map);
+        items_order_to_flush = std::mem::take(&mut tier_to_flush.order);
     }
+
+    let _ = items_order_to_flush;
 
     // Cache is now unlocked
 
@@ -541,7 +584,9 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
     // within those disks to be in order. Since if the blocks are in order, the head doesn't have to move around
     // the disk as much.
 
-    let items = items_to_flush.make_contiguous();
+    // Get the items from the hashmap
+    let mut items: Vec<CachedBlock> = items_map_to_flush.into_values().collect();
+    // Sort
     items.sort_unstable_by_key(|item| (item.block_origin.disk, item.block_origin.block));
     
     // Now to reduce head movement even further, we don't want to check the allocation table
@@ -597,8 +642,6 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
             current_disk = disk_load_header_invalidation(block.block_origin.disk)?;
         }
         // Write the block
-        // Make sure block is not empty
-        assert!(!&block.to_raw().data.iter().all(|byte| *byte == 0));
         current_disk.unchecked_write_block(&block.to_raw())?;
     }
 
@@ -608,7 +651,7 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
 }
 
 fn go_check_tier_full(tier: &TieredCache) -> bool {
-    tier.items.len() == tier.size
+    tier.order.len() == tier.size
 }
 
 // Function for handling the possibility of cached disk headers

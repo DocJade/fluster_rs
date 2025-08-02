@@ -1,6 +1,6 @@
 /// Points to a specific block on a disk
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub(crate) struct DiskPointer {
     pub(crate) disk: u16,
     pub(crate) block: u16,
