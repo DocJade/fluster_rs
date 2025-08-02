@@ -45,7 +45,7 @@ pub(super) fn cached_allocation(raw_block: &RawBlock, expected_disk_type: JustDi
 
     if let Some(header_block) = BlockCache::try_find(header) {
         // Header is cached! We can sneak around the disk access.
-        the_sidestep(raw_block, &header_block)?;
+        the_sidestep(raw_block, header_block)?;
 
         // Now that we have that spoofed disk, we need to update the real disks table, otherwise
         // it would be out of sync immediately after this function.
@@ -79,7 +79,7 @@ pub(super) fn cached_allocation(raw_block: &RawBlock, expected_disk_type: JustDi
 }
 
 // Returns the spoofed standard disk
-fn the_sidestep(block_to_allocate: &RawBlock, header_block: &CachedBlock) -> Result<(), FloppyDriveError> {
+fn the_sidestep(block_to_allocate: &RawBlock, header_block: CachedBlock) -> Result<(), FloppyDriveError> {
     // We will spoof the disk.
     // This is super risky, maybe,
     // but the speedup and the reduction in disk swapping should be well worth it

@@ -137,7 +137,7 @@ fn go_find_free_pool_blocks(blocks: u16, mark: bool, add_crc: bool) -> Result<Ve
             Ok(ok) => {
                 // We were able to allocate all of the blocks we asked for!
                 // We're done!
-                free_blocks.append(&mut block_indexes_to_pointers(ok.clone(), disk_to_check));
+                free_blocks.append(&mut block_indexes_to_pointers(&ok, disk_to_check));
 
                 // Allocate those blocks if needed.
                 if mark {
@@ -174,7 +174,7 @@ fn go_find_free_pool_blocks(blocks: u16, mark: bool, add_crc: bool) -> Result<Ve
                 let blockie_doos = disk
                     .find_free_blocks(amount)
                     .expect("We already asked how much room you had.");
-                free_blocks.append(&mut block_indexes_to_pointers(blockie_doos.clone(), disk_to_check));
+                free_blocks.append(&mut block_indexes_to_pointers(&blockie_doos, disk_to_check));
 
                 // Allocate those blocks if needed.
                 if mark {
@@ -225,10 +225,10 @@ fn go_find_free_pool_blocks(blocks: u16, mark: bool, add_crc: bool) -> Result<Ve
 }
 
 // helper
-fn block_indexes_to_pointers(blocks: Vec<u16>, disk: u16) -> Vec<DiskPointer> {
+fn block_indexes_to_pointers(blocks: &Vec<u16>, disk: u16) -> Vec<DiskPointer> {
     let mut result: Vec<DiskPointer> = Vec::new();
     for block in blocks {
-        result.push(DiskPointer { disk, block });
+        result.push(DiskPointer { disk, block: *block });
     }
     result
 }
