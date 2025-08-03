@@ -5,7 +5,7 @@
 
 use std::{cmp::max, u16};
 
-use crate::pool::{disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::{block_structs::RawBlock, crc::add_crc_to_block}, generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO}, standard_disk::{block::{directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem}, file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::{ExtentFlags, FileExtent, FileExtentBlock}}, inode::inode_struct::{Inode, InodeBlock, InodeFile, InodeFlags, InodeTimestamp}}, standard_disk_struct::StandardDisk}}, pool_actions::pool_struct::Pool};
+use crate::pool::{disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::{block_structs::RawBlock, crc::add_crc_to_block}, generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO}, standard_disk::{block::{directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem}, file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::{ExtentFlags, FileExtent, FileExtentBlock}}, inode::inode_struct::{Inode, InodeBlock, InodeDirectory, InodeFile, InodeFlags, InodeTimestamp}, io::directory::types::NamedItem}, standard_disk_struct::StandardDisk}}, pool_actions::pool_struct::Pool};
 
 impl InodeFile {
     /// Update the contents of a file starting at the provided seek point.
@@ -17,18 +17,8 @@ impl InodeFile {
     /// Optionally returns to a provided disk when done.
     /// 
     /// Returns number of bytes written, but also updates the incoming file's size automatically
-    fn write(&mut self, bytes: &[u8], seek_point: u64, return_to: Option<u16>) -> Result<u64, FloppyDriveError> {
+    fn write(&mut self, bytes: &[u8], seek_point: u64, return_to: Option<u16>) -> Result<u32, FloppyDriveError> {
        go_write(self, bytes, seek_point, return_to)
-    }
-    /// Deletes a file by deallocating every block the file used to take up, including
-    /// all of the FileExtent blocks that were used to construct the file.
-    fn delete(self) -> Result<(), FloppyDriveError> {
-        todo!();
-    }
-    /// Truncates a file. Deallocates every block that used to hold data for this file.
-    /// Does not delete the origin FileExtent block.
-    fn truncate(&mut self) -> Result<(), FloppyDriveError> {
-        todo!();
     }
 }
 
@@ -42,6 +32,35 @@ impl DirectoryBlock {
     /// Should include extension iirc?
     pub fn new_file(self, name: String, return_to: Option<u16>) -> Result<DirectoryItem, FloppyDriveError> {
         go_make_new_file(self, name, return_to)
+    }
+
+    /// Deletes an file by deallocating every block the file used to take up, and removing it
+    /// from the directory.
+    /// 
+    /// If you are looking to truncate the file, you need to call 
+    /// 
+    /// Returns `None` if the file did not exist.
+    ///
+    /// Panics if fed a directory. Use remove_directory() !
+    pub fn delete_file(&mut self, file: NamedItem) -> Result<Option<()>, FloppyDriveError> {
+        // We only handle files here
+        assert!(file.is_file());
+        
+        // Extract the item
+        let extracted_item: DirectoryItem;
+        if let Some(exists) = self.extract_item(&file)? {
+            // Item was there
+            extracted_item = exists
+        } else {
+            // Tried to delete a file that does not exist in this directory.
+            return Ok(None)
+        };
+
+        // Delete it.
+        truncate_or_delete_file(&extracted_item, true)?;
+
+        // Since the extraction function already handles pulling out the item from the directory blocks, we are done.
+        Ok(Some(()))
     }
 }
 
@@ -63,7 +82,7 @@ impl DirectoryItem {
     /// Returns how many bytes were written.
     /// 
     /// Optionally returns to a specified disk.
-    pub fn write_file(&self, bytes: &[u8], seek_point: u64, return_to: Option<u16>) -> Result<u64, FloppyDriveError> {
+    pub fn write_file(&self, bytes: &[u8], seek_point: u64, return_to: Option<u16>) -> Result<u32, FloppyDriveError> {
         // Is this a file?
         if self.flags.contains(DirectoryFlags::IsDirectory) {
             // Uh, no it isn't why did you give me a dir?
@@ -100,6 +119,9 @@ impl DirectoryItem {
         // Replace the inner file with the new updated one
         updated_inode.file = Some(file);
 
+        // We also need to update the modify timestamp.
+        updated_inode.modified = InodeTimestamp::now();
+
         // Now update the inode in the block. This also flushes to disk for us.
         inode_block.update_inode(location.offset, updated_inode)?;
 
@@ -111,12 +133,25 @@ impl DirectoryItem {
         // All done. Return the number of bytes we wrote.
         Ok(num_bytes_written)
     }
+
+    /// Truncates a file. Deallocates every block that used to hold data for this file.
+    /// 
+    /// No action needs to be taken after this method.
+    /// 
+    /// Does not delete the origin FileExtent block.
+    /// 
+    /// Panics if fed a directory.
+    pub fn truncate(&self) -> Result<(), FloppyDriveError> {
+        // Make sure this is a file
+        assert!(!self.flags.contains(DirectoryFlags::IsDirectory));
+        truncate_or_delete_file(self, false)
+    }
 }
 
-fn go_write(inode: &mut InodeFile, bytes: &[u8], seek_point: u64, return_to: Option<u16>) -> Result<u64, FloppyDriveError> {
+fn go_write(inode_file: &mut InodeFile, bytes: &[u8], seek_point: u64, return_to: Option<u16>) -> Result<u32, FloppyDriveError> {
     // Decompose the file into its pointers
     // No return location, we don't care where this puts us.
-    let mut blocks = inode.to_pointers(None)?;
+    let mut blocks = inode_file.to_pointers(None)?;
 
     // get the seek point
     let (block_index, mut byte_index) = InodeFile::byte_finder( seek_point);
@@ -155,7 +190,7 @@ fn go_write(inode: &mut InodeFile, bytes: &[u8], seek_point: u64, return_to: Opt
 
         // Add that many more blocks to this file.
         // Since we know its already less than u16::MAX this cast is fine.
-        let new_pointers = expand_file(*inode, needed_blocks.try_into().expect("Guarded."))?;
+        let new_pointers = expand_file(*inode_file, needed_blocks.try_into().expect("Guarded."))?;
 
         // The new pointers are already in order for us, and we will add them onto the end of the
         // pointers we grabbed earlier from the file.
@@ -194,11 +229,11 @@ fn go_write(inode: &mut InodeFile, bytes: &[u8], seek_point: u64, return_to: Opt
     }
 
     // Update the file size with the new bytes we wrote.
-    let before = inode.get_size();
-    inode.set_size(before + bytes_written as u64);
+    let before = inode_file.get_size();
+    inode_file.set_size(before + bytes_written as u64);
 
     // Return how many bytes we wrote!
-    Ok(bytes_written as u64)
+    Ok(bytes_written as u32)
 }
 
 /// Updates a block with new content, overwriting previous content at an offset.
@@ -535,6 +570,103 @@ fn go_make_new_file(directory_block: DirectoryBlock, name: String, return_to: Op
     // All done.
     // Dont need to swap disks, already did that on the item add.
     Ok(new_file)
+}
+
+// Will only truncate if delete is false.
+fn truncate_or_delete_file(item: &DirectoryItem, delete: bool) -> Result<(), FloppyDriveError> {
+    // Is this a file?
+        if item.flags.contains(DirectoryFlags::IsDirectory) {
+            // Uh, no it isn't why did you give me a dir?
+            panic!("Tried to read a directory as a file!")
+        }
+
+        // Extract out the file
+        assert!(item.location.disk.is_some());
+        let location = &item.location;
+
+        // Get the inode block
+        let the_pointer_in_question: DiskPointer = DiskPointer {
+            disk: location.disk.expect("Guarded"),
+            block: location.block,
+        };
+
+        let read: RawBlock = CachedBlockIO::read_block(the_pointer_in_question, JustDiskType::Standard)?;
+        let mut inode_block: InodeBlock = InodeBlock::from_block(&read);
+
+        // Get the actual file
+        let mut inode_with_file: Inode = inode_block.try_read_inode(location.offset).expect("Caller guarantee.");
+        let mut file: InodeFile = inode_with_file.extract_file().expect("Caller guarantee.");
+
+        // Get all of the blocks that the file is stored in.
+        let mut used_blocks: Vec<DiskPointer> = file.to_pointers(None)?;
+
+        // Now we need to get all of the blocks that the extents take up
+
+        let first_extent: DiskPointer = file.pointer;
+
+        let mut current_extent_block: FileExtentBlock = FileExtentBlock::from_block(&CachedBlockIO::read_block(first_extent, JustDiskType::Standard)?);
+
+        // Loop over the extents, adding the blocks until we hit the end
+        while !current_extent_block.next_block.no_destination() {
+            // Have a destination, add it to the pile.
+            used_blocks.push(current_extent_block.next_block);
+            // Next
+            current_extent_block = FileExtentBlock::from_block(&CachedBlockIO::read_block(first_extent, JustDiskType::Standard)?);
+        }
+
+        // Now we will free all of those blocks
+
+        // But not the first extent if we are not deleting.
+        if !delete {
+            // Remove the first extent block from the list to delete
+            // This has to work, the loop HAD to've added it
+            let index_of_first = used_blocks.iter().position(|pointer| *pointer == first_extent).expect("Should have first pointer");
+            let _ = used_blocks.swap_remove(index_of_first);
+        }
+
+        // Sort blocks by disk and block order
+        used_blocks.sort_unstable_by_key(|block| (block.disk, block.block));
+
+        // Split into sections based on when the disk changes
+        // I feel like i already wrote this but i cant find it. lol
+        // But i know i didn't do it this way before! suck it past me!
+
+        let chunked = used_blocks.chunk_by(|a, b| a == b);
+
+
+        // Now go free all of those blocks.
+        // This will zero out the blocks, and remove them from the cache for us.
+        for chunk in chunked {
+            let freed = Pool::free_pool_block_from_disk(chunk)?;
+            assert_eq!(freed as usize, chunk.len());
+        }
+
+        // Now all of those blocks have been freed.
+
+        // If we are deleting the file, we dont need to do anything else, since the caller will just discard the directory item.
+        if delete {
+            // All done.
+            return Ok(());
+        }
+
+        // If we're still here, we need to truncate the directory item we were handed.
+        
+        
+        // Go reset the first extent block
+        let new_extent_start: FileExtentBlock = FileExtentBlock::new(first_extent);
+        CachedBlockIO::update_block(&new_extent_start.to_block(), JustDiskType::Standard)?;
+        
+        // Update the inode
+        // Set the file to a size of 0
+        file.set_size(0);
+        inode_with_file.file = Some(file);
+        // Update the modification time
+        inode_with_file.modified = InodeTimestamp::now();
+        // Put the inode back in the block it came from, this will write for us.
+        inode_block.update_inode(location.offset, inode_with_file)?;
+
+        // All done!
+        Ok(())
 }
 
 /// Just flushes the current FileExtentBlock to disk, nice helper function

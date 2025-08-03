@@ -58,6 +58,27 @@ impl DirectoryBlock {
     ) -> Result<(), FloppyDriveError> {
         go_make_directory(self, name, return_to)
     }
+
+    /// Remove a the given directory. Removes all blocks that contained information about this directory, and updates
+    /// all other blocks to remove references to this directory.
+    /// 
+    /// Caller must take care in ensuring that if this directory was pointed to from another directory (ie, was a folder in another folder)
+    /// that those references are cleaned up. (Done by removing the DirectoryItem that pointed to this.)
+    /// 
+    /// The directory block must be empty of all items.
+    /// 
+    /// Consumes the DirectoryBlock, since it will no longer exist after this call.
+    /// 
+    /// May swap disks.
+    /// 
+    /// Returns nothing on success.
+    pub fn delete_directory(self) -> Result<(), FloppyDriveError> {
+        // Make sure the directory is empty.
+        // Find all blocks that this directory currently references.
+        // Remove those blocks.
+        // Remove inode that referred to this directory.
+        todo!();
+    }
 }
 
 fn go_make_directory(

@@ -39,7 +39,7 @@ fn write_small_file() {
     let bytes_written = new_item.write_file(&bytes, seek_point, None).unwrap();
 
     // Make sure we actually wrote all the bytes
-    assert_eq!(bytes_written, bytes.len() as u64);
+    assert_eq!(bytes_written, bytes.len() as u32);
     //  This should fit on one disk.
     assert_eq!(fs.pool.lock().expect("testing").header.highest_known_disk, 1);
 }
@@ -67,7 +67,7 @@ fn write_big_file() {
     let bytes_written = new_file.write_file(&bytes, seek_point, None).unwrap();
 
     // Make sure we actually wrote all the bytes
-    assert_eq!(bytes_written, bytes.len() as u64);
+    assert_eq!(bytes_written, bytes.len() as u32);
     // Make sure this actually used multiple disks
     assert!(fs.pool.lock().expect("testing").header.highest_known_disk > 1);
 }
@@ -89,6 +89,7 @@ fn make_lots_of_files() {
 
 /// Make a lot of filled random size files.
 #[test]
+#[ignore = "Very slow."]
 fn make_lots_of_filled_files() {
     let _fs = get_filesystem();
     let mut current_filename_number: usize = 0;
@@ -111,9 +112,9 @@ fn make_lots_of_filled_files() {
         let bytes_written = new_file.write_file(&bytes, 0, None).unwrap();
 
         // Make sure we actually wrote all the bytes
-        assert_eq!(bytes_written, bytes.len() as u64);
+        assert_eq!(bytes_written, bytes.len() as u32);
         // Keep track in case we need to debug
-        total_bytes_written += bytes_written;
+        total_bytes_written += bytes_written as u64;
         current_filename_number += 1;
     }
 }
@@ -139,7 +140,7 @@ fn write_and_read_small() {
     let bytes_written = new_file.write_file(&bytes, seek_point, None).unwrap();
 
     // Make sure we actually wrote all the bytes
-    assert_eq!(bytes_written, bytes.len() as u64);
+    assert_eq!(bytes_written, bytes.len() as u32);
 
     // Read back in that file
     // We will find the file by its file name, to ensure disk access works correctly.
@@ -179,7 +180,7 @@ fn write_and_read_large() {
     let bytes_written = new_file.write_file(&bytes, seek_point, None).unwrap();
 
     // Make sure we actually wrote all the bytes
-    assert_eq!(bytes_written, bytes.len() as u64);
+    assert_eq!(bytes_written, bytes.len() as u32);
 
     // Read back in that file
     // We will find the file by its file name, to ensure disk access works correctly.
@@ -200,6 +201,7 @@ fn write_and_read_large() {
 
 /// Read and write a lot of random files
 #[test]
+#[ignore = "Very slow."]
 fn read_and_write_random_files() {
     let fs = get_filesystem();
     let mut current_filename_number: usize = 0;
@@ -228,9 +230,9 @@ fn read_and_write_random_files() {
         let bytes_written = new_file.write_file(&bytes, 0, None).unwrap();
         
         // Make sure we actually wrote all the bytes
-        assert_eq!(bytes_written, bytes.len() as u64);
+        assert_eq!(bytes_written, bytes.len() as u32);
         // Keep track in case we need to debug
-        total_bytes_written += bytes_written;
+        total_bytes_written += bytes_written as u64;
         current_filename_number += 1;
     }
     let stats = fs.pool.lock().unwrap();

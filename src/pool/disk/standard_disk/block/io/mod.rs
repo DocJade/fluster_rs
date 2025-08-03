@@ -1,3 +1,3 @@
-mod directory;
+pub(crate) mod directory;
 mod file;
 mod inode;

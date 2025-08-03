@@ -21,7 +21,7 @@ pub struct DirectoryItem {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct DirectoryBlock {
+pub(crate) struct DirectoryBlock {
     pub(super) flags: DirectoryBlockFlags,
     pub(super) bytes_free: u16,
     // Points to the next directory block.

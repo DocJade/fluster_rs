@@ -5,16 +5,15 @@
 // Implementations
 
 use crate::pool::disk::{
-    generic::{
+    drive_struct::{FloppyDriveError, JustDiskType}, generic::{
         block::{block_structs::RawBlock, crc::add_crc_to_block},
-        generic_structs::pointer_struct::DiskPointer,
-    },
-    standard_disk::block::{
+        generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO,
+    }, standard_disk::block::{
         directory::directory_struct::{
             DirectoryBlock, DirectoryBlockError, DirectoryBlockFlags, DirectoryFlags, DirectoryItem,
         },
-        inode::inode_struct::InodeLocation,
-    },
+        inode::inode_struct::{Inode, InodeDirectory, InodeLocation, InodeTimestamp},
+    }
 };
 
 // We can convert from a raw block to a directory bock, but not the other way around.
@@ -323,5 +322,41 @@ impl DirectoryItem {
             name,
             location,
         }
+    }
+
+    /// Get the size of the item. Regardless of type.
+    pub(crate) fn get_size(&self) -> Result<u64, FloppyDriveError> {
+        // Grab the inode to work with
+        let inode: Inode = self.get_inode()?;
+
+        // If this is a file, it's easy
+        if let Some(file) = inode.extract_file() {
+            return Ok(file.get_size())
+        }
+
+        // Otherwise, this must be a directory, so we need the directory block
+        let inode_directory: InodeDirectory = inode.extract_directory().expect("Guard.");
+
+        // Load the block
+        let raw_block: RawBlock = CachedBlockIO::read_block(inode_directory.pointer, JustDiskType::Standard)?;
+
+        let directory: DirectoryBlock = DirectoryBlock::from_block(&raw_block);
+
+        // Now we can call the size method.
+        directory.get_size()
+    }
+
+    /// Get when the inode / item was created.
+    pub(crate) fn get_crated_time(&self) -> Result<InodeTimestamp, FloppyDriveError> {
+        // get the inode
+        let inode = self.get_inode()?;
+        Ok(inode.created)
+    }
+
+    /// Get when the inode / item was modified.
+    pub(crate) fn get_modified_time(&self) -> Result<InodeTimestamp, FloppyDriveError> {
+        // get the inode
+        let inode = self.get_inode()?;
+        Ok(inode.modified)
     }
 }

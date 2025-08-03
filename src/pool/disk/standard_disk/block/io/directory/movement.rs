@@ -1,15 +1,17 @@
 // Helpers to move between directories
 
+use std::{ffi::OsStr, path::{Component, Path, PathBuf}};
+
 use log::info;
 
-use crate::pool::disk::{
+use crate::pool::{disk::{
     drive_struct::{FloppyDrive, FloppyDriveError, JustDiskType},
     generic::{generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO},
     standard_disk::block::{
         directory::directory_struct::DirectoryBlock, inode::inode_struct::InodeBlock,
         io::directory::types::NamedItem,
     },
-};
+}, pool_actions::pool_struct::Pool};
 
 impl DirectoryBlock {
     /// Attempts to open a directory in the current directory block.
@@ -83,5 +85,37 @@ impl DirectoryBlock {
 
         // All done! Enjoy the new block.
         Ok(Some(new_dir_block))
+    }
+
+    /// Attempts to open any directory in the pool.
+    /// 
+    /// Will automatically grab the root directory.
+    pub(crate) fn try_find_directory(path: &Path) -> Result<Option<DirectoryBlock>, FloppyDriveError> {
+        // Pretty simple loop, bail if the directory does not exist at any level.
+        let mut current_directory: DirectoryBlock;
+        // Load in the root directory
+        current_directory = Pool::root_directory()?;
+
+        // Split the path into folder names
+        for folder in path.components() {
+            // Is this the start?
+            if folder == Component::RootDir {
+                // Skip
+                continue;
+            }
+            // Try to move into the folder
+            if let Some(new_dir) = current_directory.change_directory(folder.as_os_str().to_str().expect("Should be valid utf8").to_string(), None)? {
+                // Directory exists. Move in.
+                current_directory = new_dir;
+                continue;
+            } else {
+                // No such directory
+                return Ok(None)
+            }
+        }
+
+        // Now that we're out of the for loop, we must be in the correct directory.
+        Ok(Some(current_directory))
+
     }
 }

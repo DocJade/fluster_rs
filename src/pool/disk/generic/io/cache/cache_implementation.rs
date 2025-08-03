@@ -168,7 +168,7 @@ impl BlockCache {
     /// Flushes all information in a tier to disk.
     /// 
     /// Caller must drop all references to cache before calling this.
-    fn flush(tier_number: usize) -> Result<(), FloppyDriveError> {
+    pub(super) fn flush(tier_number: usize) -> Result<(), FloppyDriveError> {
         go_flush_tier(tier_number)
     }
 }

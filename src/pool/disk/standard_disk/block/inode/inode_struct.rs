@@ -35,8 +35,8 @@ pub(crate) struct InodeDirectory {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 /// Relative to Unix Epoch
 pub struct InodeTimestamp {
-    pub(super) seconds: u64,
-    pub(super) nanos: u32,
+    pub(crate) seconds: u64,
+    pub(crate) nanos: u32,
 }
 
 // Points to a specific inode globally

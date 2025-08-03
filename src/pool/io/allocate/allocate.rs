@@ -272,6 +272,12 @@ fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, FloppyDriveEr
         extracted_blocks.push(block.block);
     }
 
+    // Remove the blocks from the cache if they exist
+    todo!();
+
+    // Go zero out the blocks on the disk
+    todo!();
+
     // Now go to that disk and free the blocks
     let mut disk: StandardDisk = match FloppyDrive::open(starter.disk)? {
         DiskType::Standard(standard_disk) => standard_disk,

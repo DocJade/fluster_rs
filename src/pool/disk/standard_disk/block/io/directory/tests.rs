@@ -51,7 +51,6 @@ fn add_directory_and_list() {
 }
 
 #[test]
-#[ignore = "Takes way too long to run with debug logging, must run standalone with a level of INFO if you ever want to see your family again."]
 fn nested_directory_hell() {
     // Use the filesystem starter to get everything in the right spots
     let _fs = get_filesystem();

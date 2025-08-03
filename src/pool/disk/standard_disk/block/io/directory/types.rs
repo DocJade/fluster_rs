@@ -6,7 +6,7 @@ use crate::pool::disk::standard_disk::block::directory::directory_struct::{
 
 // Need a way to search for either a file or a directory
 #[derive(Ord, PartialEq, Eq, PartialOrd)]
-pub enum NamedItem {
+pub(crate) enum NamedItem {
     File(String),
     Directory(String),
 }
@@ -30,6 +30,14 @@ impl NamedItem {
             convert == *self
         });
         item_found.cloned()
+    }
+    /// Helper function to figure out if this is a file
+    pub fn is_file(&self) -> bool {
+        matches!(self, NamedItem::File(_))
+    }
+    /// Helper function to figure out if this is a directory
+    pub fn is_directory(&self) -> bool {
+        matches!(self, NamedItem::Directory(_))
     }
 }
 

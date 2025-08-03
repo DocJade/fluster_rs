@@ -15,6 +15,21 @@ pub struct CachedBlockIO {
    // m tea
 }
 
+/// Even higher struct for just flushing the pool
+pub(crate) struct FlushBlockCache {
+    // empty
+}
+
+impl FlushBlockCache {
+    /// Flushes all information in the cache to disk
+    pub fn go() -> Result<(), FloppyDriveError> {
+        BlockCache::flush(0)?;
+        BlockCache::flush(1)?;
+        BlockCache::flush(2)?;
+        Ok(())
+    } 
+}
+
 // Cache methods
 impl CachedBlockIO {
     /// Sometimes you need to forcibly write a disk during initialization procedures, so we need a bypass.

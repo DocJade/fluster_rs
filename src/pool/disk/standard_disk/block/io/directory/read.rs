@@ -4,7 +4,7 @@ use log::{debug, trace};
 
 use crate::pool::disk::{
     drive_struct::{FloppyDrive, FloppyDriveError, JustDiskType}, generic::io::cache::cache_io::CachedBlockIO, standard_disk::block::{
-        directory::directory_struct::{DirectoryBlock, DirectoryItem},
+        directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem},
         io::directory::types::NamedItem,
     }
 };
@@ -52,6 +52,50 @@ impl DirectoryBlock {
     /// Optionally returns to a specified disk after gathering directory items.
     pub fn list(&self, return_to: Option<u16>) -> Result<Vec<DirectoryItem>, FloppyDriveError> {
         go_list_directory(self, return_to)
+    }
+
+    /// Get the size of a directory by totalling all of the items contained within it.
+    /// 
+    /// Does not recurse into sub-directories. (Seems to be standard behavior in ls -l)
+    /// 
+    /// Returns the size in bytes.
+    pub fn get_size(&self) -> Result<u64, FloppyDriveError> {
+        // get all the items
+        let items = self.list(None)?;
+
+        let mut total_size: u64 = 0;
+        for item in items {
+            // Ignore if this is a directory
+            if item.flags.contains(DirectoryFlags::IsDirectory) {
+                continue;
+            }
+            // Get the size of this file
+            let inode = item.get_inode()?;
+            let file = inode.extract_file().expect("Guarded.");
+            total_size += file.get_size()
+        }
+
+        // All done
+        Ok(total_size)
+    }
+
+    /// Extracts an item from a directory block, blanking out the space it used to occupy.
+    /// 
+    /// If you just want to get the item for reading or minor modifications, use find_item()
+    /// 
+    /// Returns nothing if the item did not exist.
+    pub(crate) fn extract_item(&self, item_to_find: &NamedItem) -> Result<Option<DirectoryItem>, FloppyDriveError> {
+
+        // Extract the item, if it came from the last directory block in the chain, make sure that
+        // block is not empty. if it is, remove that block and update previous block.
+
+        // TODO: If we remove an item and the directory block it was in is now empty, but the
+        // block in front of it has items, update the block before us to point to the block after.
+
+        // Write back all blocks that have changed.
+
+        // This should also remove inodes that pointed at this item.
+        todo!();
     }
 }
 
