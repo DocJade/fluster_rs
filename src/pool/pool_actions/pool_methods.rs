@@ -15,6 +15,9 @@ use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 use crate::pool::disk::generic::io::cache::cache_io::CachedBlockIO;
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolDiskHeader;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryBlock;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::Inode;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeBlock;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
 use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
 use log::debug;
 use log::error;
@@ -48,6 +51,10 @@ impl Pool {
     /// May swap disks, but you should be working with enough abstractions to not care.
     pub fn root_directory() -> Result<DirectoryBlock, FloppyDriveError> {
         pool_get_root_directory()
+    }
+    /// Get the location of the inode that holds information about the root directory
+    pub fn root_inode_location() -> InodeLocation {
+        pool_get_root_inode_location()
     }
 }
 
@@ -208,4 +215,13 @@ fn pool_get_root_directory() -> Result<DirectoryBlock, FloppyDriveError> {
     let block = DirectoryBlock::from_block(&block_reader);
 
     Ok(block)
+}
+
+/// Grabs the root inode location, duh
+fn pool_get_root_inode_location() -> InodeLocation {
+    InodeLocation {
+        disk: Some(1),
+        block: 1,
+        offset: 0,
+    }
 }

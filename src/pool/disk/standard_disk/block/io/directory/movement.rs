@@ -96,6 +96,12 @@ impl DirectoryBlock {
         // Load in the root directory
         current_directory = Pool::root_directory()?;
 
+        // Easy way out, if the incoming path is empty, that means its the root directory itself.
+        if path.iter().count() == 0 {
+            // There are no paths above the root, we are trying to load the root.
+            return Ok(Some(current_directory))
+        }
+
         // Split the path into folder names
         for folder in path.components() {
             // Is this the start?

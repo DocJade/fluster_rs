@@ -28,7 +28,10 @@ use easy_fuser::types::OwnedFileHandle;
 use easy_fuser::types::PosixError;
 use easy_fuser::{FuseHandler, templates::DefaultFuseHandler};
 use log::debug;
+use log::info;
+use log::warn;
 use std::ffi::OsString;
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::exit;
 use std::sync::LazyLock;
@@ -134,7 +137,11 @@ fn open_response_flags() -> FUSEOpenResponseFlags {
     // There are flags we will always set when returning items, such as always using direct io to
     // prevent FUSE/linux/whatever from caching things.
     let mut flags = FUSEOpenResponseFlags::empty();
-    flags.insert(FUSEOpenResponseFlags::DIRECT_IO);
+    // flags.insert(FUSEOpenResponseFlags::DIRECT_IO);
+    // flags.insert(FUSEOpenResponseFlags::CACHE_DIR);
+    // flags.insert(FUSEOpenResponseFlags::KEEP_CACHE);
+    // flags.insert(FUSEOpenResponseFlags::NOFLUSH);
+    // flags.insert(FUSEOpenResponseFlags::PASSTHROUGH);
 
     flags
 }
@@ -174,12 +181,28 @@ fn love_handle() -> OwnedFileHandle {
 // You can't just check for file extensions, since files do not need an extension...
 //
 // The approach i'll take is to see if the path ends with a delimiter.
-fn is_this_a_file(path: &PathBuf) -> bool {
+fn is_this_a_file(path: &Path) -> bool {
     // The delimiter is platform specific too.
+
+    // If the path is empty, its the root node, which is a directory
+    if path.iter().count() == 0 {
+        // This is the root
+        return false
+    }
+
     static DELIMITER: char = std::path::MAIN_SEPARATOR;
     path.as_os_str().to_str().expect("Should be valid utf8").ends_with(DELIMITER)
 }
 
+
+// One more thing to note is, since we are using PathBuf instead of inode:
+// from easy_fuser/src/types/file_id_type.rs
+// /// 2. `PathBuf`: Uses file paths for identification.
+// ///    - Pros: Automatic inode-to-path mapping and caching.
+// ///    - Cons: May have performance overhead for large file systems.
+// ///    - Root: Represented by an empty string. Paths are relative and never begin with a forward slash.
+//
+// Thus the root directory is not `/`, it is ``.
 
 
 
@@ -234,11 +257,13 @@ impl FuseHandler<PathBuf> for FlusterFS {
     }
 
     fn get_default_ttl(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(10) // we're slow okay
+        std::time::Duration::from_secs(10000) // we're slow okay
     }
 
     // There's a few things we need to tweak in the KernelConfig.
     // This should be automatically called right when the FS starts if I'm reading the docs correctly.
+    //
+    // The most British function in Fluster
     fn init(
         &self,
         _req: &easy_fuser::prelude::RequestInfo,
@@ -415,63 +440,120 @@ impl FuseHandler<PathBuf> for FlusterFS {
         file_id: PathBuf,
         _file_handle: Option<easy_fuser::prelude::BorrowedFileHandle>,
     ) -> easy_fuser::prelude::FuseResult<easy_fuser::prelude::FileAttribute> {
+        info!("Getting attributes of `{}`", file_id.display());
 
         // We only return things we actually know about the file, spoofing everything else.
 
-        // Open the directory the file is in
+        // This method is called on files and directories, including the root directory.
+
+
 
         // Chop off the head of the file id
-        let item_name = file_id.file_name().expect("Fuse should not hand us an empty pathbuf");
-        let directory_path = file_id.parent().expect("Every file has a parent.");
+        let item_name = match file_id.file_name() {
+            Some(ok) => Some(ok),
+            None => {
+                // If there is no item name here, that means we are trying
+                // to get information about the root directory.
+                // We can skip finding the item lower down by just looking at inode 0 of root block.
+                info!("This the root dir.");
+                None
+            },
+        };
+
+        // Yes i know that match statement is pointless, it just makes documenting it easier.
+
+        // Get the directory path, but if this is `None`, we just mean the root directory
+        let directory_path = match file_id.parent() {
+            Some(ok) => ok,
+            None => {
+                // This must be in the root directory.
+                Path::new("")
+            },
+        };
 
         let found_dir: DirectoryBlock;
         if let Some(directory) = DirectoryBlock::try_find_directory(directory_path)? {
             found_dir = directory
         } else {
             // No such directory!
+            warn!("Parent directory of item we want attributes from does not exist!");
+            warn!("Getting attributes failed!");
             return Err(NO_SUCH_ITEM.to_owned());
         };
 
         // Now get the file/dir
 
         // To find the item, we need to know if its a file or a directory.
-        let name_stringified: String = item_name.to_str().expect("Should be valid utf8").to_string();
+
+        // We don't actually have to do a lookup if we are trying to find info on the root.
+        let the_item: DirectoryItem;
         let is_file: bool = is_this_a_file(&file_id);
-        let to_find: NamedItem = if is_file {
-            // This is a file
-            NamedItem::File(name_stringified)
+
+        if let Some(name) = item_name {
+            // We are looking for something other than the root directory
+
+            let name_stringified: String = name.to_str().expect("Should be valid utf8").to_string();
+            let to_find: NamedItem = if is_file {
+                // This is a file
+                NamedItem::File(name_stringified)
+            } else {
+                // it must be a folder
+                NamedItem::Directory(name_stringified)
+            };
+            // Go find it
+            the_item = match found_dir.find_item(&to_find, None)? {
+                Some(ok) => ok,
+                None => {
+                    // The item did not exist
+                    warn!("Tried to get attributes of a file that did not exist!");
+                    warn!("Getting attributes failed!");
+                    return Err(NO_SUCH_ITEM.to_owned())
+                }, 
+            };
         } else {
-            // it must be a folder
-            NamedItem::Directory(name_stringified)
-        };
-
-        // Go find it
-        let the_item = match found_dir.find_item(&to_find, None)? {
-            Some(ok) => ok,
-            None => return Err(NO_SUCH_ITEM.to_owned()), // The item did not exist
-        };
-
+            info!("Constructing root directory item...");
+            // This is the root. We will spoof a directory item for it
+            the_item = DirectoryItem {
+                flags: DirectoryFlags::IsDirectory,
+                name_length: 1,
+                name: "/".to_string(),
+                location: Pool::root_inode_location(),
+            };
+            info!("Done.");
+        }
+        
         // Now we need to get more info about it
         
         // The size of the item
+        info!("Getting size of item...");
         let item_size: u64 = the_item.get_size()?;
-
+        info!("Done.");
+        
         // Creation and modification time. We do not support access time.
+        info!("Getting timestamps...");
         let creation_time = the_item.get_crated_time()?;
         let modification_time = the_item.get_modified_time()?;
-
+        info!("Done.");
+        
         // Finally, the type of the file
+        info!("Deducing item type...");
         let file_type: FileKind = if is_file {
+            info!("It's a file.");
             FileKind::RegularFile
         } else {
+            info!("It's a directory.");
             FileKind::Directory
         };
-
-
+        info!("Done.");
+        
+        
         // Assemble all the info
+        info!("Spoofing the attribute...");
         let attribute: FileAttribute = spoofed_file_attributes(item_size, creation_time, modification_time, file_type);
-
+        info!("Done.");
+        
         // All done!
+        info!("Got attributes successfully.");
         Ok(attribute)
     }
 
@@ -561,13 +643,20 @@ impl FuseHandler<PathBuf> for FlusterFS {
         name: &std::ffi::OsStr,
     ) -> easy_fuser::prelude::FuseResult<<PathBuf as easy_fuser::prelude::FileIdType>::Metadata>
     {
+        info!("Looking up `{}` in `{}`", name.display(), parent_id.display());
         // Since we use PathBuf, we dont need to return inode information, we can just call getattr() !
         // So just stick the file name back onto the parent and call.
         let joined: PathBuf = parent_id.join(name);
 
         // Go get em!
         // We dont use file handles
-        self.getattr(req, joined, None)
+        info!("Getting attributes...");
+        let result = self.getattr(req, joined, None)?;
+        info!("Done.");
+
+        // All done
+        info!("Looked up file successfully.");
+        Ok(result)
     }
 
     // Not mentioned, Assuming we're tracking where we are in files when handing out those BorrowedFileHandle's, in theory
@@ -595,15 +684,18 @@ impl FuseHandler<PathBuf> for FlusterFS {
         _umask: u32,
     ) -> easy_fuser::prelude::FuseResult<<PathBuf as easy_fuser::prelude::FileIdType>::Metadata>
     {
+        info!("Making a new directory named `{}` at `{}`", name.display(), parent_id.display());
         // We ignore the mode and umask. (related to file permissions)
         // All fluster directories are just epic like that.
 
         // Make sure the name of the folder isn't too long
         if name.len() > 255 {
             // Too long.
+            warn!("Directory name is too long!");
+            warn!("Failed to create directory!");
             return Err(FILE_NAME_TOO_LONG.to_owned())
         }
-
+        
 
         // Open the folder 
         let block: DirectoryBlock;
@@ -613,23 +705,35 @@ impl FuseHandler<PathBuf> for FlusterFS {
             block = found;
         } else {
             // No such directory.
+            warn!("Parent directory does not exist!");
+            warn!("Failed to create directory!");
             return Err(NO_SUCH_ITEM.to_owned())
         };
-
+        
         // Make sure the directory we are trying to create does not already exist
         let new_name: String = name.to_str().expect("Should be valid utf8").to_string();
         if block.find_item(&NamedItem::Directory(new_name.clone()), None)?.is_some() {
             // A folder with that name already exists.
+            warn!("Directory already exists!");
+            warn!("Failed to create directory!");
             return Err(FILE_ALREADY_EXISTS.to_owned())
         }
 
         // Now that we have the directory, make the new directory
+        info!("Creating directory...");
         block.make_directory(new_name, None)?;
-
+        info!("Done.");
+        
         // Now get info about the new directory.
         let new_location: PathBuf = parent_id.join(name);
         // We dont use file handles.
-        self.getattr(req, new_location, None)
+        info!("Getting attributes of the new directory...");
+        let result = self.getattr(req, new_location, None)?;
+        info!("Done.");
+        
+        // all done
+        info!("Directory created successfully.");
+        Ok(result)
     }
 
     // "This function is rarely needed, since it's uncommon to make these objects inside special-purpose filesystems."
@@ -660,14 +764,19 @@ impl FuseHandler<PathBuf> for FlusterFS {
         easy_fuser::prelude::OwnedFileHandle,
         easy_fuser::prelude::FUSEOpenResponseFlags,
     )> {
+        info!("Opening file `{}`", file_id.display());
 
         // There are some flags I don't quite understand, so we will go through them here
         if flags.contains(OpenFlags::MUST_BE_DIRECTORY) {
             // I think open should only be called on files, right?
+            warn!("We can only open files, not directories!");
+            warn!("Open failed!");
             return Err(NOT_SUPPORTED.to_owned())
         }
         if flags.contains(OpenFlags::TEMPORARY_FILE) {
             // No temp files.
+            warn!("We do not support temp files!");
+            warn!("Open failed!");
             return Err(NOT_SUPPORTED.to_owned())
         }
 
@@ -682,62 +791,79 @@ impl FuseHandler<PathBuf> for FlusterFS {
         // Make sure the file name isn't too long
         if file_name.len() > 255 {
             // Too long
+            warn!("File name was too long!");
+            warn!("Open failed!");
             return Err(FILE_NAME_TOO_LONG.to_owned());
         }
 
         // See if we are creating this file
         if flags.contains(OpenFlags::CREATE) {
+            info!("We will be creating the file.");
             // We need to make this file first.
             // Open the directory
             if let Some(dir) = DirectoryBlock::try_find_directory(containing_folder)? {
                 // Folder was real, make the file
-
+                
                 // Make sure file does not already exist.
                 if dir.find_item(&NamedItem::File(file_name.clone()), None)?.is_some() {
+                    info!("File already exists...");
                     // File already exists.
-
+                    
                     // Weirdly, we only need to fail here if a flag is set. Otherwise we just ignore this.
                     if flags.contains(OpenFlags::CREATE_EXCLUSIVE) {
+                        warn!("...and thats's bad!");
+                        warn!("Opening file failed!");
                         // We will fail.
                         return Err(FILE_ALREADY_EXISTS.to_owned());
                     }
+                    info!("...but we don't care.");
                 } else {
                     // But, we can still only create the file if it doesn't exist.
                     // We do not care about the resulting directory item, only if this fails.
+                    info!("Creating file...");
                     let _ = dir.new_file(file_name.clone(), None)?;
+                    info!("Done.");
                     // File made. Continue!
                 }
             } else {
                 // Tried to make a file in a folder that did not exist
+                warn!("The directory we tried to create the file in does not exist.!");
+                warn!("Opening file failed!");
                 return Err(NO_SUCH_ITEM.to_owned())
             };
             // File has been made.
         }
-
+        
         // Now we actually read the file in again every time we do any kind of operation on them, so we just need to
         // check that the file exists before giving out a handle.
-
+        
         // Go find the file
-
+        
         // Open the containing directory
         if let Some(directory) = DirectoryBlock::try_find_directory(containing_folder)? {
             // Folder exists.
             if let Some(file) = directory.find_item(&NamedItem::File(file_name), None)? {
                 // File exists, all good.
-
+                
                 // But we may need to truncate the file if asked.
                 if flags.contains(OpenFlags::TRUNCATE) {
                     // Yep, truncate that sucker
+                    info!("Truncation requested, truncating...");
                     file.truncate()?;
+                    info!("Done.");
                 }
-
+                
             } else {
                 // No such file.
+                warn!("The the file was not present in the directory!");
+                warn!("Opening file failed!");
                 return Err(NO_SUCH_ITEM.to_owned())
             }
-
+            
         } else {
             // No such folder.
+            warn!("The directory we tried to open the file from does not exist.");
+            warn!("Opening file failed!");
             return Err(NO_SUCH_ITEM.to_owned())
         }
 
@@ -750,6 +876,7 @@ impl FuseHandler<PathBuf> for FlusterFS {
         let flags = open_response_flags();
 
         // All done!
+        info!("File opened succesfully.");
         Ok((handle, flags))
     }
 
@@ -802,17 +929,21 @@ impl FuseHandler<PathBuf> for FlusterFS {
         _flags: easy_fuser::prelude::FUSEOpenFlags,
         _lock_owner: Option<u64>,
     ) -> easy_fuser::prelude::FuseResult<Vec<u8>> {
-
+        info!("Attempting to read `{}` bytes out of file `{}`", size, file_id.display());
+        
         // We only support seeking from the start of files, since we do not store seek information.
         // Will this be an issue? We'll find out later.
         let byte_offset: u64 = match seek {
             std::io::SeekFrom::Start(bytes) => bytes,
             _ => {
+                warn!("Tried to seek from non-start point. We do not support this!");
+                warn!("Read failed!");
                 // Only support start seeks.
                 return Err(ILLEGAL_SEEK.to_owned())
             },
         };
-
+        info!("We will be reading the file at a seek offset of `{}`.", byte_offset);
+        
         // Open the file if it exists.
         if let Some(dir) = DirectoryBlock::try_find_directory(file_id.parent().expect("Files live in folders."))? {
             // directory exists.
@@ -825,21 +956,28 @@ impl FuseHandler<PathBuf> for FlusterFS {
                 .expect("Should be valid utf8")
                 .to_string()
             );
-
+            
             if let Some(found_file) = dir.find_item(&finder, None)? {
                 // File exists
                 // Read it
                 // `size` is how many bytes are attempting to be read.
+                info!("File exists, reading from it...");
                 let read_result = found_file.read_file(byte_offset, size, None)?;
-
+                info!("Done.");
+                
                 // All done!
+                info!("File read successfully.");
                 Ok(read_result)
             } else {
                 // No such file.
+                warn!("There is no file to read from!");
+                warn!("Read failed!");
                 Err(NO_SUCH_ITEM.to_owned())
             }
         } else {
             // No such directory.
+            warn!("The parent directory of the file we wanted to read did not exist!");
+            warn!("Read failed!");
             Err(NO_SUCH_ITEM.to_owned())
         }
         // Unreachable down here.
@@ -865,6 +1003,7 @@ impl FuseHandler<PathBuf> for FlusterFS {
             <PathBuf as easy_fuser::prelude::FileIdType>::MinimalMetadata,
         )>,
     > {
+        info!("Getting contents of directory `{}`", file_id.display());
 
         // This seems to just be a list call.
 
@@ -874,6 +1013,8 @@ impl FuseHandler<PathBuf> for FlusterFS {
 
         // I'm assuming the incoming path is a directory, not a file.
         if is_this_a_file(&file_id) {
+            warn!("Tried to read a file as a directory!");
+            warn!("Getting contents failed!");
             // Why are you reading a file as a directory
             return Err(NOT_A_DIRECTORY.to_owned())
         };
@@ -884,18 +1025,23 @@ impl FuseHandler<PathBuf> for FlusterFS {
             requested_dir = exists
         } else {
             // No such directory
+            warn!("The directory does not exist!");
+            warn!("Getting contents failed!");
             return Err(NO_SUCH_ITEM.to_owned())
         }
 
         // List the directory
+        info!("Listing items...");
         let items = requested_dir.list(None)?;
-
+        info!("Done.");
+        
         // Now we need to construct the minimal metadata, which is easy since we only
         // need the file type.
-
+        
         // (name, filetype)
         let mut output: Vec<(OsString, FileKind)> = Vec::new();
-
+        
+        info!("Extracting required file metadata...");
         for item in items {
             let name: OsString = item.name.into();
             let item_type: FileKind = if item.flags.contains(DirectoryFlags::IsDirectory) {
@@ -907,6 +1053,8 @@ impl FuseHandler<PathBuf> for FlusterFS {
             };
             output.push((name, item_type));
         }
+        info!("Done.");
+        info!("Directory contents retrieved successfully.");
 
         // All done.
         Ok(output)
@@ -1023,6 +1171,7 @@ impl FuseHandler<PathBuf> for FlusterFS {
         parent_id: PathBuf,
         name: &std::ffi::OsStr,
     ) -> easy_fuser::prelude::FuseResult<()> {
+        info!("Attempting to remove directory `{}` contained within `{}`", name.display(), parent_id.display());
         // Open the directory
         let parent: DirectoryBlock;
         if let Some(exists) = DirectoryBlock::try_find_directory(&parent_id)? {
@@ -1030,6 +1179,8 @@ impl FuseHandler<PathBuf> for FlusterFS {
             parent = exists;
         } else {
             // Cant remove a directory from a non-existant parent directory.
+            warn!("Parent directory did not exist!");
+            warn!("Directory removal failed!");
             return Err(NO_SUCH_ITEM.to_owned())
         }
         
@@ -1041,27 +1192,32 @@ impl FuseHandler<PathBuf> for FlusterFS {
             extracted = found;
         } else {
             // Cant delete a dir that isnt there
+            warn!("There isn't a directory with that name in the parent folder.");
+            warn!("Directory removal failed!");
             return Err(NO_SUCH_ITEM.to_owned())
         }
-
+        
         // Get the directory from the item we extracted
         let to_delete_pointer: DiskPointer = extracted
-            .get_inode()?
-            .extract_directory()
-            .expect("This should be a directory.")
-            .pointer;
-
+        .get_inode()?
+        .extract_directory()
+        .expect("This should be a directory.")
+        .pointer;
+    
         // Open the block
         let to_delete_dir: DirectoryBlock = DirectoryBlock::from_block(
             &CachedBlockIO::read_block(
-                to_delete_pointer,
-                JustDiskType::Standard)?
-            );
-
+            to_delete_pointer,
+            JustDiskType::Standard)?
+        );
+        
         // Go delete it.
+        info!("Removing directory...");
         to_delete_dir.delete_directory()?;
-
+        info!("Done.");
+        
         // All done.
+        info!("Directory removed.");
         Ok(())
     }
 
@@ -1075,6 +1231,7 @@ impl FuseHandler<PathBuf> for FlusterFS {
         file_id: PathBuf,
         attrs: easy_fuser::prelude::SetAttrRequest,
     ) -> easy_fuser::prelude::FuseResult<easy_fuser::prelude::FileAttribute> {
+        info!("Attemping to set attributes on file `{}`", file_id.display());
 
         // We can ignore almost all of this
 
@@ -1111,22 +1268,30 @@ impl FuseHandler<PathBuf> for FlusterFS {
         
         // File permissions cannot be changed.
         if attrs.mode.is_some() {
+            warn!("Changing permissions is not supported!");
+            warn!("Setting attributes failed!");
             return Err(NOT_SUPPORTED.to_owned())
         }
 
         // File owner cannot be changed.
         if attrs.uid.is_some() {
+            warn!("Changing owner is not supported!");
+            warn!("Setting attributes failed!");
             return Err(NOT_SUPPORTED.to_owned())
         }
 
         // File owner group cannot be changed.
         if attrs.gid.is_some() {
+            warn!("Changing owner group is not supported!");
+            warn!("Setting attributes failed!");
             return Err(NOT_SUPPORTED.to_owned())
         }
 
         // File size cannot be changed here. Making a file bigger is done by writing, and
         //  truncation is the only way to make a file smaller.
         if attrs.size.is_some() {
+            warn!("Changing file size directly is not supported!");
+            warn!("Setting attributes failed!");
             return Err(NOT_SUPPORTED.to_owned())
         }
         
@@ -1137,6 +1302,8 @@ impl FuseHandler<PathBuf> for FlusterFS {
         attrs.crtime.is_some() ||
         attrs.ctime.is_some() ||
         attrs.mtime.is_some() {
+            warn!("Changing time information is not supported!");
+            warn!("Setting attributes failed!");
             return Err(NOT_SUPPORTED.to_owned())
         }
         
@@ -1148,12 +1315,16 @@ impl FuseHandler<PathBuf> for FlusterFS {
         
         // We dont use file handles
         if attrs.file_handle.is_some() {
+            warn!("We dont use file handles!");
+            warn!("Setting attributes failed!");
             return Err(NOT_SUPPORTED.to_owned())
         }
-
+        
         // We just return what already exists
-        self.getattr(req, file_id, None)
-
+        info!("We will return the attributes that already exist...");
+        let result = self.getattr(req, file_id, None)?;
+        info!("Done");
+        Ok(result)
     }
 
     // No file locking.
@@ -1223,7 +1394,7 @@ impl FuseHandler<PathBuf> for FlusterFS {
     // We could grab pool statistics from here...
     fn write(
         &self,
-        req: &easy_fuser::prelude::RequestInfo,
+        _req: &easy_fuser::prelude::RequestInfo,
         file_id: PathBuf,
         _file_handle: easy_fuser::prelude::BorrowedFileHandle,
         seek: std::io::SeekFrom,
@@ -1233,6 +1404,8 @@ impl FuseHandler<PathBuf> for FlusterFS {
         _lock_owner: Option<u64>,
     ) -> easy_fuser::prelude::FuseResult<u32> {
 
+        info!("Attempting to write `{}` bytes to file `{}`", data.len(), file_id.display());
+
         // Get the file
         // We only support seeking from the start of files, since we do not store seek information.
         // Will this be an issue? We'll find out later.
@@ -1240,10 +1413,11 @@ impl FuseHandler<PathBuf> for FlusterFS {
             std::io::SeekFrom::Start(bytes) => bytes,
             _ => {
                 // Only support start seeks.
+                warn!("Cannot seek from anywhere but the start of the file!");
                 return Err(ILLEGAL_SEEK.to_owned())
             },
         };
-
+        
         // Open the file if it exists.
         if let Some(dir) = DirectoryBlock::try_find_directory(file_id.parent().expect("Files live in folders."))? {
             // directory exists.
@@ -1256,24 +1430,31 @@ impl FuseHandler<PathBuf> for FlusterFS {
                 .expect("Should be valid utf8")
                 .to_string()
             );
-
+            
             if let Some(found_file) = dir.find_item(&finder, None)? {
                 // File exists
                 // Write to it.
+                info!("Writing data...");
                 let bytes_written: u32 = found_file.write_file(
                     &data,
                     byte_offset,
                     None
                 )?;
-
+                info!("Done.");
+                
                 // All done!
+                info!("Write successful!");
                 Ok(bytes_written)
             } else {
                 // No such file.
+                warn!("The file we are trying to write do does not exist!");
+                warn!("Writing to file failed!");
                 Err(NO_SUCH_ITEM.to_owned())
             }
         } else {
             // No such directory.
+            warn!("Parent folder does not exist!");
+            warn!("Writing to file failed!");
             Err(NO_SUCH_ITEM.to_owned())
         }
     }

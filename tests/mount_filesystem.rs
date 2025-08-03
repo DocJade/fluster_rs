@@ -1,6 +1,7 @@
 use std::{thread, time::Duration};
 
 use test_log::test; // We want to see logs while testing.
+use crate::test_common::test_mount_options;
 mod test_common;
 
 #[test]
@@ -12,7 +13,7 @@ fn mount_filesystem() {
 
     // fs needs to be mounted in another thread bc it blocks
     let mount_thread = thread::spawn(move || {
-        easy_fuser::mount(fs, &mount_path, &[]).unwrap();
+        easy_fuser::mount(fs, &mount_path, &test_mount_options()).unwrap();
     });
 
     // wait for it to start...
