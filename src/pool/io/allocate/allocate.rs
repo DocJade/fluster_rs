@@ -268,6 +268,7 @@ fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, FloppyDriveEr
     let starter: DiskPointer = *blocks.first().expect("Why are we getting 0 blocks?");
     let mut extracted_blocks: Vec<u16> = Vec::new();
     for block in blocks {
+        // Make sure all blocks are from the same disk.
         assert_eq!(starter.disk, block.disk);
         extracted_blocks.push(block.block);
     }

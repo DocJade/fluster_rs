@@ -12,7 +12,7 @@ fn create_blank() {
     // Make a blank file
     let _fs = get_filesystem();
     let root_block = Pool::root_directory().unwrap();
-    let new_item = root_block.new_file("test123.txt".to_string(), None).unwrap();
+    let new_item = root_block.new_file("test123.txt".to_string()).unwrap();
 
     let new_file = new_item.get_inode().unwrap().extract_file().unwrap();
 
@@ -25,7 +25,7 @@ fn write_small_file() {
     // Make a blank file
     let fs = get_filesystem();
     let root_block = Pool::root_directory().unwrap();
-    let new_item = root_block.new_file("test123.txt".to_string(), None).unwrap();
+    let new_item = root_block.new_file("test123.txt".to_string()).unwrap();
 
     // Bytes to write
     let mut random: ThreadRng = rand::rng();
@@ -36,7 +36,7 @@ fn write_small_file() {
     // Write to that file
     // We will write from the start.
     let seek_point: u64 = 0;
-    let bytes_written = new_item.write_file(&bytes, seek_point, None).unwrap();
+    let bytes_written = new_item.write_file(&bytes, seek_point).unwrap();
 
     // Make sure we actually wrote all the bytes
     assert_eq!(bytes_written, bytes.len() as u32);
@@ -50,7 +50,7 @@ fn write_big_file() {
     // Make a blank file
     let fs = get_filesystem();
     let root_block = Pool::root_directory().unwrap();
-    let new_file = root_block.new_file("test123.txt".to_string(), None).unwrap();
+    let new_file = root_block.new_file("test123.txt".to_string()).unwrap();
 
     // lol, how about 4 MB
     // This is 4x what fluster will normally handle
@@ -64,7 +64,7 @@ fn write_big_file() {
     // Write to that file
     // We will write from the start.
     let seek_point: u64 = 0;
-    let bytes_written = new_file.write_file(&bytes, seek_point, None).unwrap();
+    let bytes_written = new_file.write_file(&bytes, seek_point).unwrap();
 
     // Make sure we actually wrote all the bytes
     assert_eq!(bytes_written, bytes.len() as u32);
@@ -81,7 +81,7 @@ fn make_lots_of_files() {
     for _ in 0..1000 {
         let root_block = Pool::root_directory().unwrap();
         let new_name: String = format!("{current_filename_number}.txt");
-        let _new_file = root_block.new_file(new_name, None).unwrap();
+        let _new_file = root_block.new_file(new_name).unwrap();
         // we wont write anything.
         current_filename_number += 1;
     }
@@ -98,7 +98,7 @@ fn make_lots_of_filled_files() {
     for _ in 0..1000 {
         let root_block = Pool::root_directory().unwrap();
         let new_name: String = format!("{current_filename_number}.txt");
-        let new_file = root_block.new_file(new_name, None).unwrap();
+        let new_file = root_block.new_file(new_name).unwrap();
         
 
         // Random size between 1 byte and 1 MB
@@ -109,7 +109,7 @@ fn make_lots_of_filled_files() {
         random.fill_bytes(&mut bytes);
 
         // Write to that file
-        let bytes_written = new_file.write_file(&bytes, 0, None).unwrap();
+        let bytes_written = new_file.write_file(&bytes, 0).unwrap();
 
         // Make sure we actually wrote all the bytes
         assert_eq!(bytes_written, bytes.len() as u32);
@@ -126,7 +126,7 @@ fn write_and_read_small() {
     // Make a blank file
     let _fs = get_filesystem();
     let root_block = Pool::root_directory().unwrap();
-    let new_file = root_block.new_file("test123.txt".to_string(), None).unwrap();
+    let new_file = root_block.new_file("test123.txt".to_string()).unwrap();
 
     // Bytes to write
     let mut random: ThreadRng = rand::rng();
@@ -137,7 +137,7 @@ fn write_and_read_small() {
     // Write to that file
     // We will write from the start.
     let seek_point: u64 = 0;
-    let bytes_written = new_file.write_file(&bytes, seek_point, None).unwrap();
+    let bytes_written = new_file.write_file(&bytes, seek_point).unwrap();
 
     // Make sure we actually wrote all the bytes
     assert_eq!(bytes_written, bytes.len() as u32);
@@ -148,10 +148,10 @@ fn write_and_read_small() {
     let root_block = Pool::root_directory().unwrap();
     // Go fetch
     let named: NamedItem = NamedItem::File("test123.txt".to_string());
-    let read_me = root_block.find_item(&named, None).unwrap().expect("We just made it");
+    let read_me = root_block.find_item(&named).unwrap().expect("We just made it");
 
     // Read the contained data
-    let read_data = read_me.read_file(0, 512, None).unwrap();
+    let read_data = read_me.read_file(0, 512).unwrap();
 
     // Does it match?
     assert_eq!(read_data.len(), bytes.len());
@@ -164,7 +164,7 @@ fn write_and_read_large() {
     // Make a blank file
     let _fs = get_filesystem();
     let root_block = Pool::root_directory().unwrap();
-    let new_file = root_block.new_file("test123.txt".to_string(), None).unwrap();
+    let new_file = root_block.new_file("test123.txt".to_string()).unwrap();
 
     // Bytes to write
     const FOUR_MEG: usize = 4 * 1024 * 1024;
@@ -177,7 +177,7 @@ fn write_and_read_large() {
     // Write to that file
     // We will write from the start.
     let seek_point: u64 = 0;
-    let bytes_written = new_file.write_file(&bytes, seek_point, None).unwrap();
+    let bytes_written = new_file.write_file(&bytes, seek_point).unwrap();
 
     // Make sure we actually wrote all the bytes
     assert_eq!(bytes_written, bytes.len() as u32);
@@ -188,10 +188,10 @@ fn write_and_read_large() {
     let root_block = Pool::root_directory().unwrap();
     // Go fetch
     let named: NamedItem = NamedItem::File("test123.txt".to_string());
-    let read_me = root_block.find_item(&named, None).unwrap().expect("We just made it");
+    let read_me = root_block.find_item(&named).unwrap().expect("We just made it");
 
     // Read the contained data
-    let read_data = read_me.read_file(0, FOUR_MEG.try_into().unwrap(), None).unwrap();
+    let read_data = read_me.read_file(0, FOUR_MEG.try_into().unwrap()).unwrap();
 
     // Does it match?
     assert_eq!(read_data.len(), bytes.len());
@@ -213,7 +213,7 @@ fn read_and_write_random_files() {
     for _ in 0..TEST_LENGTH {
         let root_block = Pool::root_directory().unwrap();
         let new_name: String = format!("{current_filename_number}.txt");
-        let new_file = root_block.new_file(new_name, None).unwrap();
+        let new_file = root_block.new_file(new_name).unwrap();
         
         
         // Random size between 1 byte and 1 MB
@@ -227,7 +227,7 @@ fn read_and_write_random_files() {
         random_files.push(bytes.clone());
         
         // Write to that file
-        let bytes_written = new_file.write_file(&bytes, 0, None).unwrap();
+        let bytes_written = new_file.write_file(&bytes, 0).unwrap();
         
         // Make sure we actually wrote all the bytes
         assert_eq!(bytes_written, bytes.len() as u32);
@@ -245,11 +245,11 @@ fn read_and_write_random_files() {
     let root_block = Pool::root_directory().unwrap();
     for _ in 0..TEST_LENGTH {
         let named: NamedItem = NamedItem::File(format!("{current_file}.txt"));
-        let found: DirectoryItem = root_block.find_item(&named, None).unwrap().unwrap();
+        let found: DirectoryItem = root_block.find_item(&named).unwrap().unwrap();
 
         // read it
         let file_size: u64 = found.get_inode().unwrap().extract_file().unwrap().get_size();
-        let read = found.read_file(0, file_size.try_into().unwrap(), None).unwrap();
+        let read = found.read_file(0, file_size.try_into().unwrap()).unwrap();
 
         // Compare
         assert_eq!(read, random_files[current_file]);
