@@ -95,6 +95,10 @@ impl CachedBlockIO {
     pub fn remove_block(block_origin: &DiskPointer) {
         BlockCache::remove_item(block_origin)
     }
+    /// Flush the entire cache to disk.
+    pub fn flush(self) {
+        todo!()
+    }
 }
 
 //

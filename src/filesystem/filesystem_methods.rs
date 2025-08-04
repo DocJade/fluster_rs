@@ -61,20 +61,7 @@ static NOT_A_DIRECTORY: LazyLock<PosixError> =
 //
 //
 
-impl FlusterFS {
-    /// Create new filesystem handle, this will kick off the whole process of loading in information about the pool.
-    /// Takes in options to configure the new pool.
-    pub fn start(options: &FilesystemOptions) -> Self {
-        debug!("Starting file system...");
-        // Right now we dont use the options for anything, but they do initialize the globals we need, so we still need to pass it in.
-        #[allow(dead_code)]
-        #[allow(unused_variables)]
-        let unused = options;
-        let fs = FlusterFS { pool: Pool::load() };
-        debug!("Done starting filesystem.");
-        fs
-    }
-}
+
 
 // Spoofing FileAttributes
 fn spoofed_file_attributes(
@@ -200,44 +187,7 @@ fn is_this_a_file(path: &Path) -> bool {
 //
 // Thus the root directory is not `/`, it is ``.
 
-impl FilesystemOptions {
-    /// Initializes options for the filesystem, also configures the virtual disks if needed.
-    pub fn new(use_virtual_disks: Option<PathBuf>, floppy_drive: PathBuf) -> Self {
-        debug!("Configuring file system options...");
-        // Set the globals
-        // set the floppy disk path
-        debug!("Setting the floppy path...");
-        debug!("Locking FLOPPY_PATH...");
-        *FLOPPY_PATH
-            .try_lock()
-            .expect("Fluster! Is single threaded.") = floppy_drive.clone();
-        debug!("Done.");
 
-        // Set the virtual disk flag if needed
-        if let Some(path) = use_virtual_disks.clone() {
-            debug!("Setting up virtual disks...");
-            // Sanity checks
-            // Make sure this is a directory, and that the directory already exists
-            if !path.is_dir() || !path.exists() {
-                // Why must you do this
-                println!("Virtual disk argument must be a valid path to a pre-existing directory.");
-                exit(-1);
-            }
-
-            debug!("Locking USE_VIRTUAL_DISKS...");
-            *USE_VIRTUAL_DISKS
-                .try_lock()
-                .expect("Fluster! Is single threaded.") = Some(path.to_path_buf());
-            debug!("Done.");
-        };
-
-        debug!("Done configuring.");
-        Self {
-            use_virtual_disks,
-            floppy_drive,
-        }
-    }
-}
 
 //
 // easy_fuser methods.
@@ -257,7 +207,6 @@ impl FuseHandler<PathBuf> for FlusterFS {
     // There's a few things we need to tweak in the KernelConfig.
     // This should be automatically called right when the FS starts if I'm reading the docs correctly.
     //
-    // The most British function in Fluster
     fn init(
         &self,
         _req: &easy_fuser::prelude::RequestInfo,
@@ -291,20 +240,6 @@ impl FuseHandler<PathBuf> for FlusterFS {
 
         Ok(())
     }
-
-    // fn destroy(&self) {
-    //     self.get_inner().destroy();
-    // }
-
-    // "This call is not required but is highly recommended." Okay then we wont do it muhahaha
-    // fn access(
-    //     &self,
-    //     req: &easy_fuser::prelude::RequestInfo,
-    //     file_id: PathBuf,
-    //     mask: easy_fuser::prelude::AccessMask,
-    // ) -> easy_fuser::prelude::FuseResult<()> {
-    //     self.get_inner().access(req, file_id, mask)
-    // }
 
     // fn bmap(
     //     &self,
@@ -386,49 +321,9 @@ impl FuseHandler<PathBuf> for FlusterFS {
     //     )
     // }
 
-    /// Flushing information about open files / the file system to disk.
-    fn flush(
-        &self,
-        _req: &easy_fuser::prelude::RequestInfo,
-        _file_id: PathBuf,
-        _file_handle: easy_fuser::prelude::BorrowedFileHandle,
-        _lock_owner: u64,
-    ) -> easy_fuser::prelude::FuseResult<()> {
-        // We dont want the OS to be able to flush the cache to disk, this could happen randomly for no reason.
-        // We are responsible for tracking how stale the cache is.
-
-        // The only time we will flush the cache from this level is on shutdown.
-
-        Ok(())
-    }
-
     // fn forget(&self, req: &easy_fuser::prelude::RequestInfo, file_id: PathBuf, nlookup: u64) {
     //     self.get_inner().forget(req, file_id, nlookup);
     // }
-
-    // Sync a file to disk
-    fn fsync(
-        &self,
-        _req: &easy_fuser::prelude::RequestInfo,
-        _file_id: PathBuf,
-        _file_handle: easy_fuser::prelude::BorrowedFileHandle,
-        _datasync: bool,
-    ) -> easy_fuser::prelude::FuseResult<()> {
-        // See flush()
-        Ok(())
-    }
-
-    // Sync a whole directory
-    fn fsyncdir(
-        &self,
-        _req: &easy_fuser::prelude::RequestInfo,
-        _file_id: PathBuf,
-        _file_handle: easy_fuser::prelude::BorrowedFileHandle,
-        _datasync: bool,
-    ) -> easy_fuser::prelude::FuseResult<()> {
-        // See flush()
-        Ok(())
-    }
 
     // "This call is pretty much required for a usable filesystem." okay fine.
     fn getattr(

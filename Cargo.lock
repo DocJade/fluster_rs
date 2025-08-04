@@ -213,6 +213,7 @@ dependencies = [
  "env_logger",
  "fuse_mt",
  "lazy_static",
+ "libc",
  "log",
  "once_cell",
  "rand",
