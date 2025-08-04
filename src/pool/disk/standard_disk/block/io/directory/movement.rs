@@ -26,12 +26,11 @@ impl DirectoryBlock {
     pub fn change_directory(
         self,
         directory_name: String,
-        return_to: Option<u16>,
     ) -> Result<Option<DirectoryBlock>, FloppyDriveError> {
         info!("Attempting to CD to `{directory_name}`");
         // Get all items in this directory
 
-        let found_dir = self.find_item(&NamedItem::Directory(directory_name), return_to)?;
+        let found_dir = self.find_item(&NamedItem::Directory(directory_name))?;
         if found_dir.is_none() {
             // The directory did not exist.
             info!("Directory did not exist.");
@@ -78,11 +77,6 @@ impl DirectoryBlock {
         let new_dir_block: DirectoryBlock =
             DirectoryBlock::from_block(&CachedBlockIO::read_block(actual_next_block, JustDiskType::Standard)?);
 
-        // Return to a disk if we need to
-        if let Some(number) = return_to {
-            let _ = FloppyDrive::open(number)?;
-        }
-
         // All done! Enjoy the new block.
         Ok(Some(new_dir_block))
     }
@@ -110,7 +104,7 @@ impl DirectoryBlock {
                 continue;
             }
             // Try to move into the folder
-            if let Some(new_dir) = current_directory.change_directory(folder.as_os_str().to_str().expect("Should be valid utf8").to_string(), None)? {
+            if let Some(new_dir) = current_directory.change_directory(folder.as_os_str().to_str().expect("Should be valid utf8").to_string())? {
                 // Directory exists. Move in.
                 current_directory = new_dir;
                 continue;

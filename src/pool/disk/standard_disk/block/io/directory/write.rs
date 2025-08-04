@@ -33,9 +33,8 @@ impl DirectoryBlock {
     pub fn add_item(
         self,
         item: &DirectoryItem,
-        return_to: Option<u16>,
     ) -> Result<(), FloppyDriveError> {
-        go_add_item(self, item, return_to)
+        go_add_item(self, item)
     }
     /// Creates a new directory block, and adds its location to the input block.
     /// Blocks are created and updated as needed.
@@ -54,9 +53,8 @@ impl DirectoryBlock {
     pub fn make_directory(
         self,
         name: String,
-        return_to: Option<u16>,
     ) -> Result<(), FloppyDriveError> {
-        go_make_directory(self, name, return_to)
+        go_make_directory(self, name)
     }
 
     /// Remove a the given directory. Removes all blocks that contained information about this directory, and updates
@@ -84,7 +82,6 @@ impl DirectoryBlock {
 fn go_make_directory(
     directory: DirectoryBlock,
     name: String,
-    return_to: Option<u16>,
 ) -> Result<(), FloppyDriveError> {
     debug!("Attempting to create a new directory with name `{name}`...");
     // Check to make sure this block does not already contain the directory we are trying to add.
@@ -92,7 +89,7 @@ fn go_make_directory(
     // go get a new directory block, which would possibly just swap disks again, and our final update
     // to the original directory block has its origin already specified with block_origin.
     if directory
-        .find_item(&NamedItem::Directory(name.clone()), None)?
+        .find_item(&NamedItem::Directory(name.clone()))?
         .is_some()
     {
         // We are attempting to create a duplicate item.
@@ -157,12 +154,7 @@ fn go_make_directory(
     // Put it into the caller directory!
     // We dont need to pass in a return disk, since we will return ourselves next if needed.
     trace!("Adding the new directory to the caller...");
-    directory.add_item(&final_directory_item, None)?;
-
-    // Go back to the return disk if needed
-    if let Some(number) = return_to {
-        let _ = FloppyDrive::open(number)?;
-    };
+    directory.add_item(&final_directory_item)?;
 
     // All done!
     debug!("Done creating directory.");
@@ -192,7 +184,6 @@ fn go_make_new_directory_block() -> Result<DiskPointer, FloppyDriveError> {
 fn go_add_item(
     directory: DirectoryBlock,
     item: &DirectoryItem,
-    return_to: Option<u16>,
 ) -> Result<(), FloppyDriveError> {
     debug!("Adding new item to directory...");
 
@@ -244,11 +235,6 @@ fn go_add_item(
     // We assume the block has already been reserved, we are simply updating it.
     let to_write: RawBlock = current_directory.to_block();
     CachedBlockIO::update_block(&to_write, JustDiskType::Standard)?;
-
-    // Go to a disk if the caller wants.
-    if let Some(number) = return_to {
-        let _ = FloppyDrive::open(number)?;
-    }
 
     debug!("Item added.");
     // Done!

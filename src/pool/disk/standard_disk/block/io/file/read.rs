@@ -7,23 +7,23 @@ use crate::pool::disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError, 
 impl InodeFile {
     // Local functions
     /// Extract all of the extents and spit out a list of all of the blocks.
-    pub(super) fn to_pointers(&self, return_to: Option<u16>) -> Result<Vec<DiskPointer>, FloppyDriveError> {
-        go_to_pointers(self, return_to)
+    pub(super) fn to_pointers(&self) -> Result<Vec<DiskPointer>, FloppyDriveError> {
+        go_to_pointers(self)
     }
     /// Extract all of the extents.
     /// 
     /// Optionally returns to provided disk.
-    pub(super) fn to_extents(&self, return_to: Option<u16>) -> Result<Vec<FileExtent>, FloppyDriveError> {
+    pub(super) fn to_extents(&self) -> Result<Vec<FileExtent>, FloppyDriveError> {
         let root = self.get_root_block()?;
-        go_to_extents(&root, return_to)
+        go_to_extents(&root)
     }
     /// Goes and gets the FileExtentBlock this refers to.
     fn get_root_block(&self) -> Result<FileExtentBlock, FloppyDriveError> {
         go_get_root_block(self)
     }
     /// Read a file
-    fn read(&self, seek_point: u64, size: u32, return_to: Option<u16>) -> Result<Vec<u8>, FloppyDriveError> {
-        go_read_file(self, seek_point, size, return_to)
+    fn read(&self, seek_point: u64, size: u32) -> Result<Vec<u8>, FloppyDriveError> {
+        go_read_file(self, seek_point, size)
     }
 }
 
@@ -40,7 +40,7 @@ impl DirectoryItem {
     /// Reads in a file at a starting offset, and returns `x` bytes after that offset.
     /// 
     /// Optionally returns to a specified disk.
-    pub fn read_file(&self, seek_point: u64, size: u32, return_to: Option<u16>) -> Result<Vec<u8>, FloppyDriveError> {
+    pub fn read_file(&self, seek_point: u64, size: u32) -> Result<Vec<u8>, FloppyDriveError> {
         // Is this a file?
         if self.flags.contains(DirectoryFlags::IsDirectory) {
             // Uh, no it isn't why did you give me a dir?
@@ -65,8 +65,7 @@ impl DirectoryItem {
         let file = inode_file.extract_file().expect("Caller guarantee.");
 
         // Now we can read in the file
-        // We pass in return_to since this is the final movement we will do with disks.
-        let read_bytes = file.read(seek_point, size, return_to)?;
+        let read_bytes = file.read(seek_point, size,)?;
 
         // Now we have the bytes. If we were writing, we would have to flush info about the file to disk, but we don't
         // need to for a read. We are all done
@@ -77,9 +76,9 @@ impl DirectoryItem {
 
 
 
-fn go_to_pointers(location: &InodeFile, return_to: Option<u16>) -> Result<Vec<DiskPointer>, FloppyDriveError> {
+fn go_to_pointers(location: &InodeFile) -> Result<Vec<DiskPointer>, FloppyDriveError> {
     // get extents
-    let extents = location.to_extents(return_to)?;
+    let extents = location.to_extents()?;
     // Extract all the blocks
     let mut blocks: Vec<DiskPointer> = Vec::new();
 
@@ -101,7 +100,6 @@ fn go_to_pointers(location: &InodeFile, return_to: Option<u16>) -> Result<Vec<Di
 
 fn go_to_extents(
     block: &FileExtentBlock,
-    return_to: Option<u16>,
 ) -> Result<Vec<FileExtent>, FloppyDriveError> {
     // Totally didn't just lift the directory logic and tweak it, no sir.
     debug!("Extracting extents for a file...");
@@ -155,11 +153,6 @@ fn go_to_extents(
     // We will not sort this vec, since the order matters. The blocks are added to extend the file always at the end.
     // TODO: Assert that this is true ^
 
-    // Return to a specified block if the caller requested it
-    if let Some(number) = return_to {
-        _ = FloppyDrive::open(number)?;
-    }
-
     Ok(extents_found)
 }
 
@@ -174,7 +167,7 @@ fn go_get_root_block(file: &InodeFile) -> Result<FileExtentBlock, FloppyDriveErr
 
 
 
-fn go_read_file(file: &InodeFile, seek_point: u64, size: u32, return_to: Option<u16>) -> Result<Vec<u8>, FloppyDriveError> {
+fn go_read_file(file: &InodeFile, seek_point: u64, size: u32) -> Result<Vec<u8>, FloppyDriveError> {
     // Make sure the file is big enough
     assert!(file.get_size()>= seek_point + size as u64);
 
@@ -185,7 +178,7 @@ fn go_read_file(file: &InodeFile, seek_point: u64, size: u32, return_to: Option<
     // TODO: This is a bandaid fix. this logic is ugly.
     byte_index -= 1;
 
-    let blocks = file.to_pointers(return_to)?;
+    let blocks = file.to_pointers()?;
     let mut bytes_remaining: u32 = size;
     let mut current_block: usize = block_index;
     let mut collected_bytes: Vec<u8> = Vec::new();

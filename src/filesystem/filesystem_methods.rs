@@ -500,7 +500,7 @@ impl FuseHandler<PathBuf> for FlusterFS {
                 NamedItem::Directory(name_stringified)
             };
             // Go find it
-            the_item = match found_dir.find_item(&to_find, None)? {
+            the_item = match found_dir.find_item(&to_find)? {
                 Some(ok) => ok,
                 None => {
                     // The item did not exist
@@ -804,7 +804,7 @@ impl FuseHandler<PathBuf> for FlusterFS {
                 // Folder was real, make the file
                 
                 // Make sure file does not already exist.
-                if dir.find_item(&NamedItem::File(file_name.clone()), None)?.is_some() {
+                if dir.find_item(&NamedItem::File(file_name.clone()))?.is_some() {
                     info!("File already exists...");
                     // File already exists.
                     
@@ -820,7 +820,7 @@ impl FuseHandler<PathBuf> for FlusterFS {
                     // But, we can still only create the file if it doesn't exist.
                     // We do not care about the resulting directory item, only if this fails.
                     info!("Creating file...");
-                    let _ = dir.new_file(file_name.clone(), None)?;
+                    let _ = dir.new_file(file_name.clone())?;
                     info!("Done.");
                     // File made. Continue!
                 }
@@ -841,7 +841,7 @@ impl FuseHandler<PathBuf> for FlusterFS {
         // Open the containing directory
         if let Some(directory) = DirectoryBlock::try_find_directory(containing_folder)? {
             // Folder exists.
-            if let Some(file) = directory.find_item(&NamedItem::File(file_name), None)? {
+            if let Some(file) = directory.find_item(&NamedItem::File(file_name))? {
                 // File exists, all good.
                 
                 // But we may need to truncate the file if asked.
@@ -956,12 +956,12 @@ impl FuseHandler<PathBuf> for FlusterFS {
                 .to_string()
             );
             
-            if let Some(found_file) = dir.find_item(&finder, None)? {
+            if let Some(found_file) = dir.find_item(&finder)? {
                 // File exists
                 // Read it
                 // `size` is how many bytes are attempting to be read.
                 info!("File exists, reading from it...");
-                let read_result = found_file.read_file(byte_offset, size, None)?;
+                let read_result = found_file.read_file(byte_offset, size)?;
                 info!("Done.");
                 
                 // All done!
@@ -1031,7 +1031,7 @@ impl FuseHandler<PathBuf> for FlusterFS {
 
         // List the directory
         info!("Listing items...");
-        let items = requested_dir.list(None)?;
+        let items = requested_dir.list()?;
         info!("Done.");
         
         // Now we need to construct the minimal metadata, which is easy since we only
@@ -1430,14 +1430,13 @@ impl FuseHandler<PathBuf> for FlusterFS {
                 .to_string()
             );
             
-            if let Some(found_file) = dir.find_item(&finder, None)? {
+            if let Some(found_file) = dir.find_item(&finder)? {
                 // File exists
                 // Write to it.
                 info!("Writing data...");
                 let bytes_written: u32 = found_file.write_file(
                     &data,
                     byte_offset,
-                    None
                 )?;
                 info!("Done.");
                 
