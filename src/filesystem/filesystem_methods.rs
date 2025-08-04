@@ -70,7 +70,6 @@ impl FlusterFS {
         #[allow(unused_variables)]
         let unused = options;
         let fs = FlusterFS {
-            inner: Box::new(DefaultFuseHandler::new()),
             pool: Pool::load(),
         };
         debug!("Done starting filesystem.");

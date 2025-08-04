@@ -3,7 +3,6 @@
 // Imports
 
 use crate::pool::pool_actions::pool_struct::Pool;
-use easy_fuser::templates::DefaultFuseHandler;
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -11,7 +10,6 @@ use std::{
 // Structs, Enums, Flags
 
 pub struct FlusterFS {
-    pub(crate) inner: Box<DefaultFuseHandler>,
     #[allow(dead_code)] // it's lying.
     pub(crate) pool: Arc<Mutex<Pool>>,
 }
