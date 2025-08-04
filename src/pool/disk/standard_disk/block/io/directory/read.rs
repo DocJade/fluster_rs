@@ -3,7 +3,7 @@
 use log::{debug, trace};
 
 use crate::pool::disk::{
-    drive_struct::{FloppyDrive, FloppyDriveError, JustDiskType}, generic::io::cache::cache_io::CachedBlockIO, standard_disk::block::{
+    drive_struct::{FloppyDriveError, JustDiskType}, generic::io::cache::cache_io::CachedBlockIO, standard_disk::block::{
         directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem},
         io::directory::types::NamedItem,
     }

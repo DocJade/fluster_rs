@@ -30,7 +30,7 @@
 //  top, previously I used bubble sort, which could lead to slightly less used items to
 //  not promote away from the bottom of the queue fast enough.
 
-use std::{collections::{HashMap, VecDeque}, hash::Hash, sync::Mutex};
+use std::{collections::{HashMap, VecDeque}, sync::Mutex};
 
 use lazy_static::lazy_static;
 

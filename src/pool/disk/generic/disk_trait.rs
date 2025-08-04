@@ -10,11 +10,6 @@ use crate::pool::disk::{
     generic::block::block_structs::{BlockError, RawBlock},
 };
 
-use crate::pool::disk::blank_disk::blank_disk_struct::BlankDisk;
-use crate::pool::disk::pool_disk::pool_disk_struct::PoolDisk;
-use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
-use crate::pool::disk::unknown_disk::unknown_disk_struct::UnknownDisk;
-
 // Generic disks must also have disk numbers, and be able to retrieve their inner File.
 #[enum_dispatch(DiskType)] // Force every disk type to implement these methods.
 pub trait GenericDiskMethods {

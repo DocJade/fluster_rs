@@ -5,7 +5,48 @@
 
 use std::{cmp::max, u16};
 
-use crate::pool::{disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::{block_structs::RawBlock, crc::add_crc_to_block}, generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO}, standard_disk::{block::{directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem}, file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::{ExtentFlags, FileExtent, FileExtentBlock}}, inode::inode_struct::{Inode, InodeBlock, InodeDirectory, InodeFile, InodeFlags, InodeTimestamp}, io::directory::types::NamedItem}, standard_disk_struct::StandardDisk}}, pool_actions::pool_struct::Pool};
+use crate::pool::{
+    disk::{
+        drive_struct::{
+            FloppyDriveError,
+            JustDiskType
+        },
+        generic::{
+            block::{
+                block_structs::RawBlock,
+                crc::add_crc_to_block
+            },
+            generic_structs::pointer_struct::DiskPointer,
+            io::cache::cache_io::CachedBlockIO
+        },
+        standard_disk::{
+            block::{
+                directory::directory_struct::{
+                    DirectoryBlock,
+                    DirectoryFlags,
+                    DirectoryItem
+                },
+                file_extents::{
+                    file_extents_methods::DATA_BLOCK_OVERHEAD,
+                    file_extents_struct::{
+                        ExtentFlags,
+                        FileExtent,
+                        FileExtentBlock
+                    }
+                },
+                inode::inode_struct::{
+                    Inode,
+                    InodeBlock,
+                    InodeFile,
+                    InodeFlags,
+                    InodeTimestamp
+                },
+                io::directory::types::NamedItem
+            },
+        }
+    },
+    pool_actions::pool_struct::Pool
+};
 
 impl InodeFile {
     /// Update the contents of a file starting at the provided seek point.

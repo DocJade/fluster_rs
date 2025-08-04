@@ -13,20 +13,10 @@ use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 use crate::pool::disk::generic::io::cache::cache_io::CachedBlockIO;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryFlags;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryItem;
-use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeDirectory;
-use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeFile;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeTimestamp;
 use crate::pool::disk::standard_disk::block::io::directory::types::NamedItem;
 use crate::pool::pool_actions::pool_struct::Pool;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryBlock;
-use easy_fuser::types::ErrorKind;
-use easy_fuser::types::FUSEOpenResponseFlags;
-use easy_fuser::types::FileAttribute;
-use easy_fuser::types::FileKind;
-use easy_fuser::types::OpenFlags;
-use easy_fuser::types::OwnedFileHandle;
-use easy_fuser::types::PosixError;
-use easy_fuser::{FuseHandler, templates::DefaultFuseHandler};
 use log::debug;
 use log::info;
 use log::warn;
@@ -711,7 +701,7 @@ impl FuseHandler<PathBuf> for FlusterFS {
         
         // Make sure the directory we are trying to create does not already exist
         let new_name: String = name.to_str().expect("Should be valid utf8").to_string();
-        if block.find_item(&NamedItem::Directory(new_name.clone()), None)?.is_some() {
+        if block.find_item(&NamedItem::Directory(new_name.clone()))?.is_some() {
             // A folder with that name already exists.
             warn!("Directory already exists!");
             warn!("Failed to create directory!");
@@ -720,14 +710,14 @@ impl FuseHandler<PathBuf> for FlusterFS {
 
         // Now that we have the directory, make the new directory
         info!("Creating directory...");
-        block.make_directory(new_name, None)?;
+        block.make_directory(new_name)?;
         info!("Done.");
         
         // Now get info about the new directory.
         let new_location: PathBuf = parent_id.join(name);
         // We dont use file handles.
         info!("Getting attributes of the new directory...");
-        let result = self.getattr(req, new_location, None)?;
+        let result = self.getattr(req, new_location)?;
         info!("Done.");
         
         // all done

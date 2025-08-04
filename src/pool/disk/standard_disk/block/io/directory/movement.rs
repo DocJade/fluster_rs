@@ -1,11 +1,11 @@
 // Helpers to move between directories
 
-use std::{ffi::OsStr, path::{Component, Path, PathBuf}};
+use std::path::{Component, Path};
 
 use log::info;
 
 use crate::pool::{disk::{
-    drive_struct::{FloppyDrive, FloppyDriveError, JustDiskType},
+    drive_struct::{FloppyDriveError, JustDiskType},
     generic::{generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO},
     standard_disk::block::{
         directory::directory_struct::DirectoryBlock, inode::inode_struct::InodeBlock,

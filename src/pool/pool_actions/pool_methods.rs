@@ -15,8 +15,6 @@ use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 use crate::pool::disk::generic::io::cache::cache_io::CachedBlockIO;
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolDiskHeader;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryBlock;
-use crate::pool::disk::standard_disk::block::inode::inode_struct::Inode;
-use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeBlock;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
 use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
 use log::debug;
