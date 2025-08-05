@@ -1,7 +1,7 @@
 use std::process::exit;
 
 use libc::c_int;
-use log::{error, warn};
+use log::error;
 
 use crate::pool::disk::drive_struct::FloppyDriveError;
 

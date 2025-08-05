@@ -4,6 +4,7 @@
 
 // Implementations
 
+use std::time::Duration;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
@@ -469,7 +470,7 @@ impl InodeTimestamp {
         let now = SystemTime::now();
         let duration_since_epoch = now
             .duration_since(UNIX_EPOCH)
-            .expect("You shouldn't be using fluster in the 1960s.");
+            .expect("You shouldn't be using fluster in the 1960s. If you are, email me.");
         Self {
             seconds: duration_since_epoch.as_secs(),
             nanos: duration_since_epoch.subsec_nanos(),
@@ -569,5 +570,21 @@ impl Inode {
     }
      pub fn extract_directory(&self) -> Option<InodeDirectory> {
         self.directory
+    }
+}
+
+// convert an inode timestamp into SystemTime
+impl From<InodeTimestamp> for SystemTime {
+    fn from(value: InodeTimestamp) -> Self {
+        // All of our measurements are relative to the Unix Epoch
+        // https://xkcd.com/376/
+
+        let epoch: SystemTime = SystemTime::UNIX_EPOCH;
+        
+        // Get the offset
+        let duration: Duration = Duration::new(value.seconds, value.nanos);
+        
+        // 88MPH
+        epoch.checked_add(duration).expect("This will break in 2038. Until then, hi mom!")
     }
 }

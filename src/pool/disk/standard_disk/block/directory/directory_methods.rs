@@ -347,7 +347,7 @@ impl DirectoryItem {
     }
 
     /// Get when the inode / item was created.
-    pub(crate) fn get_crated_time(&self) -> Result<InodeTimestamp, FloppyDriveError> {
+    pub(crate) fn get_created_time(&self) -> Result<InodeTimestamp, FloppyDriveError> {
         // get the inode
         let inode = self.get_inode()?;
         Ok(inode.created)

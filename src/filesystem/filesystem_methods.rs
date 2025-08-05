@@ -45,62 +45,7 @@ use std::time::SystemTime;
 
 
 
-// Spoofing FileAttributes
-fn spoofed_file_attributes(
-    file_size: u64,
-    creation_time: InodeTimestamp,
-    modified_time: InodeTimestamp,
-    item_type: FileKind,
-) -> FileAttribute {
-    // Convert the times
-    let mut system_creation_time: SystemTime = SystemTime::UNIX_EPOCH;
-    // Add the seconds
-    system_creation_time = system_creation_time
-        .checked_add(Duration::from_secs(creation_time.seconds))
-        .expect("Time stuff sucks, but this should be fine.");
-    // Add the nanoseconds
-    // This is less precise than expected, but if you need more than millisecond accuracy, you are using
-    // the wrong filesystem lmao.
-    system_creation_time = system_creation_time
-        .checked_add(Duration::from_nanos(creation_time.nanos as u64 * 1000))
-        .expect("Time stuff sucks, but this should be fine.");
 
-    let mut system_modified_time: SystemTime = SystemTime::UNIX_EPOCH;
-    system_modified_time = system_modified_time
-        .checked_add(Duration::from_secs(modified_time.seconds))
-        .expect("Time stuff sucks, but this should be fine.");
-    system_modified_time = system_modified_time
-        .checked_add(Duration::from_nanos(modified_time.nanos as u64 * 1000))
-        .expect("Time stuff sucks, but this should be fine.");
-
-    // Now for ease of implementation, we (very stupidly) ignore all file access permissions,
-    // owner information, and group owner information.
-
-    // Root owns all files (user id 0)
-    // Owner is in the superuser group (group id 0)
-    // All permission bits are set (very scary!)
-
-    // Due to this, we also do not check any permissions on reads or writes! :D
-
-    FileAttribute {
-        size: file_size,                 // File size in bytes
-        blocks: file_size.div_ceil(512), // Rounds up.
-        atime: SystemTime::UNIX_EPOCH,   // We dont support access times.
-        mtime: system_modified_time,
-        ctime: SystemTime::UNIX_EPOCH, // We dont support change time, this is inode stuff.
-        crtime: system_creation_time,
-        kind: item_type,          // What kind of file is this
-        perm: 0b1111111111111111, // All permission bits
-        nlink: 0,                 // We do not support hard links.
-        uid: 0,                   // Root
-        gid: 0,                   // Superuser
-        rdev: 0,                  // We do not support special files.
-        blksize: 512,             // Preferred block size is 512 bytes.
-        flags: 0,                 // easy_fuser actually completely ignores this.
-        ttl: None,                // Default
-        generation: None,         // We do not support generations
-    }
-}
 
 fn open_response_flags() -> FUSEOpenResponseFlags {
     // There are flags we will always set when returning items, such as always using direct io to

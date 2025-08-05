@@ -24,6 +24,9 @@ use crate::filesystem::error::error_types::*;
 
 // I'm pretty sure that the read/write flags do not overlap. If they do I will split this into multiple types.
 
+// All of the c flags are i32 for reasons unknown to me, so we have to cast all of them lol
+// Not sure why the fuse_mt crate uses u32...
+
 bitflags! {
     /// Flags that items have.
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -31,7 +34,7 @@ bitflags! {
         /// The file is opened in append mode.
         /// Before each write, the file offset is positioned at the end of the file.
         /// The modification of the file offset and write is done as one atomic step.
-        const APPEND = libc::O_APPEND;
+        const APPEND = libc::O_APPEND as u32;
         
         /// Async, fluster does not support this. Thus we will not
         /// add this bit to the flags.
@@ -40,30 +43,30 @@ bitflags! {
         /// Has to do with closing when executing, ignoring, good luck.
         /// 
         /// Has no effect
-        const O_CLOEXEC = libc::O_CLOEXEC;
+        const O_CLOEXEC = libc::O_CLOEXEC as u32;
 
         /// If the path does not exist, create it as a regular file.
-        const CREATE = libc::O_CREAT;
+        const CREATE = libc::O_CREAT as u32;
 
         /// Has to do with direct IO. We don't really care, since we have no special
         /// handling for this kinda thing.
         /// 
         /// Has no effect.
-        const O_DIRECT = libc::O_DIRECT;
+        const O_DIRECT = libc::O_DIRECT as u32;
 
         /// Fail the open if the path is not a directory.
-        const ASSERT_DIRECTORY = libc::O_DIRECTORY;
+        const ASSERT_DIRECTORY = libc::O_DIRECTORY as u32;
 
         /// Has to do with data syncing. We do not care.
         /// 
         /// Has no effect
-        const O_DSYNC = libc::O_DSYNC;
+        const O_DSYNC = libc::O_DSYNC as u32;
 
         /// Ensure that call creates the file. if this is set and O_CREAT is also set, we're
         /// supposed to turn a EEXIST on open if path already exists.
         /// 
         /// O_EXCL is undefined if used without O_CREAT (unless pointing at block devices which fluster is not.)
-        const CREATE_EXCLUSIVE = libc::O_EXCL;
+        const CREATE_EXCLUSIVE = libc::O_EXCL as u32;
         
         /// Deals with filesizes with offsets that can be greated than off_t (I think that's 32 bit)
         /// 
@@ -76,7 +79,7 @@ bitflags! {
         /// Cool, we don't support that anyways.
         /// 
         /// Has no effect.
-        const O_NOATIME = libc::O_NOATIME;
+        const O_NOATIME = libc::O_NOATIME as u32;
 
         /// If path is a terminal device, do not control it or whatever.
         /// 
@@ -96,14 +99,14 @@ bitflags! {
         /// Guess what buddy? you'll just get the whole file regardless.
         /// 
         /// Has no effect.
-        const O_PATH = libc::O_PATH;
+        const O_PATH = libc::O_PATH as u32;
         
         /// Do synchronized file I/O.
         /// 
         /// This is supposed to force sync to disk, but we are silly and don't care :)
         /// 
         /// Has no effect.
-        const O_SYNC = libc::O_SYNC;
+        const O_SYNC = libc::O_SYNC as u32;
         
         /// Creates unnamed tempfiles.
         /// 
@@ -114,7 +117,7 @@ bitflags! {
         /// 
         /// There is already a truncate method on the filesystem, but this may get called elsewhere
         /// so we still need to care elsewhere.
-        const TRUNCATE = libc::O_TRUNC;
+        const TRUNCATE = libc::O_TRUNC as u32;
 
     }
 }

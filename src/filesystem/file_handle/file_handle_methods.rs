@@ -66,14 +66,19 @@ lazy_static! {
 // The actual handles
 //
 
-use crate::filesystem::file_handle::file_handle_struct::FileHandle;
+use crate::{filesystem::file_handle::file_handle_struct::FileHandle, pool::disk::{drive_struct::FloppyDriveError, standard_disk::block::directory::directory_struct::DirectoryItem}};
 
 impl FileHandle {
     /// The name of the file/folder, if it exists.
     /// This will return None on the root.
     pub fn name(&self) -> Option<&str> {
         // Get the name, if it exists.
-        self.path.file_name()
+        if let Some(name) = self.path.file_name() {
+            Some(name.to_str().expect("Should be valid UTF8"))
+        } else {
+            // No name, this must be the root.
+            Some("")
+        }
     }
 
     /// Allocate the file handle for tracking.
@@ -83,7 +88,7 @@ impl FileHandle {
     /// Does not create a new ItemHandle, only stores it.
     pub fn allocate(self) -> u64 {
         // This is blocking.
-        let read_handles: LoveHandles = &mut LOANED_HANDLES.lock();
+        let read_handles = &mut LOANED_HANDLES.lock().expect("Other mutex holders should not panic.");
         // Add it
         read_handles.make_handle(self)
     }
@@ -91,18 +96,18 @@ impl FileHandle {
     /// Get contents of handle.
     /// 
     /// Will block.
-    fn read(handle: u64) -> Self {
+    pub fn read(handle: u64) -> Self {
         // This is blocking
-        let read_handles: LoveHandles = LOANED_HANDLES.lock();
+        let read_handles = LOANED_HANDLES.lock().expect("Other mutex holders should not panic.");
         read_handles.read_handle(handle)
     }
 
     /// Release a handle.
     /// 
     /// Will block.
-    fn drop_handle(handle: u64) {
+    pub fn drop_handle(handle: u64) {
         // This is blocking
-        let read_handles: LoveHandles = &mut LOANED_HANDLES.lock();
+        let read_handles = &mut LOANED_HANDLES.lock().expect("Other mutex holders should not panic.");
         read_handles.release_handle(handle);
     }
 
@@ -127,5 +132,11 @@ impl FileHandle {
         
         // Check if it ends with the delimiter.
         self.path.as_os_str().to_str().expect("Should be valid utf8").ends_with(DELIMITER)
+    }
+
+    
+    /// Loads in and returns the directory item. Assuming it exists.
+    pub fn get_directory_item(&self) -> Result<DirectoryItem, FloppyDriveError> {
+        todo!()
     }
 }

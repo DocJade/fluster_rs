@@ -8,9 +8,9 @@
 //
 //
 
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
-use fuse_mt::FilesystemMT;
+use fuse_mt::{FileAttr, FilesystemMT};
 use log::{debug, info, warn};
 
 use crate::{
@@ -20,6 +20,8 @@ use crate::{
 
 use super::file_handle::file_handle_struct::FileHandle;
 use super::error::error_types::*;
+
+use fuse_mt::CreatedEntry;
 
 
 
@@ -228,14 +230,14 @@ impl FilesystemMT for FlusterFS {
     // Does not create files.
     fn open(
         &self,
-        req: fuse_mt::RequestInfo,
+        _req: fuse_mt::RequestInfo,
         path: &std::path::Path,
         flags: u32,
     ) -> fuse_mt::ResultOpen {
         debug!("Opening item at path `{}`...", path.display());
         // Deduce the open permissions.
         debug!("Deducing flags...");
-        let mut converted_flag: ItemFlag = ItemFlag::deduce_flag(flags)?;
+        let converted_flag: ItemFlag = ItemFlag::deduce_flag(flags)?;
         debug!("Ok.");
 
         // We require at least one of the read/write flags.
@@ -248,7 +250,7 @@ impl FilesystemMT for FlusterFS {
         // open() always returns a brand new file handle, regardless if that file was
         // already open somewhere else.
         let handle: FileHandle = FileHandle {
-            path,
+            path: path.into(),
             flags: converted_flag,
         };
 
@@ -259,7 +261,7 @@ impl FilesystemMT for FlusterFS {
             if name.len() > 255 {
                 warn!("File name is too long.");
                 // File name was too long.
-                Err(FILE_NAME_TOO_LONG)
+                return Err(FILE_NAME_TOO_LONG)
             }
         }
 
@@ -271,7 +273,7 @@ impl FilesystemMT for FlusterFS {
             None => {
                 // Cannot load files from directories that do not exist.
                 warn!("Directory that the item was supposed to be contained within does not exist.");
-                Err(NO_SUCH_ITEM)
+                return Err(NO_SUCH_ITEM)
             },
         };
         debug!("Directory loaded.");
@@ -290,7 +292,7 @@ impl FilesystemMT for FlusterFS {
             } else {
                 // Cannot load nameless files.
                 warn!("Tried to read a file with no name.");
-                Err(INVALID_ARGUMENT)
+                return Err(INVALID_ARGUMENT)
             }
         } else {
             // Directory
@@ -310,13 +312,13 @@ impl FilesystemMT for FlusterFS {
 
         // Now load in the directory item.
         debug!("Attempting to find the item...");
-        if let Some(exists) = containing_dir_block.find_item(item_to_find)? {
+        if let Some(exists) = containing_dir_block.find_item(&item_to_find)? {
             debug!("Item exists.");
             found_item = exists;
         } else {
             // No item
             debug!("Item does not exist.");
-            Err(NO_SUCH_ITEM);
+            return Err(NO_SUCH_ITEM);
         }
 
         // We have now loaded in the directory item, or bailed out if needed.
@@ -337,7 +339,7 @@ impl FilesystemMT for FlusterFS {
         let new_handle: u64 = handle.allocate();
 
         // Done!
-        Ok((new_handle, converted_flag))
+        Ok((new_handle, converted_flag.into()))
     }
 
     // Read file data from a file handle.
@@ -530,12 +532,12 @@ impl FilesystemMT for FlusterFS {
 
         // Extract the flags
         // Will bail if needed.
-        let mut deduced_flags: ItemFlag = ItemFlag::deduce_flag(flags)?;
+        let deduced_flags: ItemFlag = ItemFlag::deduce_flag(flags)?;
 
         // Is the name too long?
         if name.len() > 255 {
             debug!("File name is too long. Bailing.");
-            Err(FILE_NAME_TOO_LONG)
+            return Err(FILE_NAME_TOO_LONG)
         }
 
         // Try and load in the parent directory
@@ -546,7 +548,7 @@ impl FilesystemMT for FlusterFS {
             None => {
                 // Nope, no parent.
                 warn!("Cannot create files in directories that do not exist.");
-                Err(NO_SUCH_ITEM)
+                return Err(NO_SUCH_ITEM)
             },
         };
         debug!("Directory loaded.");
@@ -555,28 +557,71 @@ impl FilesystemMT for FlusterFS {
         debug!("Checking if file already exists...");
         let converted_name: String = name.to_str().expect("Should be valid UTF8.").to_string();
         // Will bail if needed.
-        if let Some(exists) = containing_dir_block.find_item(&NamedItem::File(converted_name))? {
+        if let Some(_exists) = containing_dir_block.find_item(&NamedItem::File(converted_name.clone()))? {
             debug!("File already exists.");
             // But do we care?
             if deduced_flags.contains(ItemFlag::CREATE_EXCLUSIVE) {
                 // Yes we do, this is a failure.
                 debug!("Caller wanted to create this file, not open it. Bailing.");
-                Err(FILE_ALREADY_EXISTS)
+                return Err(FILE_ALREADY_EXISTS)
             }
-
+            
             // Since the file already exists we can skip the creation process.
             // just load it in as usual.
-
+            
             // Full item path
-            let constructed_path: Path = parent.join(name);
-
+            let constructed_path: &Path = &parent.join(name);
+            
             // Dont care about the returned flags, they wont change anyways.
             let (file_handle, _): (u64, u32) = self.open(req, constructed_path, flags)?;
-
-            // Now fill in file attributes based on the handle.
-            todo!()
+            
+            // Get the innards of the handle
+            let handle_inner: FileHandle = FileHandle::read(file_handle);
+            
+            // Get the metadata from that
+            debug!("Getting file attributes...");
+            let facebook_data: FileAttr = handle_inner.try_into()?;
+            
+            // Put it all together
+            // No idea what the TTL should be set to. I'm assuming that's how long the handles last?
+            // I will never drop handles on my side, the OS has to drop em.
+            debug!("Done reading in file, returning.");
+            return Ok(CreatedEntry {
+                ttl: Duration::from_secs(60*60*24*365), // A year sounds good.
+                attr: facebook_data,
+                fh: file_handle,
+                flags,  // We use the same flags we came in with. Not the one from the loaded file.
+                        // Is that a bad idea? No idea. TODO: is this safe?
+            })
         }
-
+        
         // File did not exist, actually creating it...
+        debug!("Creating file...");
+        let resulting_item: DirectoryItem = containing_dir_block.new_file(converted_name)?;
+        debug!("Creating file...");
+
+        // Full item path
+        let constructed_path: &Path = &parent.join(name);
+
+        // Construct and return the handle to the new file
+        let new_handle: FileHandle = FileHandle {
+            path: constructed_path.into(),
+            flags: deduced_flags.into(),
+        };
+
+        // We can get attributes directly from the directory item we just made
+        let attributes: FileAttr = resulting_item.try_into()?;
+
+        // Allocate the handle for it
+        let handle_num: u64 = new_handle.allocate();
+
+        // Assemble it, and we're done!
+        debug!("Done creating file.");
+        Ok(CreatedEntry {
+            ttl: Duration::from_secs(60*60*24*365), // A year sounds good.
+            attr: attributes,
+            fh: handle_num,
+            flags,
+        })
     }
 }
