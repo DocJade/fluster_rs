@@ -272,15 +272,60 @@ impl FilesystemMT for FlusterFS {
     //     Err(libc::ENOSYS)
     // }
 
-    // Create a new directory.
+    // Create a new directory if it does not already exist.
+    // Returns file attributes about the new directory
     fn mkdir(
         &self,
         _req: fuse_mt::RequestInfo,
-        _parent: &std::path::Path,
-        _name: &std::ffi::OsStr,
-        _mode: u32,
+        parent: &std::path::Path,
+        name: &std::ffi::OsStr,
+        _mode: u32, // Permission bit related. Do not need.
     ) -> fuse_mt::ResultEntry {
-        Err(UNIMPLEMENTED)
+        debug!("Creating new directory in `{}` named `{}`.", parent.display(), name.display());
+        // Make sure the name isn't too long
+        if name.len() > 255 {
+            debug!("Name is too long.");
+            return Err(FILE_NAME_TOO_LONG);
+        }
+
+        // the new directory
+        let new_dir: DirectoryItem;
+        let the_name: String = name.to_str().expect("Should be valid utf8").to_string()
+
+        // Open parent
+        if let Some(parent) = DirectoryBlock::try_find_directory(Some(parent))? {
+            debug!("Checking if directory exists...");
+            if parent.find_item(&NamedItem::Directory(the_name.clone()))?.is_some() {
+                // Directory already exists.
+                debug!("Directory already exists.");
+                return Err(ITEM_ALREADY_EXISTS)
+            }
+            
+            // Make the directory
+            debug!("It did not, creating directory...");
+            new_dir = parent.make_directory(the_name)?;
+            debug!("Directory created.");
+        } else {
+            // No such parent
+            debug!("Parent did not exist.");
+            return Err(NO_SUCH_ITEM);
+        }
+
+        // Now we need attribute information about it.
+        debug!("Getting attribute info...");
+        let attributes: FileAttr = new_dir.try_into()?;
+        debug!("Done.");
+
+        let a_year: Duration = Duration::from_secs(60*60*24*365);
+
+        // All done!
+        debug!("Directory created successfully.");
+        Ok(
+            (
+                a_year,
+                attributes
+            )
+        )
     }
 
     // Deletes a file.
@@ -660,7 +705,7 @@ impl FilesystemMT for FlusterFS {
             if deduced_flags.contains(ItemFlag::CREATE_EXCLUSIVE) {
                 // Yes we do, this is a failure.
                 debug!("Caller wanted to create this file, not open it. Bailing.");
-                return Err(FILE_ALREADY_EXISTS)
+                return Err(ITEM_ALREADY_EXISTS)
             }
             
             // Since the file already exists we can skip the creation process.

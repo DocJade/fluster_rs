@@ -19,7 +19,7 @@ use crate::pool::disk::drive_struct::FloppyDriveError;
 
 pub const FILE_NAME_TOO_LONG: c_int = libc::ENAMETOOLONG;
 pub const DIRECTORY_NOT_EMPTY: c_int = libc::ENOTEMPTY;
-pub const FILE_ALREADY_EXISTS: c_int = libc::EEXIST;
+pub const ITEM_ALREADY_EXISTS: c_int = libc::EEXIST;
 pub const NOT_A_DIRECTORY: c_int = libc::ENOTDIR;
 pub const INVALID_ARGUMENT: c_int = libc::EINVAL;
 pub const IS_A_DIRECTORY: c_int = libc::EISDIR;
