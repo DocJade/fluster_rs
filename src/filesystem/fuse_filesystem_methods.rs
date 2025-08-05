@@ -70,14 +70,85 @@ impl FilesystemMT for FlusterFS {
         info!("Goodbye! .o/");
     }
 
-    // Get file attributes.
+    // Get file attributes of an item.
     fn getattr(
         &self,
         _req: fuse_mt::RequestInfo,
-        _path: &std::path::Path,
-        _fh: Option<u64>,
+        path: &std::path::Path,
+        fh: Option<u64>,
     ) -> fuse_mt::ResultEntry {
-        Err(UNIMPLEMENTED)
+        debug!("Getting attributes of `{}`...", path.display());
+        // This wants a TTL again, ok...
+        // TODO: Add a ttl setting to FlusterFS type
+        let a_year: Duration = Duration::from_secs(60*60*24*365);
+
+        // I already wrote a method for this yay
+        // but that assumes we have a handle.
+        if let Some(handle) = fh {
+            debug!("Handle was provided, getting and returning attributes.");
+            // Handle exists, easy path.
+            return Ok(
+                (
+                    a_year,
+                    FileHandle::read(handle).try_into()?
+                )
+            )
+        }
+
+        // No handle, dang.
+        
+        // Go find that sucker
+
+        // Making a temporary handle (doesn't need to be allocated) lets us call some easier methods.
+        // We cant just use the TryInto FileAttr since we dont know for sure if the item exists yet.
+        let temp_handle: FileHandle = FileHandle {
+            path: path.into(),
+            flags: ItemFlag::empty(),
+        };
+
+        // Get the name of the item
+        let item_name_string: String = temp_handle.name().to_string();
+
+        // Deduce the type
+        let item_to_find: NamedItem = if temp_handle.is_file() {
+            // yeah its a file
+            NamedItem::File(item_name_string)
+        } else {
+            // dir
+            NamedItem::Directory(item_name_string)
+        };
+
+        let found_item: DirectoryItem;
+
+        // Directory
+        debug!("Searching for item...");
+        if let Some(parent) = DirectoryBlock::try_find_directory(path.parent())? {
+            // Item
+            if let Some(item) = parent.find_item(&item_to_find)? {
+                debug!("Item found.");
+                found_item = item;
+            } else {
+                // item did not exist.
+                debug!("Item was not present in parent.");
+                return Err(NO_SUCH_ITEM)
+            }
+        } else {
+            // Parent does not exist. We cannot get attributes.
+            debug!("Parent directory did not exist for this item.");
+            return Err(NO_SUCH_ITEM)
+        }
+
+        // Get the attributes
+        debug!("Getting attributes of item...");
+        let found_attributes: FileAttr = found_item.try_into()?;
+        debug!("Done! Returning.");
+
+        return Ok(
+            (
+                a_year,
+                found_attributes
+            )
+        );
     }
 
     // We dont support file permissions.
@@ -257,12 +328,10 @@ impl FilesystemMT for FlusterFS {
         // We do not allocate the file handle until we are sure we will use it.
 
         // Make sure the name of the file is not too long.
-        if let Some(name) = handle.name() {
-            if name.len() > 255 {
-                warn!("File name is too long.");
-                // File name was too long.
-                return Err(FILE_NAME_TOO_LONG)
-            }
+        if handle.name().len() > 255 {
+            warn!("File name is too long.");
+            // File name was too long.
+            return Err(FILE_NAME_TOO_LONG)
         }
 
         // Load in info about where the file should be.
@@ -285,26 +354,13 @@ impl FilesystemMT for FlusterFS {
             // File
             debug!("Looking for a file...");
             // Cool beans.
-            // Files must have names, otherwise the path provided was malformed.
-            if let Some(name) = extracted_name {
-                debug!("Named `{name}`.");
-                NamedItem::File(name.to_string())
-            } else {
-                // Cannot load nameless files.
-                warn!("Tried to read a file with no name.");
-                return Err(INVALID_ARGUMENT)
-            }
+            debug!("Named `{extracted_name}`.");
+            NamedItem::File(extracted_name.to_string())
         } else {
             // Directory
             debug!("Looking for a directory...");
-            if let Some(name) = extracted_name {
-                debug!("Named `{name}`.");
-                NamedItem::Directory(name.to_string())
-            } else {
-                // Directory did not have a name, this must be root, no?
-                debug!("Directory has no name. We'll assume it's the root.");
-                NamedItem::Directory("".to_string())
-            }
+            debug!("Named `{extracted_name}`.");
+            NamedItem::Directory(extracted_name.to_string())
         };
 
         // Hold onto the item until we need it

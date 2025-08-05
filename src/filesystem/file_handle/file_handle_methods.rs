@@ -71,13 +71,13 @@ use crate::{filesystem::file_handle::file_handle_struct::FileHandle, pool::disk:
 impl FileHandle {
     /// The name of the file/folder, if it exists.
     /// This will return None on the root.
-    pub fn name(&self) -> Option<&str> {
+    pub fn name(&self) -> &str {
         // Get the name, if it exists.
         if let Some(name) = self.path.file_name() {
-            Some(name.to_str().expect("Should be valid UTF8"))
+            name.to_str().expect("Should be valid UTF8")
         } else {
             // No name, this must be the root.
-            Some("")
+            ""
         }
     }
 
