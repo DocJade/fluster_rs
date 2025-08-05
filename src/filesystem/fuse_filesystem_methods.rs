@@ -8,101 +8,21 @@
 //
 //
 
+use std::path::Path;
+
 use fuse_mt::FilesystemMT;
-use libc::c_int;
-use bitflags::bitflags;
-use log::info;
+use log::{debug, info, warn};
 
-use crate::{filesystem::filesystem_struct::FlusterFS, pool::disk::generic::io::cache::cache_io::CachedBlockIO};
+use crate::{
+    filesystem::{filesystem_struct::FlusterFS, item_flag::flag_struct::ItemFlag},
+    pool::disk::{generic::io::cache::cache_io::CachedBlockIO, standard_disk::block::{directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem}, io::directory::types::NamedItem}}
+};
 
-//
-//
-// ======
-// Error types
-// ======
-//
-//
-
-const UNIMPLEMENTED: c_int = libc::ENOSYS;
-
-//
-//
-// ======
-// Handle type
-// ======
-//
-//
+use super::file_handle::file_handle_struct::FileHandle;
+use super::error::error_types::*;
 
 
-// We are in charge of our own file handle management. Fun! (lie)
-// So we need a way to hand out and retrieve them.
 
-
-/// Handle for any type of item (file or directory).
-struct ItemHandle {
-    /// The path of this file/folder.
-    path: Box<std::path::Path>, // Non-static size, thus boxed.
-    /// Is this a file, or a directory?
-    is_file: bool,
-    // todo
-}
-
-impl ItemHandle {
-    /// The name of the file/folder.
-    fn name(&self) -> Option<&str> {
-        // Get the name, if it exists.
-        todo!()
-    }
-
-    /// Make a brand new file handle.
-    fn make_handle(self) -> u64 {
-        todo!()
-    }
-
-    /// Make a brand new file handle.
-    fn read_handle(handle: u64) -> Self {
-        todo!()
-    }
-
-    /// Release a handle.
-    fn drop_handle(handle: u64) {
-        todo!()
-    }
-}
-
-//
-//
-// ======
-// Flag type
-// ======
-//
-//
-
-// Flags are handled with bare u32 integers,
-// hence we have a bitflag type to make dealing with them easier.
-
-bitflags! {
-    /// Flags that items have.
-    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-    pub struct ItemFlag: u32 {
-        // todo
-    }
-}
-
-/// Convert a flag to a u32 for use in returning.
-impl From<ItemFlag> for u32 {
-    fn from(value: ItemFlag) -> Self {
-        value.bits()
-    }
-}
-
-/// Convert a u32 into a flag.
-impl From<u32> for ItemFlag {
-    fn from(value: u32) -> Self {
-        // All bits must be used. We need to know what they all are.
-        ItemFlag::from_bits(value).expect("All bits should be documented.")
-    }
-}
 
 //
 //
@@ -123,6 +43,9 @@ impl From<u32> for ItemFlag {
 // I have archived this page on internet archive.
 // Thanks Geoff! I hope your life is going well, 16 years later.
 //
+// In theory, some calls like truncate() should be handled by the os before other operations here. We will still check for those flags, just in case.
+//
+// Also, in theory again, we should NEVER modify the flags before returning them. Linux VFS depends on this (in theory)
 
 impl FilesystemMT for FlusterFS {
     // The most British function in Fluster
@@ -139,6 +62,8 @@ impl FilesystemMT for FlusterFS {
         // Flush all of the tiers of cache.
         info!("Flushing cache...");
         CachedBlockIO::flush().expect("I sure hope flushing works.");
+        // Now flush pool information
+        todo!("Flush pool info to pool disk.");
         info!("Done.");
         info!("Goodbye! .o/");
     }
@@ -178,6 +103,7 @@ impl FilesystemMT for FlusterFS {
     // }
 
     // File truncation is supported.
+    // Does not always truncate file to 0 bytes long.
     fn truncate(
         &self,
         _req: fuse_mt::RequestInfo,
@@ -299,13 +225,119 @@ impl FilesystemMT for FlusterFS {
     // }
 
     // Open a file and get a handle that will be used to access it.
+    // Does not create files.
     fn open(
         &self,
-        _req: fuse_mt::RequestInfo,
-        _path: &std::path::Path,
-        _flags: u32,
+        req: fuse_mt::RequestInfo,
+        path: &std::path::Path,
+        flags: u32,
     ) -> fuse_mt::ResultOpen {
-        Err(UNIMPLEMENTED)
+        debug!("Opening item at path `{}`...", path.display());
+        // Deduce the open permissions.
+        debug!("Deducing flags...");
+        let mut converted_flag: ItemFlag = ItemFlag::deduce_flag(flags)?;
+        debug!("Ok.");
+
+        // We require at least one of the read/write flags.
+        // ...or, more correctly: we would require them if we used them.
+        // We dont. Everything is read/write.
+
+        // We ignore any flags that are not valid for this method, such as
+        // truncation or creation flags.
+
+        // open() always returns a brand new file handle, regardless if that file was
+        // already open somewhere else.
+        let handle: FileHandle = FileHandle {
+            path,
+            flags: converted_flag,
+        };
+
+        // We do not allocate the file handle until we are sure we will use it.
+
+        // Make sure the name of the file is not too long.
+        if let Some(name) = handle.name() {
+            if name.len() > 255 {
+                warn!("File name is too long.");
+                // File name was too long.
+                Err(FILE_NAME_TOO_LONG)
+            }
+        }
+
+        // Load in info about where the file should be.
+        // This will bail if a low level floppy issue happens.
+        debug!("Attempting to load in the parent directory...");
+        let containing_dir_block: DirectoryBlock = match DirectoryBlock::try_find_directory(handle.path.parent())? {
+            Some(ok) => ok,
+            None => {
+                // Cannot load files from directories that do not exist.
+                warn!("Directory that the item was supposed to be contained within does not exist.");
+                Err(NO_SUCH_ITEM)
+            },
+        };
+        debug!("Directory loaded.");
+        
+        // At this point. We need to know if we are looking for a directory or a file.
+        debug!("Deducing request item type...");
+        let extracted_name = handle.name();
+        let item_to_find: NamedItem = if handle.is_file() {
+            // File
+            debug!("Looking for a file...");
+            // Cool beans.
+            // Files must have names, otherwise the path provided was malformed.
+            if let Some(name) = extracted_name {
+                debug!("Named `{name}`.");
+                NamedItem::File(name.to_string())
+            } else {
+                // Cannot load nameless files.
+                warn!("Tried to read a file with no name.");
+                Err(INVALID_ARGUMENT)
+            }
+        } else {
+            // Directory
+            debug!("Looking for a directory...");
+            if let Some(name) = extracted_name {
+                debug!("Named `{name}`.");
+                NamedItem::Directory(name.to_string())
+            } else {
+                // Directory did not have a name, this must be root, no?
+                debug!("Directory has no name. We'll assume it's the root.");
+                NamedItem::Directory("".to_string())
+            }
+        };
+
+        // Hold onto the item until we need it
+        let found_item: DirectoryItem;
+
+        // Now load in the directory item.
+        debug!("Attempting to find the item...");
+        if let Some(exists) = containing_dir_block.find_item(item_to_find)? {
+            debug!("Item exists.");
+            found_item = exists;
+        } else {
+            // No item
+            debug!("Item does not exist.");
+            Err(NO_SUCH_ITEM);
+        }
+
+        // We have now loaded in the directory item, or bailed out if needed.
+
+        // Assert that this is a directory if required.
+        // In theory we could check this earlier, but it's good to ensure that the underlying
+        // item agrees.
+        if converted_flag.contains(ItemFlag::ASSERT_DIRECTORY) {
+            debug!("Caller wants to ensure they are opening a directory.");
+            if !found_item.flags.contains(DirectoryFlags::IsDirectory) {
+                debug!("This is not a directory.");
+                return Err(NOT_A_DIRECTORY)
+            }
+            debug!("This is a directory.");
+        }
+
+        // We are done creating/loading the file, its time to get a handle.
+        let new_handle: u64 = handle.allocate();
+
+        // Done!
+        Ok((new_handle, converted_flag))
     }
 
     // Read file data from a file handle.
@@ -488,12 +520,63 @@ impl FilesystemMT for FlusterFS {
     // Creates and opens a new file, returns a file handle.
     fn create(
         &self,
-        _req: fuse_mt::RequestInfo,
-        _parent: &std::path::Path,
-        _name: &std::ffi::OsStr,
+        req: fuse_mt::RequestInfo,
+        parent: &std::path::Path,
+        name: &std::ffi::OsStr,
         _mode: u32,
-        _flags: u32,
+        flags: u32,
     ) -> fuse_mt::ResultCreate {
-        Err(UNIMPLEMENTED)
+        debug!("Creating new file named `{}` in `{}`...", name.display(), parent.display());
+
+        // Extract the flags
+        // Will bail if needed.
+        let mut deduced_flags: ItemFlag = ItemFlag::deduce_flag(flags)?;
+
+        // Is the name too long?
+        if name.len() > 255 {
+            debug!("File name is too long. Bailing.");
+            Err(FILE_NAME_TOO_LONG)
+        }
+
+        // Try and load in the parent directory
+        // This will bail if a low level floppy issue happens.
+        debug!("Attempting to load in the parent directory...");
+        let containing_dir_block: DirectoryBlock = match DirectoryBlock::try_find_directory(Some(parent))? {
+            Some(ok) => ok,
+            None => {
+                // Nope, no parent.
+                warn!("Cannot create files in directories that do not exist.");
+                Err(NO_SUCH_ITEM)
+            },
+        };
+        debug!("Directory loaded.");
+        
+        // Make sure the file does not already exist.
+        debug!("Checking if file already exists...");
+        let converted_name: String = name.to_str().expect("Should be valid UTF8.").to_string();
+        // Will bail if needed.
+        if let Some(exists) = containing_dir_block.find_item(&NamedItem::File(converted_name))? {
+            debug!("File already exists.");
+            // But do we care?
+            if deduced_flags.contains(ItemFlag::CREATE_EXCLUSIVE) {
+                // Yes we do, this is a failure.
+                debug!("Caller wanted to create this file, not open it. Bailing.");
+                Err(FILE_ALREADY_EXISTS)
+            }
+
+            // Since the file already exists we can skip the creation process.
+            // just load it in as usual.
+
+            // Full item path
+            let constructed_path: Path = parent.join(name);
+
+            // Dont care about the returned flags, they wont change anyways.
+            let (file_handle, _): (u64, u32) = self.open(req, constructed_path, flags)?;
+
+            // Now fill in file attributes based on the handle.
+            todo!()
+        }
+
+        // File did not exist, actually creating it...
     }
 }

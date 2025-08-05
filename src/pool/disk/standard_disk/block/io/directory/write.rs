@@ -47,13 +47,11 @@ impl DirectoryBlock {
     /// The name of the new directory must be less than 256 characters long.
     /// Attempting to recreate an already existing directory will panic.
     ///
-    /// May swap disks, will optionally return to a provided disk.
-    ///
-    /// Returns nothing.
+    /// Returns the created directory as a DirectoryItem.
     pub fn make_directory(
         self,
         name: String,
-    ) -> Result<(), FloppyDriveError> {
+    ) -> Result<DirectoryItem, FloppyDriveError> {
         go_make_directory(self, name)
     }
 
@@ -158,7 +156,7 @@ fn go_make_directory(
 
     // All done!
     debug!("Done creating directory.");
-    Ok(())
+    Ok(final_directory_item)
 }
 
 /// Allocates space for and writes a new directory block.

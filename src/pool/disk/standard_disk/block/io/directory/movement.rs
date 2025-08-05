@@ -2,7 +2,7 @@
 
 use std::path::{Component, Path};
 
-use log::info;
+use log::{debug, info};
 
 use crate::pool::{disk::{
     drive_struct::{FloppyDriveError, JustDiskType},
@@ -84,11 +84,24 @@ impl DirectoryBlock {
     /// Attempts to open any directory in the pool.
     /// 
     /// Will automatically grab the root directory.
-    pub(crate) fn try_find_directory(path: &Path) -> Result<Option<DirectoryBlock>, FloppyDriveError> {
+    pub(crate) fn try_find_directory(maybe_path: Option<&Path>) -> Result<Option<DirectoryBlock>, FloppyDriveError> {
+        debug!("Attempting to find and open a directory...");
         // Pretty simple loop, bail if the directory does not exist at any level.
         let mut current_directory: DirectoryBlock;
         // Load in the root directory
         current_directory = Pool::root_directory()?;
+
+        // If no path was supplied, this is the root directory.
+        let path = match maybe_path {
+            Some(ok) => ok,
+            None => {
+                // This must be root.
+                debug!("No path was provided to find, it is assumed the caller wants the root directory.");
+                return Ok(Some(current_directory))
+            },
+        };
+
+        debug!("Looking for `{}`...", path.display());
 
         // Easy way out, if the incoming path is empty, that means its the root directory itself.
         if path.iter().count() == 0 {

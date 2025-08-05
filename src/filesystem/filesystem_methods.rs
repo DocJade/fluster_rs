@@ -36,24 +36,6 @@ use std::time::SystemTime;
 
 // Error reference: https://docs.particle.io/reference/device-os/api/debugging/posix-errors/
 
-static NO_SUCH_ITEM: LazyLock<PosixError> =
-    LazyLock::new(|| PosixError::new(2, "Yo, the containing directory does not exist."));
-static FILE_NAME_TOO_LONG: LazyLock<PosixError> =
-    LazyLock::new(|| PosixError::new(91, "Yo, names have to be at most 255 characters long."));
-static FILE_ALREADY_EXISTS: LazyLock<PosixError> =
-    LazyLock::new(|| PosixError::new(17, "Yo, that file already exists."));
-static FILE_TOO_BIG: LazyLock<PosixError> =
-    LazyLock::new(|| PosixError::new(27, "Yo, we cant handle such a large file."));
-static NOT_SUPPORTED: LazyLock<PosixError> = LazyLock::new(|| {
-    PosixError::new(
-        134,
-        "Yo, whatever you're trying to do here, we dont do that.",
-    )
-});
-static ILLEGAL_SEEK: LazyLock<PosixError> =
-    LazyLock::new(|| PosixError::new(29, "Yo, you cant seek that way bro."));
-static NOT_A_DIRECTORY: LazyLock<PosixError> =
-    LazyLock::new(|| PosixError::new(20, "Yo, this has to be called on a directory."));
 
 //
 //
@@ -152,30 +134,6 @@ fn open_response_flags() -> FUSEOpenResponseFlags {
 /// This file handle is never used anywhere. At all.
 fn love_handle() -> OwnedFileHandle {
     unsafe { OwnedFileHandle::from_raw(0) }
-}
-
-// Also annoyingly, rust's PathBuf type doesn't have a way to test if itself is a directory
-// without reading from disk, which makes it completely useless for deducing wether the passed argument
-// is a file or folder. Very very annoying. So how am I supposed to tell if the incoming read is for a file
-// or a directory?
-//
-// You can't just check for file extensions, since files do not need an extension...
-//
-// The approach i'll take is to see if the path ends with a delimiter.
-fn is_this_a_file(path: &Path) -> bool {
-    // The delimiter is platform specific too.
-
-    // If the path is empty, its the root node, which is a directory
-    if path.iter().count() == 0 {
-        // This is the root
-        return false;
-    }
-
-    static DELIMITER: char = std::path::MAIN_SEPARATOR;
-    path.as_os_str()
-        .to_str()
-        .expect("Should be valid utf8")
-        .ends_with(DELIMITER)
 }
 
 // One more thing to note is, since we are using PathBuf instead of inode:
