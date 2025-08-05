@@ -290,7 +290,7 @@ impl FilesystemMT for FlusterFS {
 
         // the new directory
         let new_dir: DirectoryItem;
-        let the_name: String = name.to_str().expect("Should be valid utf8").to_string()
+        let the_name: String = name.to_str().expect("Should be valid utf8").to_string();
 
         // Open parent
         if let Some(parent) = DirectoryBlock::try_find_directory(Some(parent))? {
@@ -332,10 +332,46 @@ impl FilesystemMT for FlusterFS {
     fn unlink(
         &self,
         _req: fuse_mt::RequestInfo,
-        _parent: &std::path::Path,
-        _name: &std::ffi::OsStr,
+        parent: &std::path::Path,
+        name: &std::ffi::OsStr,
     ) -> fuse_mt::ResultEmpty {
-        Err(UNIMPLEMENTED)
+        debug!("Deleting file `{}` from directory `{}`...", name.display(), parent.display());
+
+
+        let the_name: String = name.to_str().expect("Should be valid utf8").to_string();
+
+        // Ensure this is not a directory
+        let temp_handle: FileHandle = FileHandle {
+            path: parent.join(name).into(),
+            flags: ItemFlag::empty(),
+        };
+
+        if !temp_handle.is_file() {
+            // Cannot unlink directories.
+            debug!("A directory was provided, not a file.");
+            return Err(NOT_A_DIRECTORY);
+        }
+
+
+        // Open directory
+        debug!("Looking for file...");
+        if let Some(mut parent_dir) = DirectoryBlock::try_find_directory(Some(parent))? {
+            // dir exists, does the file?
+            if let Some(the_file) = parent_dir.find_item(&NamedItem::File(the_name))? {
+                // File exists, delete it.
+                parent_dir.delete_file(the_file.into())?;
+                // All done.
+                return Ok(());
+            } else {
+                // No such file.
+                debug!("File does not exist.");
+                return Err(NO_SUCH_ITEM);
+            }
+        } else {
+            // bad folder
+            debug!("Parent folder does not exist.");
+            return Err(NO_SUCH_ITEM);
+        }
     }
 
     // Deletes a directory.
