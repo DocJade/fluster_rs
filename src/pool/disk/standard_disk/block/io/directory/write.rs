@@ -80,7 +80,7 @@ impl DirectoryBlock {
 fn go_make_directory(
     directory: DirectoryBlock,
     name: String,
-) -> Result<(), FloppyDriveError> {
+) -> Result<DirectoryItem, FloppyDriveError> {
     debug!("Attempting to create a new directory with name `{name}`...");
     // Check to make sure this block does not already contain the directory we are trying to add.
     // We dont care if listing the directory puts us somewhere else, because we're immediately going to

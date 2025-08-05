@@ -134,12 +134,12 @@ impl FilesystemMT for FlusterFS {
         let found_attributes: FileAttr = found_item.try_into()?;
         debug!("Done! Returning.");
 
-        return Ok(
+        Ok(
             (
                 a_year,
                 found_attributes
             )
-        );
+        )
     }
 
     // We dont support file permissions.
@@ -359,18 +359,24 @@ impl FilesystemMT for FlusterFS {
             // dir exists, does the file?
             if let Some(the_file) = parent_dir.find_item(&NamedItem::File(the_name))? {
                 // File exists, delete it.
-                parent_dir.delete_file(the_file.into())?;
-                // All done.
-                return Ok(());
+                if parent_dir.delete_file(the_file.into())?.is_some() {
+                    // All done.
+                    Ok(())
+                } else {
+                    // Weird, we checked that the directory was there, but when we went to delete it, it wasnt???
+                    warn!("We found the directory to delete, but when we tried to delete it, it was missing.");
+                    // this should not happen lmao, but whatever.
+                    Err(NO_SUCH_ITEM)
+                }
             } else {
                 // No such file.
                 debug!("File does not exist.");
-                return Err(NO_SUCH_ITEM);
+                Err(NO_SUCH_ITEM)
             }
         } else {
             // bad folder
             debug!("Parent folder does not exist.");
-            return Err(NO_SUCH_ITEM);
+            Err(NO_SUCH_ITEM)
         }
     }
 
@@ -379,10 +385,52 @@ impl FilesystemMT for FlusterFS {
     fn rmdir(
         &self,
         _req: fuse_mt::RequestInfo,
-        _parent: &std::path::Path,
-        _name: &std::ffi::OsStr,
+        parent: &std::path::Path,
+        name: &std::ffi::OsStr,
     ) -> fuse_mt::ResultEmpty {
-        Err(UNIMPLEMENTED)
+        debug!("Attempting to remove directory `{}` from `{}`...", name.display(), parent.display());
+
+        let string_name: String = name.to_str().expect("Should be valid utf8").to_string();
+
+        // Open the parent directory
+        if let Some(parent_dir) = DirectoryBlock::try_find_directory(Some(parent))? {
+            // Parent exists, get the child
+            if let Some(child_dir) = parent_dir.find_item(&NamedItem::Directory(string_name))? {
+                // Directory exists.
+
+                // Make sure this is actually a directory
+                if child_dir.flags.contains(DirectoryFlags::IsDirectory) {
+                    // Not a dir
+                    debug!("Provided item is not a directory.");
+                    return Err(NOT_A_DIRECTORY);
+                }
+
+                // Get the block
+                let block_to_delete = child_dir.get_directory_block()?;
+
+                // Make sure it's empty
+                if !block_to_delete.is_empty()? {
+                    // Nope.
+                    debug!("Directory is not empty, cannot delete.");
+                    return Err(DIRECTORY_NOT_EMPTY);
+                }
+
+                // Run the deletion.
+                debug!("Deleting directory...");
+                block_to_delete.delete_directory()?;
+                debug!("Done.");
+                Ok(())
+                
+            } else {
+                // child directory did not exist.
+                debug!("The directory we wanted to delete does not exist.");
+                Err(NO_SUCH_ITEM)
+            }
+        } else {
+            // parent dir went to get milk
+            debug!("Parent directory does not exist.");
+            Err(NO_SUCH_ITEM)
+        }
     }
 
     // We do not support symlinks.
@@ -784,7 +832,7 @@ impl FilesystemMT for FlusterFS {
         // Construct and return the handle to the new file
         let new_handle: FileHandle = FileHandle {
             path: constructed_path.into(),
-            flags: deduced_flags.into(),
+            flags: deduced_flags,
         };
 
         // We can get attributes directly from the directory item we just made

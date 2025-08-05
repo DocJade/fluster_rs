@@ -31,12 +31,14 @@ impl DirectoryBlock {
     pub fn from_block(block: &RawBlock) -> Self {
         directory_block_from_bytes(block)
     }
+
     /// Try to add an DirectoryItem to this block.
     ///
     /// Returns nothing.
     pub fn try_add_item(&mut self, item: &DirectoryItem) -> Result<(), DirectoryBlockError> {
         directory_block_try_add_item(self, item)
     }
+
     /// Try to remove a item from a directory.
     /// The item on the directory must match the item provided exactly.
     ///
@@ -47,6 +49,7 @@ impl DirectoryBlock {
     ) -> Result<(), DirectoryBlockError> {
         directory_block_try_remove_item(self, item)
     }
+
     /// Create a new directory block.
     /// 
     /// Requires the location/destination of this block.
@@ -57,11 +60,17 @@ impl DirectoryBlock {
     pub fn new(origin: DiskPointer) -> Self {
         new_directory_block(origin)
     }
+
     /// Get the items located within this block.
     /// This function is just to obscure the items by default, so higher up callers
     /// use higher abstractions
     pub fn get_items(&self) -> Vec<DirectoryItem> {
         self.directory_items.clone()
+    }
+
+    /// Check if this block is empty
+    pub fn is_empty(&self) -> Result<bool, FloppyDriveError> {
+        Ok(self.list()?.len() == 0)
     }
 }
 
@@ -358,5 +367,22 @@ impl DirectoryItem {
         // get the inode
         let inode = self.get_inode()?;
         Ok(inode.modified)
+    }
+
+    /// Turn a directory type DirectoryItem into a DirectoryBlock.
+    /// 
+    /// Panics if fed a file.
+    pub(crate) fn get_directory_block(self) -> Result<DirectoryBlock, FloppyDriveError> {
+        // Grab the inode to work with
+        let inode: Inode = self.get_inode()?;
+
+        if let Some(dir) = inode.extract_directory() {
+            // Get the directory block
+            let raw_block: RawBlock = CachedBlockIO::read_block(dir.pointer, JustDiskType::Standard)?;
+            return Ok(DirectoryBlock::from_block(&raw_block))
+        } else {
+            // This was not a file.
+            panic!("Attempted to turn a DirectoryItem of File type into a DirectoryBlock!")
+        }
     }
 }

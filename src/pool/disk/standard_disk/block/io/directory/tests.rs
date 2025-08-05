@@ -28,7 +28,7 @@ fn add_directory() {
     let _fs = get_filesystem();
     // Now try adding a directory to the pool
     let block = Pool::root_directory().unwrap();
-    block.make_directory("test".to_string(),).unwrap();
+    let _ = block.make_directory("test".to_string(),).unwrap();
     // We dont even check if its there, we just want to know if writing it failed.
 }
 
@@ -38,7 +38,7 @@ fn add_directory_and_list() {
     let _fs = get_filesystem();
     // Now try adding a directory to the pool
     let block = Pool::root_directory().unwrap();
-    block.make_directory("test".to_string(),).unwrap();
+    let _ = block.make_directory("test".to_string(),).unwrap();
 
     // try to find it again
     let new_block = Pool::root_directory().unwrap();
@@ -90,7 +90,7 @@ fn nested_directory_hell() {
         }
         // Now that we've picked a directory, lets make a new one in here.
         // To make sure we dont end up with duplicate directory names, we just use a counter.
-        where_are_we
+        let _ = where_are_we
             .make_directory(name_number.to_string())
             .unwrap();
         name_number += 1;
@@ -106,7 +106,7 @@ fn directories_switch_disks() -> Result<(), ()> {
     for i in 0..3000 {
         // There's only 2880 blocks on the first disk, assuming no overhead.
         let root_dir = Pool::root_directory().unwrap();
-        root_dir.make_directory(i.to_string()).unwrap();
+        let _ = root_dir.make_directory(i.to_string()).unwrap();
     }
     // Now make sure we actually have directories that claim to live on another disk
     let root_dir_done = Pool::root_directory().unwrap();
