@@ -22,6 +22,7 @@ pub const DIRECTORY_NOT_EMPTY: c_int = libc::ENOTEMPTY;
 pub const FILE_ALREADY_EXISTS: c_int = libc::EEXIST;
 pub const NOT_A_DIRECTORY: c_int = libc::ENOTDIR;
 pub const INVALID_ARGUMENT: c_int = libc::EINVAL;
+pub const IS_A_DIRECTORY: c_int = libc::EISDIR;
 pub const UNIMPLEMENTED: c_int = libc::ENOSYS; // Function not implemented
 pub const UNSUPPORTED: c_int = libc::ENOTSUP; // This operation is not supported in this filesystem.
 pub const NO_SUCH_ITEM: c_int = libc::ENOENT; // Access denied / files does not exist

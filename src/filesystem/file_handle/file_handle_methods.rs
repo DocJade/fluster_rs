@@ -66,7 +66,7 @@ lazy_static! {
 // The actual handles
 //
 
-use crate::{filesystem::file_handle::file_handle_struct::FileHandle, pool::disk::{drive_struct::FloppyDriveError, standard_disk::block::directory::directory_struct::DirectoryItem}};
+use crate::{filesystem::file_handle::file_handle_struct::FileHandle, pool::disk::{drive_struct::FloppyDriveError, standard_disk::block::{directory::directory_struct::DirectoryItem, io::directory::types::NamedItem}}};
 
 impl FileHandle {
     /// The name of the file/folder, if it exists.
@@ -138,5 +138,20 @@ impl FileHandle {
     /// Loads in and returns the directory item. Assuming it exists.
     pub fn get_directory_item(&self) -> Result<DirectoryItem, FloppyDriveError> {
         todo!()
+    }
+
+    /// Get a named item from this handle.
+    pub fn get_named_item(&self) -> NamedItem {
+        // Get a name
+        let name: String = self.name().to_string();
+
+        // Deduce the type
+        if self.is_file() {
+            // yeah its a file
+            NamedItem::File(name)
+        } else {
+            // dir
+            NamedItem::Directory(name)
+        }
     }
 }

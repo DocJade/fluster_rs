@@ -98,7 +98,7 @@ impl DirectoryBlock {
         };
 
         // Delete it.
-        truncate_or_delete_file(&extracted_item, true)?;
+        truncate_or_delete_file(&extracted_item, true, None)?;
 
         // Since the extraction function already handles pulling out the item from the directory blocks, we are done.
         Ok(Some(()))
@@ -176,10 +176,10 @@ impl DirectoryItem {
     /// Does not delete the origin FileExtent block.
     /// 
     /// Panics if fed a directory.
-    pub fn truncate(&self) -> Result<(), FloppyDriveError> {
+    pub fn truncate(&self, new_size: u64) -> Result<(), FloppyDriveError> {
         // Make sure this is a file
         assert!(!self.flags.contains(DirectoryFlags::IsDirectory));
-        truncate_or_delete_file(self, false)
+        truncate_or_delete_file(self, false, Some(new_size))
     }
 }
 
@@ -601,7 +601,11 @@ fn go_make_new_file(directory_block: DirectoryBlock, name: String) -> Result<Dir
 }
 
 // Will only truncate if delete is false.
-fn truncate_or_delete_file(item: &DirectoryItem, delete: bool) -> Result<(), FloppyDriveError> {
+fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<u64>) -> Result<(), FloppyDriveError> {
+
+    // todo, variable size truncation.
+    todo!("truncation");
+
     // Is this a file?
         if item.flags.contains(DirectoryFlags::IsDirectory) {
             // Uh, no it isn't why did you give me a dir?

@@ -106,17 +106,8 @@ impl FilesystemMT for FlusterFS {
             flags: ItemFlag::empty(),
         };
 
-        // Get the name of the item
-        let item_name_string: String = temp_handle.name().to_string();
-
-        // Deduce the type
-        let item_to_find: NamedItem = if temp_handle.is_file() {
-            // yeah its a file
-            NamedItem::File(item_name_string)
-        } else {
-            // dir
-            NamedItem::Directory(item_name_string)
-        };
+        // Get the item type
+        let item_to_find: NamedItem = temp_handle.get_named_item();
 
         let found_item: DirectoryItem;
 
@@ -180,11 +171,61 @@ impl FilesystemMT for FlusterFS {
     fn truncate(
         &self,
         _req: fuse_mt::RequestInfo,
-        _path: &std::path::Path,
-        _fh: Option<u64>,
-        _size: u64,
+        path: &std::path::Path,
+        fh: Option<u64>,
+        size: u64,
     ) -> fuse_mt::ResultEmpty {
-        Err(UNIMPLEMENTED)
+        debug!("Truncating `{}` to be `{}` bytes long...", path.display(), size);
+        // Get a file handle
+        let handle: FileHandle = if let Some(exists) = fh {
+            debug!("File handle was passed in, using that...");
+            // Got a handle from the call, no fancy work.
+            // Read it in
+            FileHandle::read(exists)
+        } else {
+            debug!("No handle provided, spoofing...");
+            // Temp handle that we will not allocate.
+            FileHandle {
+                path: path.into(),
+                flags: ItemFlag::empty(),
+            }
+        };
+
+        debug!("Handle obtained.");
+
+        // You cannot truncate directories.
+        if !handle.is_file() {
+            warn!("Attempted to truncate a directory. Ignoring.");
+            return Err(IS_A_DIRECTORY)
+        }
+
+        // Go load the file to truncate
+        let item_to_find: NamedItem = handle.get_named_item();
+        let found_item: DirectoryItem;
+
+        debug!("Searching for item...");
+        if let Some(parent) = DirectoryBlock::try_find_directory(path.parent())? {
+            // Item
+            if let Some(item) = parent.find_item(&item_to_find)? {
+                debug!("Item found.");
+                found_item = item;
+            } else {
+                // item did not exist.
+                debug!("Item was not present in parent.");
+                return Err(NO_SUCH_ITEM)
+            }
+        } else {
+            // Parent does not exist. We cannot get attributes.
+            debug!("Parent directory did not exist for this item.");
+            return Err(NO_SUCH_ITEM)
+        }
+
+        // Now with the directory item, we can run the truncation.
+        debug!("Starting truncation...");
+        found_item.truncate(size)?;
+        debug!("Truncation finished.");
+        // All done.
+        Ok(())
     }
 
     // We do not support manually updating timestamps.
