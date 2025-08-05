@@ -617,18 +617,18 @@ impl FilesystemMT for FlusterFS {
         Ok(())
     }
 
-    // Releasing a file handle. Not sure if we need to do anything special with the passed in handle yet. We'll see.
-    // Releasing things should have no effect, since we handle all of our own caching stuff, and don't support locks.
+    // Releasing a file handle.
     fn release(
         &self,
         _req: fuse_mt::RequestInfo,
         _path: &std::path::Path,
-        _fh: u64,
+        fh: u64,
         _flags: u32,
         _lock_owner: u64,
         _flush: bool,
     ) -> fuse_mt::ResultEmpty {
-        Err(UNIMPLEMENTED)
+        FileHandle::drop_handle(fh);
+        Ok(())
     }
 
     // See flush()
