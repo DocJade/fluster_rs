@@ -89,7 +89,7 @@ impl DirectoryBlock {
         // Pretty simple loop, bail if the directory does not exist at any level.
         let mut current_directory: DirectoryBlock;
         // Load in the root directory
-        current_directory = Pool::root_directory()?;
+        current_directory = Pool::get_root_directory()?;
 
         // If no path was supplied, this is the root directory.
         let path = match maybe_path {

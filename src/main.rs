@@ -25,7 +25,7 @@ struct Cli {
 
 fn main() {
     // Start the logger
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
     // Get the block device that the user specifies is their floppy drive
     let cli = Cli::parse();
@@ -71,7 +71,13 @@ fn main() {
 
     // Now for the fuse mount options
     let fuse_options = [
-        OsStr::new("-o"), // Option flag
+        OsStr::new("nodev"), // Disable dev devices
+        OsStr::new("noatime"), // No access times
+        OsStr::new("nosuid"), // Ignore file/folder permissions (lol)
+        OsStr::new("rw"), // Read/Write
+        OsStr::new("exec"), // Files are executable
+        OsStr::new("sync"), // No async.
+        OsStr::new("dirsync"), // No async
         OsStr::new("fsname=fluster"), // Set the name of the fuse mount
     ];
 

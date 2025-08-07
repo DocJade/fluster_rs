@@ -12,16 +12,20 @@ fn mount_filesystem() {
     let mount_path = mount_point.path().to_path_buf();
 
     // fs needs to be mounted in another thread bc it blocks
-    let mount_thread = thread::spawn(move || {
+    let mount_thread_result = thread::spawn(move || {
         // This blocks this thread until the unmount happens.
-        fuse_mt::mount(fs, &mount_path, &test_mount_options()).expect("Unmount should not fail.");
+        fuse_mt::mount(fs, &mount_path, &test_mount_options())
     });
 
     // wait for it to start...
-    thread::sleep(Duration::from_millis(100));
+    thread::sleep(Duration::from_millis(1000));
 
     // Immediately unmount.
-    // cleanup
+    // The mounted fs makes/lives in a folder named `fluster_test`, but we just unmount everything
+    // in the folder that containers `fluster_test`
     test_common::unmount(mount_point.path().to_path_buf());
-    let _ = mount_thread.join();
+    
+    // Make sure the mount actually happened.
+    // Two unwraps, one for the join, one for the result of fuse_mf::mount
+    mount_thread_result.join().unwrap().unwrap();
 }

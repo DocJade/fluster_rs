@@ -2,12 +2,12 @@
 
 use log::{debug, trace};
 
-use crate::pool::disk::{
-    drive_struct::{FloppyDriveError, JustDiskType}, generic::io::cache::cache_io::CachedBlockIO, standard_disk::block::{
+use crate::pool::{disk::{
+    drive_struct::{FloppyDriveError, JustDiskType}, generic::{generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO}, standard_disk::block::{
         directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem},
         io::directory::types::NamedItem,
     }
-};
+}, pool_actions::pool_struct::Pool};
 
 impl DirectoryBlock {
     /// Check if this directory contains an item with the provided name and type.
@@ -27,6 +27,18 @@ impl DirectoryBlock {
             "Checking if a directory contains the {} `{}`...",
             extracted_debug.0, extracted_debug.1
         );
+
+        // Special case if we are trying to find the root directory.
+        if self.is_root() {
+            // This is the root directory, are we trying to find a nameless directory?
+            if *item_to_find == NamedItem::Directory("".to_string()) {
+                // This was a lookup on the root directory.
+                debug!("Caller was looking for the root directory item, skipping lookup...");
+                return Ok(Some(Pool::get_root_directory_item()));
+            }
+        }
+
+
         // Get items
         let items: Vec<DirectoryItem> = self.list()?;
 
@@ -76,6 +88,19 @@ impl DirectoryBlock {
 
         // All done
         Ok(total_size)
+    }
+
+    /// Check if this DirectoryBlock is the head of the root directory.
+    /// 
+    /// This will return false on any other block than the head block.
+    fn is_root(&self) -> bool {
+        // Lives in a static place.
+        static ROOT_BLOCK_LOCATION: DiskPointer = DiskPointer {
+            disk: 1,
+            block: 2,
+        };
+
+        self.block_origin == ROOT_BLOCK_LOCATION
     }
 
     /// Extracts an item from a directory block, blanking out the space it used to occupy.

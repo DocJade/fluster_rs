@@ -15,6 +15,8 @@ use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 use crate::pool::disk::generic::io::cache::cache_io::CachedBlockIO;
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolDiskHeader;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryBlock;
+use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryFlags;
+use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryItem;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
 use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
 use log::debug;
@@ -47,12 +49,16 @@ impl Pool {
     /// Get the root inode block
     ///
     /// May swap disks, but you should be working with enough abstractions to not care.
-    pub fn root_directory() -> Result<DirectoryBlock, FloppyDriveError> {
+    pub fn get_root_directory() -> Result<DirectoryBlock, FloppyDriveError> {
         pool_get_root_directory()
     }
     /// Get the location of the inode that holds information about the root directory
-    pub fn root_inode_location() -> InodeLocation {
+    pub fn get_root_inode_location() -> InodeLocation {
         pool_get_root_inode_location()
+    }
+    /// Get a DirectoryItem that has details about the root directory.
+    pub fn get_root_directory_item() -> DirectoryItem {
+        pool_get_root_directory_item()
     }
 }
 
@@ -221,5 +227,16 @@ fn pool_get_root_inode_location() -> InodeLocation {
         disk: Some(1),
         block: 1,
         offset: 0,
+    }
+}
+
+/// Constructs a directory item with info about the root.
+fn pool_get_root_directory_item() -> DirectoryItem {
+    // 
+    DirectoryItem {
+        flags: DirectoryFlags::IsDirectory,
+        name_length: 0,
+        name: "".into(),
+        location: pool_get_root_inode_location(),
     }
 }

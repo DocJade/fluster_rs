@@ -19,16 +19,18 @@ fn create_directory() {
         thread::sleep(Duration::from_millis(100)); // Pause to let the debugger see the thread
         // If we dont pause, breakpoints dont work.
         // This blocks until the unmount happens.
-        fuse_mt::mount(fs, &thread_mount_path, &mount_options).expect("Unmount should not fail.");
+        fuse_mt::mount(fs, &thread_mount_path, &mount_options)
     });
 
-    let mount_path = mount_point.path().to_path_buf();
+    let mut mounted_fs_path = mount_point.path().to_path_buf();
+    // Filesystem will mount itself in a folder named `fluster_test`
+    mounted_fs_path.push("fluster_test");
     
     // wait for it to start...
     thread::sleep(Duration::from_millis(500));
 
     // make a new dir
-    let mut new_dir = mount_path.clone();
+    let mut new_dir = mounted_fs_path.clone();
     new_dir.push("testdir");
 
     info!("Attempting to create a new directory...");
@@ -37,7 +39,7 @@ fn create_directory() {
     
     // See if it's there
     info!("Checking if directory exists...");
-    let find_result = std::fs::read_dir(mount_path);
+    let find_result = std::fs::read_dir(mounted_fs_path);
     let mut file_found: bool = false;
     if let Ok(items) = find_result {
         for i in items {
@@ -59,7 +61,8 @@ fn create_directory() {
 
     // cleanup
     test_common::unmount(mount_point.path().to_path_buf());
-    let _ = mount_thread.join();
+    let unmount_result = mount_thread.join();
+    unmount_result.unwrap().unwrap(); // Unmounting the fs should not fail.
 
     creation_result.unwrap(); // Do the unwrap after unmounting, so we unmount even if it failed.
     // Was the folder there?

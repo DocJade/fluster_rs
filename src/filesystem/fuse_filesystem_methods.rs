@@ -18,7 +18,7 @@ use crate::{
         filesystem_struct::FlusterFS,
         item_flag::flag_struct::ItemFlag
     },
-    pool::disk::{
+    pool::{disk::{
         generic::io::cache::cache_io::CachedBlockIO,
         standard_disk::block::{
             directory::directory_struct::{
@@ -28,7 +28,7 @@ use crate::{
             },
             io::directory::types::NamedItem
         }
-    }
+    }, pool_actions::pool_struct::Pool}
 };
 
 use super::file_handle::file_handle_struct::FileHandle;

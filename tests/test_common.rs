@@ -40,21 +40,25 @@ pub fn start_filesystem() -> FuseMT<FlusterFS> {
 
 pub fn unmount(mount_point: PathBuf) {
     info!("Unmounting filesystem....");
-    let _ = std::process::Command::new("fusermount")
+    let result = std::process::Command::new("fusermount")
         .arg("-u")
         .arg(mount_point)
-        .status();
+        .status().unwrap();
+    assert!(result.success());
 }
 
 pub fn test_mount_options() -> Vec<&'static OsStr> {
     [
-        OsStr::new("-o"), // Options flag
-        OsStr::new("nodev"), // Disable dev devices
-        OsStr::new("noatime"), // No access times
-        OsStr::new("nosuid"), // Ignore file/folder permissions (lol)
-        OsStr::new("rw"), // Read/Write
-        OsStr::new("exec"), // Files are executable
-        OsStr::new("sync"), // No async.
-        OsStr::new("dirsync"), // No async
+        // No spaces after `-o` or it does not work lol.
+        OsStr::new("-onodev"), // Disable dev devices
+        OsStr::new("-onoatime"), // No access times
+        OsStr::new("-onosuid"), // Ignore file/folder permissions (lol)
+        OsStr::new("-orw"), // Read/Write
+        OsStr::new("-oexec"), // Files are executable
+        OsStr::new("-osync"), // No async.
+        OsStr::new("-odirsync"), // No async
+        // Set the name of the mount point. This should create a
+        // directory in the temp folder with this same name.
+        OsStr::new("-ofsname=fluster_test"), 
     ].to_vec()
 }
