@@ -27,7 +27,7 @@ fn add_directory() {
     // Use the filesystem starter to get everything in the right spots
     let _fs = get_filesystem();
     // Now try adding a directory to the pool
-    let block = Pool::root_directory().unwrap();
+    let mut block = Pool::root_directory().unwrap();
     let _ = block.make_directory("test".to_string(),).unwrap();
     // We dont even check if its there, we just want to know if writing it failed.
 }
@@ -37,7 +37,7 @@ fn add_directory_and_list() {
     // Use the filesystem starter to get everything in the right spots
     let _fs = get_filesystem();
     // Now try adding a directory to the pool
-    let block = Pool::root_directory().unwrap();
+    let mut block = Pool::root_directory().unwrap();
     let _ = block.make_directory("test".to_string(),).unwrap();
 
     // try to find it again
@@ -105,7 +105,7 @@ fn directories_switch_disks() -> Result<(), ()> {
     let _fs = get_filesystem();
     for i in 0..3000 {
         // There's only 2880 blocks on the first disk, assuming no overhead.
-        let root_dir = Pool::root_directory().unwrap();
+        let mut root_dir = Pool::root_directory().unwrap();
         let _ = root_dir.make_directory(i.to_string()).unwrap();
     }
     // Now make sure we actually have directories that claim to live on another disk

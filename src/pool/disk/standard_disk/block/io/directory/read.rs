@@ -111,9 +111,12 @@ fn go_list_directory(
     // We need to iterate over the entire directory and get every single item.
     // We assume we are handed the first directory in the chain.
     let mut items_found: Vec<DirectoryItem> = Vec::new();
-    let mut current_dir_block: DirectoryBlock = block.clone();
+    let mut current_dir_block: &DirectoryBlock = block;
     // To keep track of what disk an inode is from
     let mut current_disk: u16 = block.block_origin.disk;
+
+    // Have to hold the next block out here or it will get dropped.
+    let mut next_dir_block: DirectoryBlock;
 
     // Big 'ol loop, we will break when we hit the end of the directory chain.
     loop {
@@ -149,7 +152,9 @@ fn go_list_directory(
         // Update what disk we're on
         current_disk = next_block.disk;
 
-        current_dir_block = DirectoryBlock::from_block(&CachedBlockIO::read_block(next_block, JustDiskType::Standard)?);
+        let next_block_reader = CachedBlockIO::read_block(next_block, JustDiskType::Standard)?;
+        next_dir_block = DirectoryBlock::from_block(&next_block_reader);
+        current_dir_block = &next_dir_block;
 
         // Onwards!
         continue;

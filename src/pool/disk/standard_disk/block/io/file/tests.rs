@@ -11,7 +11,7 @@ use crate::pool::{disk::{generic::io::cache::cache_io::CachedBlockIO, standard_d
 fn create_blank() {
     // Make a blank file
     let _fs = get_filesystem();
-    let root_block = Pool::root_directory().unwrap();
+    let mut root_block = Pool::root_directory().unwrap();
     let new_item = root_block.new_file("test123.txt".to_string()).unwrap();
 
     let new_file = new_item.get_inode().unwrap().extract_file().unwrap();
@@ -24,7 +24,7 @@ fn create_blank() {
 fn write_small_file() {
     // Make a blank file
     let fs = get_filesystem();
-    let root_block = Pool::root_directory().unwrap();
+    let mut root_block = Pool::root_directory().unwrap();
     let new_item = root_block.new_file("test123.txt".to_string()).unwrap();
 
     // Bytes to write
@@ -49,7 +49,7 @@ fn write_small_file() {
 fn write_big_file() {
     // Make a blank file
     let fs = get_filesystem();
-    let root_block = Pool::root_directory().unwrap();
+    let mut root_block = Pool::root_directory().unwrap();
     let new_file = root_block.new_file("test123.txt".to_string()).unwrap();
 
     // lol, how about 4 MB
@@ -79,7 +79,7 @@ fn make_lots_of_files() {
     let _fs = get_filesystem();
     let mut current_filename_number: usize = 0;
     for _ in 0..1000 {
-        let root_block = Pool::root_directory().unwrap();
+        let mut root_block = Pool::root_directory().unwrap();
         let new_name: String = format!("{current_filename_number}.txt");
         let _new_file = root_block.new_file(new_name).unwrap();
         // we wont write anything.
@@ -96,7 +96,7 @@ fn make_lots_of_filled_files() {
     let mut random: ThreadRng = rand::rng();
     let mut total_bytes_written: u64 = 0;
     for _ in 0..1000 {
-        let root_block = Pool::root_directory().unwrap();
+        let mut root_block = Pool::root_directory().unwrap();
         let new_name: String = format!("{current_filename_number}.txt");
         let new_file = root_block.new_file(new_name).unwrap();
         
@@ -125,7 +125,7 @@ fn make_lots_of_filled_files() {
 fn write_and_read_small() {
     // Make a blank file
     let _fs = get_filesystem();
-    let root_block = Pool::root_directory().unwrap();
+    let mut root_block = Pool::root_directory().unwrap();
     let new_file = root_block.new_file("test123.txt".to_string()).unwrap();
 
     // Bytes to write
@@ -163,7 +163,7 @@ fn write_and_read_small() {
 fn write_and_read_large() {
     // Make a blank file
     let _fs = get_filesystem();
-    let root_block = Pool::root_directory().unwrap();
+    let mut root_block = Pool::root_directory().unwrap();
     let new_file = root_block.new_file("test123.txt".to_string()).unwrap();
 
     // Bytes to write
@@ -211,7 +211,7 @@ fn read_and_write_random_files() {
     const TEST_LENGTH: usize = 1000;
     const MAX_FILE_SIZE: usize = 1024 * 1024; // Currently one meg
     for _ in 0..TEST_LENGTH {
-        let root_block = Pool::root_directory().unwrap();
+        let mut root_block = Pool::root_directory().unwrap();
         let new_name: String = format!("{current_filename_number}.txt");
         let new_file = root_block.new_file(new_name).unwrap();
         

@@ -187,12 +187,15 @@ fn go_add_item(
 
     // Persistent vars
     // We may load in other blocks, so these may change
-    let mut current_directory: DirectoryBlock = directory.clone();
-    let mut new_block_origin: DiskPointer = directory.block_origin;
     let original_location: DiskPointer = directory.block_origin;
+    let mut new_block_origin: DiskPointer;
+    let mut current_directory: &mut DirectoryBlock = directory;
     // If we swap disks, we need to update the item to not be on the local disk anymore.
     // We clone here so higher up we can keep directory items that are added to directories instead of consuming them on write.
-    let mut item_to_add: DirectoryItem = item.clone(); 
+    let mut item_to_add: DirectoryItem = item.clone();
+
+    // Need to hold this out here or the borrow will be dropped.
+    let mut next_directory: DirectoryBlock;
 
     // Now for the loop
     loop {
@@ -220,7 +223,8 @@ fn go_add_item(
 
         // Load the new directory
         let read_block: RawBlock = CachedBlockIO::read_block(new_block_origin, JustDiskType::Standard)?;
-        current_directory = DirectoryBlock::from_block(&read_block);
+        next_directory = DirectoryBlock::from_block(&read_block);
+        current_directory = &mut next_directory;
 
         // Time to try again!
         continue;
@@ -237,10 +241,12 @@ fn go_add_item(
 }
 
 /// Finds the next section of this directory, or extends it if there is none.
+/// 
+/// Needs a mutable reference, since the pointer may change.
 ///
 /// May swap disks, will return to original disk.
 fn go_find_next_or_extend_block(
-    directory: DirectoryBlock,
+    directory: &mut DirectoryBlock,
 ) -> Result<DiskPointer, FloppyDriveError> {
     let mut block_to_load: DiskPointer = directory.next_block;
 
@@ -255,7 +261,7 @@ fn go_find_next_or_extend_block(
     block_to_load = go_make_new_directory_block()?;
 
     // Now we must update the previous block to point to this new one.
-    let mut updated_directory = directory;
+    let updated_directory = directory;
     updated_directory.next_block = block_to_load;
 
     let raw_block: RawBlock = updated_directory.to_block();

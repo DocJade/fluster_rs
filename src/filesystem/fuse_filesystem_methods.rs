@@ -1282,7 +1282,7 @@ impl FilesystemMT for FlusterFS {
         // Try and load in the parent directory
         // This will bail if a low level floppy issue happens.
         debug!("Attempting to load in the parent directory...");
-        let containing_dir_block: DirectoryBlock = match DirectoryBlock::try_find_directory(Some(parent))? {
+        let mut containing_dir_block: DirectoryBlock = match DirectoryBlock::try_find_directory(Some(parent))? {
             Some(ok) => ok,
             None => {
                 // Nope, no parent.

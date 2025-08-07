@@ -68,10 +68,12 @@ impl DirectoryBlock {
     /// 
     /// Adds the file to the directory, flushes it to disk.
     /// 
+    /// Requires a mutable borrow, since this may update the block.
+    /// 
     /// Returns the created file's directory item. Will contain disk info.
     /// 
     /// Should include extension iirc?
-    pub fn new_file(self, name: String) -> Result<DirectoryItem, FloppyDriveError> {
+    pub fn new_file(&mut self, name: String) -> Result<DirectoryItem, FloppyDriveError> {
         go_make_new_file(self, name)
     }
 
@@ -517,7 +519,7 @@ fn pointers_into_extents(pointers: &[DiskPointer]) -> Vec<FileExtent> {
 }
 
 /// Create a new file.
-fn go_make_new_file(directory_block: DirectoryBlock, name: String) -> Result<DirectoryItem, FloppyDriveError> {
+fn go_make_new_file(directory_block: &mut DirectoryBlock, name: String) -> Result<DirectoryItem, FloppyDriveError> {
     // Directory blocks already have a method to add a new item to them, so we just need
     // to create that item to add.
 
@@ -612,93 +614,93 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
             panic!("Tried to read a directory as a file!")
         }
 
-        // Extract out the file
-        assert!(item.location.disk.is_some());
-        let location = &item.location;
+    // Extract out the file
+    assert!(item.location.disk.is_some());
+    let location = &item.location;
 
-        // Get the inode block
-        let the_pointer_in_question: DiskPointer = DiskPointer {
-            disk: location.disk.expect("Guarded"),
-            block: location.block,
-        };
+    // Get the inode block
+    let the_pointer_in_question: DiskPointer = DiskPointer {
+        disk: location.disk.expect("Guarded"),
+        block: location.block,
+    };
 
-        let read: RawBlock = CachedBlockIO::read_block(the_pointer_in_question, JustDiskType::Standard)?;
-        let mut inode_block: InodeBlock = InodeBlock::from_block(&read);
+    let read: RawBlock = CachedBlockIO::read_block(the_pointer_in_question, JustDiskType::Standard)?;
+    let mut inode_block: InodeBlock = InodeBlock::from_block(&read);
 
-        // Get the actual file
-        let mut inode_with_file: Inode = inode_block.try_read_inode(location.offset).expect("Caller guarantee.");
-        let mut file: InodeFile = inode_with_file.extract_file().expect("Caller guarantee.");
+    // Get the actual file
+    let mut inode_with_file: Inode = inode_block.try_read_inode(location.offset).expect("Caller guarantee.");
+    let mut file: InodeFile = inode_with_file.extract_file().expect("Caller guarantee.");
 
-        // Get all of the blocks that the file is stored in.
-        let mut used_blocks: Vec<DiskPointer> = file.to_pointers()?;
+    // Get all of the blocks that the file is stored in.
+    let mut used_blocks: Vec<DiskPointer> = file.to_pointers()?;
 
-        // Now we need to get all of the blocks that the extents take up
+    // Now we need to get all of the blocks that the extents take up
 
-        let first_extent: DiskPointer = file.pointer;
+    let first_extent: DiskPointer = file.pointer;
 
-        let mut current_extent_block: FileExtentBlock = FileExtentBlock::from_block(&CachedBlockIO::read_block(first_extent, JustDiskType::Standard)?);
+    let mut current_extent_block: FileExtentBlock = FileExtentBlock::from_block(&CachedBlockIO::read_block(first_extent, JustDiskType::Standard)?);
 
-        // Loop over the extents, adding the blocks until we hit the end
-        while !current_extent_block.next_block.no_destination() {
-            // Have a destination, add it to the pile.
-            used_blocks.push(current_extent_block.next_block);
-            // Next
-            current_extent_block = FileExtentBlock::from_block(&CachedBlockIO::read_block(first_extent, JustDiskType::Standard)?);
-        }
+    // Loop over the extents, adding the blocks until we hit the end
+    while !current_extent_block.next_block.no_destination() {
+        // Have a destination, add it to the pile.
+        used_blocks.push(current_extent_block.next_block);
+        // Next
+        current_extent_block = FileExtentBlock::from_block(&CachedBlockIO::read_block(first_extent, JustDiskType::Standard)?);
+    }
 
-        // Now we will free all of those blocks
+    // Now we will free all of those blocks
 
-        // But not the first extent if we are not deleting.
-        if !delete {
-            // Remove the first extent block from the list to delete
-            // This has to work, the loop HAD to've added it
-            let index_of_first = used_blocks.iter().position(|pointer| *pointer == first_extent).expect("Should have first pointer");
-            let _ = used_blocks.swap_remove(index_of_first);
-        }
+    // But not the first extent if we are not deleting.
+    if !delete {
+        // Remove the first extent block from the list to delete
+        // This has to work, the loop HAD to've added it
+        let index_of_first = used_blocks.iter().position(|pointer| *pointer == first_extent).expect("Should have first pointer");
+        let _ = used_blocks.swap_remove(index_of_first);
+    }
 
-        // Sort blocks by disk and block order
-        used_blocks.sort_unstable_by_key(|block| (block.disk, block.block));
+    // Sort blocks by disk and block order
+    used_blocks.sort_unstable_by_key(|block| (block.disk, block.block));
 
-        // Split into sections based on when the disk changes
-        // I feel like i already wrote this but i cant find it. lol
-        // But i know i didn't do it this way before! suck it past me!
+    // Split into sections based on when the disk changes
+    // I feel like i already wrote this but i cant find it. lol
+    // But i know i didn't do it this way before! suck it past me!
 
-        let chunked = used_blocks.chunk_by(|a, b| a == b);
+    let chunked = used_blocks.chunk_by(|a, b| a == b);
 
 
-        // Now go free all of those blocks.
-        // This will zero out the blocks, and remove them from the cache for us.
-        for chunk in chunked {
-            let freed = Pool::free_pool_block_from_disk(chunk)?;
-            assert_eq!(freed as usize, chunk.len());
-        }
+    // Now go free all of those blocks.
+    // This will zero out the blocks, and remove them from the cache for us.
+    for chunk in chunked {
+        let freed = Pool::free_pool_block_from_disk(chunk)?;
+        assert_eq!(freed as usize, chunk.len());
+    }
 
-        // Now all of those blocks have been freed.
+    // Now all of those blocks have been freed.
 
-        // If we are deleting the file, we dont need to do anything else, since the caller will just discard the directory item.
-        if delete {
-            // All done.
-            return Ok(());
-        }
+    // If we are deleting the file, we dont need to do anything else, since the caller will just discard the directory item.
+    if delete {
+        // All done.
+        return Ok(());
+    }
 
-        // If we're still here, we need to truncate the directory item we were handed.
+    // If we're still here, we need to truncate the directory item we were handed.
         
         
-        // Go reset the first extent block
-        let new_extent_start: FileExtentBlock = FileExtentBlock::new(first_extent);
-        CachedBlockIO::update_block(&new_extent_start.to_block(), JustDiskType::Standard)?;
+    // Go reset the first extent block
+    let new_extent_start: FileExtentBlock = FileExtentBlock::new(first_extent);
+    CachedBlockIO::update_block(&new_extent_start.to_block(), JustDiskType::Standard)?;
         
-        // Update the inode
-        // Set the file to a size of 0
-        file.set_size(0);
-        inode_with_file.file = Some(file);
-        // Update the modification time
-        inode_with_file.modified = InodeTimestamp::now();
-        // Put the inode back in the block it came from, this will write for us.
-        inode_block.update_inode(location.offset, inode_with_file)?;
+    // Update the inode
+    // Set the file to a size of 0
+    file.set_size(0);
+    inode_with_file.file = Some(file);
+    // Update the modification time
+    inode_with_file.modified = InodeTimestamp::now();
+    // Put the inode back in the block it came from, this will write for us.
+    inode_block.update_inode(location.offset, inode_with_file)?;
 
-        // All done!
-        Ok(())
+    // All done!
+    Ok(())
 }
 
 /// Just flushes the current FileExtentBlock to disk, nice helper function
