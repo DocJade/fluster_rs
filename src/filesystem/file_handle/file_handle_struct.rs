@@ -14,6 +14,7 @@ use crate::filesystem::item_flag::flag_struct::ItemFlag;
 
 
 /// Handle for any type of item (file or directory).
+#[derive(Debug, Clone)]
 pub struct FileHandle {
     /// The path of this file/folder.
     pub path: Box<std::path::Path>, // Non-static size, thus boxed.

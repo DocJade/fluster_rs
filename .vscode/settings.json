@@ -1,0 +1,10 @@
+{
+    "rust-analyzer.runnables.extraEnv": {
+        "RUST_LOG": "info,fluster_fs=debug" // debug level logs in tests
+    },
+    "rust-analyzer.runnables.cargo.args": [
+        "--no-fail-fast",
+        "--",
+        "--nocapture"
+    ]
+}

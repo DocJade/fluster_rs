@@ -3,6 +3,8 @@
 use std::{collections::HashMap, sync::{Arc, Mutex}};
 
 use lazy_static::lazy_static;
+use libc::c_int;
+use log::{debug, error, warn};
 
 //
 // Global info about open files
@@ -30,25 +32,59 @@ impl LoveHandles {
 
     /// Make a new handle
     fn make_handle(&mut self, item: FileHandle) -> u64 {
-        todo!()
+        // Get a number
+        let num = self.next_free();
+
+        // Put it in the hashmap.
+        // We also assert that we have not already used this number
+        assert!(self.allocated.insert(num, item).is_none());
+
+        // All done.
+        num
     }
 
     /// Get the handle back
     fn read_handle(&self, number: u64) -> FileHandle {
         // Handles are not read after freeing, doing so is undefined behavior.
-        todo!()
+        if let Some(handle) = self.allocated.get(&number) {
+            // Cool, it's there.
+            handle.clone()
+        } else {
+            // We are cooked.
+            error!("Tried to read a handle that was not allocated!");
+            panic!("Use after free on handle.");
+        }
     }
 
     /// Get the next free handle (internal abstraction)
-    fn next_free(&self) -> u64 {
-        todo!()
+    fn next_free(&mut self) -> u64 {
+        // Prefer vec items
+        if self.free.is_empty() {
+            // Time for a new number then.
+            let give = self.highest;
+            self.highest += 1;
+            return give;
+        }
+
+        // There is a vec item.
+        self.free.pop().expect("Guarded.")
     }
 
     /// You need to let go...
     fn release_handle(&mut self, number: u64) {
         // Handles are only ever freed once. Freeing an empty handle is undefined behavior, thus we
         // cant do anything but give up.
-        todo!()
+        if self.allocated.remove(&number).is_none() {
+            // Bad!
+            error!("Tried to free a handle that was not allocated!");
+            panic!("Double free on handle.");
+        };
+
+        // Is this number right below the current highest?
+        if number == self.highest - 1 {
+            // Yep! Reduce highest.
+            self.highest -= 1;
+        }
     }
 }
 
@@ -66,7 +102,19 @@ lazy_static! {
 // The actual handles
 //
 
-use crate::{filesystem::file_handle::file_handle_struct::FileHandle, pool::disk::{drive_struct::FloppyDriveError, standard_disk::block::{directory::directory_struct::DirectoryItem, io::directory::types::NamedItem}}};
+use crate::{
+    filesystem::{
+        error::error_types::*,
+        file_handle::file_handle_struct::FileHandle
+    },
+    pool::disk::standard_disk::block::{
+        directory::directory_struct::{
+            DirectoryBlock,
+            DirectoryItem
+        },
+        io::directory::types::NamedItem
+    }
+};
 
 impl FileHandle {
     /// The name of the file/folder, if it exists.
@@ -130,14 +178,32 @@ impl FileHandle {
             return false;
         }
         
-        // Check if it ends with the delimiter.
-        self.path.as_os_str().to_str().expect("Should be valid utf8").ends_with(DELIMITER)
+        // Check if it ends with the delimiter, if it does, its a directory, otherwise its a file.
+        !self.path.as_os_str().to_str().expect("Should be valid utf8").ends_with(DELIMITER)
     }
 
     
-    /// Loads in and returns the directory item. Assuming it exists.
-    pub fn get_directory_item(&self) -> Result<DirectoryItem, FloppyDriveError> {
-        todo!()
+    /// Loads in and returns the directory item if it exists.
+    pub fn get_directory_item(&self) -> Result<DirectoryItem, c_int> {
+        // Open the containing folder
+        let block = match DirectoryBlock::try_find_directory(self.path.parent())? {
+            Some(ok) => ok,
+            None => {
+                // Containing block did not exist.
+                return Err(NO_SUCH_ITEM);
+            },
+        };
+
+        let named_item = self.get_named_item();
+
+        // Find the item
+        if let Some(exists) = block.find_item(&named_item)? {
+            // File existed.
+            Ok(exists)
+        } else {
+            // No such item.
+            Err(NO_SUCH_ITEM)
+        }
     }
 
     /// Get a named item from this handle.

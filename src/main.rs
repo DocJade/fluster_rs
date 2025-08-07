@@ -71,14 +71,14 @@ fn main() {
 
     // Now for the fuse mount options
     let fuse_options = [
-        OsStr::new("nodev"), // Disable dev devices
-        OsStr::new("noatime"), // No access times
-        OsStr::new("nosuid"), // Ignore file/folder permissions (lol)
-        OsStr::new("rw"), // Read/Write
-        OsStr::new("exec"), // Files are executable
-        OsStr::new("sync"), // No async.
-        OsStr::new("dirsync"), // No async
-        OsStr::new("fsname=fluster"), // Set the name of the fuse mount
+        OsStr::new("-onodev"), // Disable dev devices
+        OsStr::new("-onoatime"), // No access times
+        OsStr::new("-onosuid"), // Ignore file/folder permissions (lol)
+        OsStr::new("-orw"), // Read/Write
+        OsStr::new("-oexec"), // Files are executable
+        OsStr::new("-osync"), // No async.
+        OsStr::new("-odirsync"), // No async
+        OsStr::new("-ofsname=fluster"), // Set the name of the fuse mount
     ];
 
     // todo!("fuse mount options for limiting read/write sizes and disabling async");

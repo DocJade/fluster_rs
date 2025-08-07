@@ -242,11 +242,12 @@ fn pool_get_root_inode_location() -> InodeLocation {
 
 /// Constructs a directory item with info about the root.
 fn pool_get_root_directory_item() -> DirectoryItem {
-    // 
+    // The name of the root directory entry is always the delimiter.
+    static DELIMITER: char = std::path::MAIN_SEPARATOR;
     DirectoryItem {
         flags: DirectoryFlags::IsDirectory,
         name_length: 0,
-        name: "".into(),
+        name: DELIMITER.into(),
         location: pool_get_root_inode_location(),
     }
 }

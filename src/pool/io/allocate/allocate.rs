@@ -81,7 +81,7 @@ impl Pool {
 
 fn go_find_free_pool_blocks(blocks: u16, mark: bool, add_crc: bool) -> Result<Vec<DiskPointer>, FloppyDriveError> {
     debug!("Attempting to allocate {blocks} blocks across the pool...");
-    debug!("We will _{}_ be marking the blocks as used.", if mark {"will"} else {"will not"});
+    debug!("We _{}_ be marking the blocks as used.", if mark {"will"} else {"will not"});
 
 
     debug!("Locking GLOBAL_POOL...");

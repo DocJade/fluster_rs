@@ -1,4 +1,5 @@
 use fuse_mt::{FileAttr, FileType};
+use libc::c_int;
 use log::debug;
 use std::time::SystemTime;
 
@@ -19,13 +20,13 @@ use crate::{
 
 // Take in a file handle and spit out its attributes.
 impl TryFrom<FileHandle> for FileAttr {
-    type Error = FloppyDriveError;
+    type Error = c_int;
     
     fn try_from(value: FileHandle) -> Result<Self, Self::Error> {
         debug!("Retrieving file metadata from handle...");
         // Get the directory item
         let item: DirectoryItem = value.get_directory_item()?;
-        go_get_metadata(item)
+        Ok(go_get_metadata(item)?)
     }
 }
 
@@ -39,35 +40,42 @@ impl TryFrom<DirectoryItem> for FileAttr {
 }
 
 fn go_get_metadata(item: DirectoryItem) -> Result<FileAttr, FloppyDriveError> {
-
+    debug!("Extracting metadata from item `{}`...", item.name);
     // Now for ease of implementation, we (very stupidly) ignore all file access permissions,
     // owner information, and group owner information.
-
+    
     // Root owns all files (user id 0)
     // Owner is in the superuser group (group id 0)
     // All permission bits are set (very scary!) go execute a jpeg, i dont even care anymore.
-
+    
     // Due to this, we also do not check any permissions on reads or writes! :D
-
-
+    
+    
     
     // How big is it
     let size: u64 = item.get_size()?;
+    debug!("`{size}` bytes...");
     
     
     // extract the times
     let creation_time: SystemTime = item.get_created_time()?.into();
+    debug!("Created at...");
     let modified_time: SystemTime = item.get_modified_time()?.into();
+    debug!("Modified at...");
     
     // "What kind of item is this?"
     // https://www.tiktok.com/@ki2myyysc6/video/7524954406438161694
     let file_kind: FileType = if item.flags.contains(DirectoryFlags::IsDirectory) {
         // "This is a directory, used for holding items in a filesystem, such as files or other directories."
+        debug!("Is a directory...");
         FileType::Directory
     } else {
         // "This is a file, used to store arbitrary data, it is very useful!"
+        debug!("Is a file...");
         FileType::RegularFile
     };
+
+    debug!("Metadata done.");
 
     // Put it all together
     Ok(FileAttr {
@@ -86,9 +94,9 @@ fn go_get_metadata(item: DirectoryItem) -> Result<FileAttr, FloppyDriveError> {
         // file type
         kind: file_kind,
         // File permissions, not supported
-        perm: 0b1111111111111111, // All permission bits
+        perm: 0o777, // All permission bits
         // links not supported
-        nlink: 0,
+        nlink: 2, // At least 1 link for each item
         // owner id, always root
         uid: 0,
         // owner group, always root

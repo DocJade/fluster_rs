@@ -59,8 +59,6 @@ impl DirectoryBlock {
     /// Returned DirectoryItem(s) will have their InodeLocation's disk set.
     ///
     /// May swap disks.
-    ///
-    /// Optionally returns to a specified disk after gathering directory items.
     pub fn list(&self) -> Result<Vec<DirectoryItem>, FloppyDriveError> {
         go_list_directory(self)
     }

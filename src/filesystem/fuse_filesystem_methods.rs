@@ -10,8 +10,8 @@
 
 use std::{path::Path, time::Duration};
 
-use fuse_mt::{FileAttr, FilesystemMT};
-use log::{debug, info, warn};
+use fuse_mt::{DirectoryEntry, FileAttr, FileType, FilesystemMT};
+use log::{debug, error, info, warn};
 
 use crate::{
     filesystem::{
@@ -530,7 +530,7 @@ impl FilesystemMT for FlusterFS {
         // Where we want to go
         // Where we're coming from (including name of file/folder)
         let destination_full_temp_handle: FileHandle = FileHandle {
-            path: parent.join(name).into(),
+            path: parent.join(newname).into(),
             flags: ItemFlag::empty(),
         };
 
@@ -1075,9 +1075,11 @@ impl FilesystemMT for FlusterFS {
         }
 
         // We are done creating/loading the file, its time to get a handle.
+        debug!("Getting a handle on things...");
         let new_handle: u64 = handle.allocate();
-
+        
         // Done!
+        debug!("Opening finished.");
         Ok((new_handle, converted_flag.into()))
     }
 
@@ -1158,21 +1160,94 @@ impl FilesystemMT for FlusterFS {
     // Open a directory and get a handle to it
     fn opendir(
         &self,
-        _req: fuse_mt::RequestInfo,
-        _path: &std::path::Path,
-        _flags: u32,
+        req: fuse_mt::RequestInfo,
+        path: &std::path::Path,
+        flags: u32,
     ) -> fuse_mt::ResultOpen {
-        Err(UNIMPLEMENTED)
+
+        // This just gets pushed over to open(), since
+        // we already handle directories over there.
+        //
+        // Should we handle files and directories both in open? maybe not.
+        self.open(req, path, flags)
     }
 
     // List the contents of a directory.
+    // "Return one or more directory entries (struct dirent) to the caller."
+    // "This is one of the most complex FUSE functions." Oof.
+    // "The readdir function is somewhat like read, in that it starts at a
+    //  given offset and returns results in a caller-supplied buffer."
+    // "However, the offset not a byte offset" What the hell
+    // "...and the results are a series of struct dirents rather than being uninterpreted bytes" those are just words Geoffery
+    //
+    // Luckily we are working at a level way above that!
     fn readdir(
         &self,
         _req: fuse_mt::RequestInfo,
-        _path: &std::path::Path,
-        _fh: u64,
+        path: &std::path::Path,
+        fh: u64,
     ) -> fuse_mt::ResultReaddir {
-        Err(UNIMPLEMENTED)
+        debug!("Getting contents of directory `{}`...", path.display());
+
+        // Make sure the file handle and the incoming path are the same. I assume they should be, but
+        // cant hurt to check.
+        let got_handle = FileHandle::read(fh);
+        
+        if got_handle.path != path.into() {
+            // They aren't the same? not sure what to do with that
+            error!("readdir() tried to read a path, but provided a handle to a different path.");
+            error!("fh: `{}` | path: `{}`", got_handle.path.display(), path.display());
+            error!("Not sure what to do here, giving up.");
+            return Err(GENERIC_FAILURE);
+        }
+
+        // Since we have a handle, getting the directory is easy.
+        debug!("Getting the directory item from handle...");
+        let dir_item: DirectoryItem = if let Ok(exists) = got_handle.get_directory_item() {
+            // good
+            exists
+        } else {
+            // Tried to read in a directory item that did not exist, yet we have a handle to it?
+            // Guess the handle must be stale?
+
+            // Yes, get_directory_item() returns its own error, but we should get rid of the invalid handle.
+
+            warn!("Tried to read in a directory item from a handle, but the item was not there. Returning stale.");
+            return Err(STALE_HANDLE)
+        };
+        
+        // Double check that this is a file.
+        if !dir_item.flags.contains(DirectoryFlags::IsDirectory) {
+            // No.
+            warn!("Tried to call readdir on a file!");
+            return Err(NOT_A_DIRECTORY);
+        }
+        
+        debug!("Getting directory block...");
+        let dir_block = dir_item.get_directory_block()?;
+
+        // List the files off
+        // List the files off
+        debug!("Listing items...");
+        let items = dir_block.list()?;
+        
+        // Now pull out the names and types
+        let listed_items: Vec<DirectoryEntry> = items.iter().map(|item| {
+            let kind = if item.flags.contains(DirectoryFlags::IsDirectory) {
+                FileType::Directory
+            } else {
+                FileType::RegularFile
+            };
+            
+            DirectoryEntry {
+                name: item.name.clone().into(),
+                kind,
+            }
+        }).collect();
+        
+        // All done!
+        debug!("Done. Directory contained `{}` items.", listed_items.len());
+        Ok(listed_items)
     }
 
     // See release()
@@ -1180,9 +1255,10 @@ impl FilesystemMT for FlusterFS {
         &self,
         _req: fuse_mt::RequestInfo,
         _path: &std::path::Path,
-        _fh: u64,
+        fh: u64,
         _flags: u32,
     ) -> fuse_mt::ResultEmpty {
+        FileHandle::drop_handle(fh);
         Ok(())
     }
 

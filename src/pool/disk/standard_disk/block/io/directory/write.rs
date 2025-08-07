@@ -1,6 +1,6 @@
 // Write a new directory into a directory block
 
-use log::{debug, trace};
+use log::{debug, error, trace};
 
 use crate::pool::{
     disk::{
@@ -83,19 +83,23 @@ fn go_make_directory(
     // We dont care if listing the directory puts us somewhere else, because we're immediately going to
     // go get a new directory block, which would possibly just swap disks again, and our final update
     // to the original directory block has its origin already specified with block_origin.
+    debug!("Checking if a directory with that name already exists...");
     if directory
-        .find_item(&NamedItem::Directory(name.clone()))?
-        .is_some()
+    .find_item(&NamedItem::Directory(name.clone()))?
+    .is_some()
     {
         // We are attempting to create a duplicate item.
+        error!("ATTEMPTED TO CREATE A DUPLICATE DIRECTORY! PANICKING!");
         panic!("Attempted to create duplicate directory!")
     }
+    
+    debug!("Name is free.");
 
     // And make sure the name isn't too long.
     assert!(name.len() < 256);
 
     // Reserve a spot for the new directory
-    trace!("Getting a new directory block...");
+    debug!("Getting a new directory block...");
     let new_directory_location = go_make_new_directory_block()?;
 
     // Now that we've made the directory, we need an inode that points to it.
@@ -112,7 +116,7 @@ fn go_make_directory(
     };
 
     // Go put it somewhere.
-    trace!("Adding the inode for the new directory...");
+    debug!("Adding the inode for the new directory...");
     let mut inode_result = Pool::fast_add_inode(inode)?;
 
     // Now we add this newly created directory to the calling directory.
@@ -139,7 +143,7 @@ fn go_make_directory(
     }
 
     // Put it all together
-    let final_directory_item = DirectoryItem {
+    let mut final_directory_item = DirectoryItem {
         flags,
         name_length: name.len() as u8,
         name,
@@ -148,8 +152,14 @@ fn go_make_directory(
 
     // Put it into the caller directory!
     // We dont need to pass in a return disk, since we will return ourselves next if needed.
-    trace!("Adding the new directory to the caller...");
+    debug!("Adding the new directory to the caller...");
     directory.add_item(&final_directory_item)?;
+
+    // Now that we've added it to the directory block, since we are returning the directory item again, we need
+    // to put the disk number back if we just removed it, since new item that comes out of this function needs
+    // to act just like a freshly read item.
+
+    final_directory_item.location.disk = Some(disk_it_ended_up_on);
 
     // All done!
     debug!("Done creating directory.");
@@ -261,10 +271,9 @@ fn go_find_next_or_extend_block(
     block_to_load = go_make_new_directory_block()?;
 
     // Now we must update the previous block to point to this new one.
-    let updated_directory = directory;
-    updated_directory.next_block = block_to_load;
+    directory.next_block = block_to_load;
 
-    let raw_block: RawBlock = updated_directory.to_block();
+    let raw_block: RawBlock = directory.to_block();
     CachedBlockIO::update_block(&raw_block, JustDiskType::Standard)?;
 
     // All done.

@@ -1,6 +1,6 @@
 use bitflags::bitflags;
 use libc::c_int;
-use log::warn;
+use log::{error, warn};
 
 use crate::filesystem::error::error_types::*;
 
@@ -72,7 +72,7 @@ bitflags! {
         /// 
         /// If you need files that big, fluster is not the tool for you.
         /// Thus we will not allow this flag.
-        // const O_LARGEFILE = libc::O_LARGEFILE;
+        const O_LARGEFILE = libc::O_LARGEFILE as u32;
         
         /// Do not update file access time.
         /// 
@@ -80,6 +80,11 @@ bitflags! {
         /// 
         /// Has no effect.
         const O_NOATIME = libc::O_NOATIME as u32;
+
+        /// Do this operation in a non-blocking way.
+        /// 
+        /// Too bad, we block for everything.
+        const O_NONBLOCK = libc::O_NONBLOCK as u32;
 
         /// If path is a terminal device, do not control it or whatever.
         /// 
@@ -119,6 +124,7 @@ bitflags! {
         /// so we still need to care elsewhere.
         const TRUNCATE = libc::O_TRUNC as u32;
 
+
     }
 }
 
@@ -137,16 +143,36 @@ impl ItemFlag {
             // All good.
             Ok(valid)
         } else {
-            // Has invalid bits set. Unsupported operation.
+            // Has invalid bits set.
             // We will print some information to deduce the unused bits.
             warn!("Incoming flag bits had unused bits set. This operation is unimplemented.");
             warn!("Listing known and unknown flags:");
-            for flag in ItemFlag::from_bits_retain(value).iter() {
-                for name in flag.iter_names() {
-                    warn!("`{}` with value `{}`", name.0, name.1.bits())
+
+            warn!("Known:");
+            let known = ItemFlag::from_bits_truncate(value);
+            for name in known.iter_names() {
+                warn!("`{}` with value `{}` (binary: `{:0>32b}`)", name.0, name.1.bits(), name.1.bits())
+            }
+
+            warn!("Unknown:");
+            let unknown_bits = value & !ItemFlag::all().bits();
+            warn!("{unknown_bits:0>32b}");
+            // now print out the values of those bits
+            warn!("Values for those bits:");
+            for i in 0..32 {
+                // shift over to mask out the bit
+                let mask: u32 = 1 << i as u32;
+                // if the bit is set, print the value
+                if mask & unknown_bits != 0 {
+                    warn!("{mask} (hex {mask:X})")
                 }
             }
-            Err(UNIMPLEMENTED)
+
+            // I've spent several hours trying to track down what 0x8000 is supposed to be a flag for, no luck.
+            // I'm just going to assume its some internal flag at this point. We will ignore all flag bits that we dont know.
+
+            warn!("Continuing anyways, but ignoring those bits may have side effects.");
+            Ok(known)
         }
     }
 }
