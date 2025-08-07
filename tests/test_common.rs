@@ -1,7 +1,7 @@
-use std::path::PathBuf;
+use std::{ffi::OsStr, path::PathBuf};
 
-use easy_fuser::prelude::MountOption;
 use fluster_fs::filesystem::filesystem_struct::{FilesystemOptions, FlusterFS};
+use fuse_mt::FuseMT;
 use log::{debug, info};
 use tempfile::{TempDir, tempdir};
 
@@ -27,13 +27,15 @@ pub fn get_actually_temp_dir() -> TempDir {
     tempdir().unwrap()
 }
 
-// Create a temporary filesystem, and returns the
-pub fn start_filesystem() -> FlusterFS {
+// Create a temporary filesystem, and returns the mt thing used to do the mount.
+pub fn start_filesystem() -> FuseMT<FlusterFS> {
     info!("Starting temp test filesystem...");
     let temp_dir = get_new_temp_dir();
     let floppy_drive: PathBuf = PathBuf::new(); // This is never read since we are using temporary disks.
     let fs_options = FilesystemOptions::new(Some(temp_dir.path().to_path_buf()), floppy_drive);
-    FlusterFS::start(&fs_options)
+    let started = FlusterFS::start(&fs_options);
+    // MT thing that is actually used for mounting.
+    fuse_mt::FuseMT::new(started, 1)
 }
 
 pub fn unmount(mount_point: PathBuf) {
@@ -44,14 +46,15 @@ pub fn unmount(mount_point: PathBuf) {
         .status();
 }
 
-pub fn test_mount_options() -> Vec<MountOption> {
+pub fn test_mount_options() -> Vec<&'static OsStr> {
     [
-        MountOption::NoDev, // Disable dev devices
-        MountOption::NoAtime, // No access times
-        MountOption::NoSuid, // Ignore file/folder permissions (lol)
-        MountOption::RW, // Read/Write
-        MountOption::Exec, // Files are executable
-        MountOption::Sync, // No async.
-        MountOption::DirSync // No async
+        OsStr::new("-o"), // Options flag
+        OsStr::new("nodev"), // Disable dev devices
+        OsStr::new("noatime"), // No access times
+        OsStr::new("nosuid"), // Ignore file/folder permissions (lol)
+        OsStr::new("rw"), // Read/Write
+        OsStr::new("exec"), // Files are executable
+        OsStr::new("sync"), // No async.
+        OsStr::new("dirsync"), // No async
     ].to_vec()
 }

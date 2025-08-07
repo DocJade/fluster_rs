@@ -1,10 +1,7 @@
 use std::{
-    path::PathBuf,
-    process::exit,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
+    ffi::OsStr, path::PathBuf, process::exit, sync::{
+        atomic::{AtomicBool, Ordering}, Arc
+    }
 };
 
 use clap::Parser;
@@ -72,7 +69,30 @@ fn main() {
 
     let filesystem: FlusterFS = FlusterFS::start(&options);
 
+    // Now for the fuse mount options
+    let fuse_options = [
+        OsStr::new("-o"), // Option flag
+        OsStr::new("fsname=fluster"), // Set the name of the fuse mount
+    ];
+
+    // todo!("fuse mount options for limiting read/write sizes and disabling async");
+
     // Mount it
-    // TODO: Extract this out so tests can be ran against a mounted file system
-    easy_fuser::mount(filesystem, &mount_point, &[]).unwrap();
+
+    // Internal fuse_mt startup stuff i think, no comments on the function implementation.
+    // takes in the filesystem, and the number of threads the filesystem will use
+    // Fluster! Is single threaded.
+    let mt_thing = fuse_mt::FuseMT::new(filesystem, 1);
+
+
+    match fuse_mt::mount(mt_thing, &mount_point, &fuse_options) {
+        Ok(_) => {
+            // Filesystem was unmounted successfully.
+            println!("Fluster! has been unmounted.");
+        },
+        Err(err) => {
+            // rhut row
+            println!("Fluster is dead and you killed them. {err:#?}");
+        },
+    }
 }

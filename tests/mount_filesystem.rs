@@ -13,7 +13,8 @@ fn mount_filesystem() {
 
     // fs needs to be mounted in another thread bc it blocks
     let mount_thread = thread::spawn(move || {
-        easy_fuser::mount(fs, &mount_path, &test_mount_options()).unwrap();
+        // This blocks this thread until the unmount happens.
+        fuse_mt::mount(fs, &mount_path, &test_mount_options()).expect("Unmount should not fail.");
     });
 
     // wait for it to start...

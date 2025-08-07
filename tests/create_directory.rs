@@ -18,8 +18,10 @@ fn create_directory() {
     let mount_thread = thread::spawn(move || {
         thread::sleep(Duration::from_millis(100)); // Pause to let the debugger see the thread
         // If we dont pause, breakpoints dont work.
-        easy_fuser::mount(fs, &thread_mount_path, &mount_options).unwrap();
+        // This blocks until the unmount happens.
+        fuse_mt::mount(fs, &thread_mount_path, &mount_options).expect("Unmount should not fail.");
     });
+
     let mount_path = mount_point.path().to_path_buf();
     
     // wait for it to start...
