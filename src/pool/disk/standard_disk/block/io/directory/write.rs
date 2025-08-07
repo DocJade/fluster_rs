@@ -24,14 +24,11 @@ impl DirectoryBlock {
     /// Add a new item to this block, extending this block if needed.
     /// Updated blocks are written to disk.
     ///
-    ///
-    /// Consumes the DirectoryBlock, since the data may have been updated.
-    ///
-    /// May swap disks, will optionally return to a provided disk.
+    /// Updates the block that was passed in, since the contents of the block may have changed.
     ///
     /// Returns nothing.
     pub fn add_item(
-        self,
+        &mut self,
         item: &DirectoryItem,
     ) -> Result<(), FloppyDriveError> {
         go_add_item(self, item)
@@ -42,14 +39,14 @@ impl DirectoryBlock {
     /// Requires a disk pointer back to the origin of Directory Block
     /// this was called on.
     ///
-    /// Consumes the DirectoryBlock, since the data may have been updated.
+    /// Updates the directory block that was passed in.
     ///
     /// The name of the new directory must be less than 256 characters long.
     /// Attempting to recreate an already existing directory will panic.
     ///
     /// Returns the created directory as a DirectoryItem.
     pub fn make_directory(
-        self,
+        &mut self,
         name: String,
     ) -> Result<DirectoryItem, FloppyDriveError> {
         go_make_directory(self, name)
@@ -63,12 +60,12 @@ impl DirectoryBlock {
     /// 
     /// The directory block must be empty of all items.
     /// 
-    /// Consumes the DirectoryBlock, since it will no longer exist after this call.
+    /// Updates the incoming directory block, since data may have changed.
     /// 
     /// May swap disks.
     /// 
     /// Returns nothing on success.
-    pub fn delete_directory(self) -> Result<(), FloppyDriveError> {
+    pub fn delete_directory(&mut self) -> Result<(), FloppyDriveError> {
         // Make sure the directory is empty.
         // Find all blocks that this directory currently references.
         // Remove those blocks.
@@ -78,7 +75,7 @@ impl DirectoryBlock {
 }
 
 fn go_make_directory(
-    directory: DirectoryBlock,
+    directory: &mut DirectoryBlock,
     name: String,
 ) -> Result<DirectoryItem, FloppyDriveError> {
     debug!("Attempting to create a new directory with name `{name}`...");
@@ -180,7 +177,7 @@ fn go_make_new_directory_block() -> Result<DiskPointer, FloppyDriveError> {
 
 // Add an item to a directory
 fn go_add_item(
-    directory: DirectoryBlock,
+    directory: &mut DirectoryBlock,
     item: &DirectoryItem,
 ) -> Result<(), FloppyDriveError> {
     debug!("Adding new item to directory...");

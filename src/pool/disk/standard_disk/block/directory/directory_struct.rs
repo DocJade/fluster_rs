@@ -20,7 +20,9 @@ pub struct DirectoryItem {
     pub location: InodeLocation,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+// This type is not clone, since you could end up with a block that is out of sync due to
+// changes made on a copy/clone of it.
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) struct DirectoryBlock {
     pub(super) flags: DirectoryBlockFlags,
     pub(super) bytes_free: u16,

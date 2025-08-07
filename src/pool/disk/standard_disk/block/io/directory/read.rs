@@ -80,10 +80,14 @@ impl DirectoryBlock {
 
     /// Extracts an item from a directory block, blanking out the space it used to occupy.
     /// 
+    /// Actions are flushed to disk.
+    /// 
     /// If you just want to get the item for reading or minor modifications, use find_item()
     /// 
+    /// Updates the directory block that was passed in, as contents may have changed.
+    /// 
     /// Returns nothing if the item did not exist.
-    pub(crate) fn extract_item(&self, item_to_find: &NamedItem) -> Result<Option<DirectoryItem>, FloppyDriveError> {
+    pub(crate) fn extract_item(&mut self, item_to_find: &NamedItem) -> Result<Option<DirectoryItem>, FloppyDriveError> {
 
         // Extract the item, if it came from the last directory block in the chain, make sure that
         // block is not empty. if it is, remove that block and update previous block.
