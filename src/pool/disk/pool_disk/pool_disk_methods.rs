@@ -104,6 +104,8 @@ impl GenericDiskMethods for PoolDisk {
 
     #[doc = " Sync all in-memory information to disk"]
     fn flush(&mut self) -> Result<(), FloppyDriveError> {
-        CachedBlockIO::update_block(&self.header.to_block(), JustDiskType::Pool)
+        error!("You cannot call flush on a pool disk header.");
+        error!("This must be handled manually via a disk unchecked write.");
+        panic!("Tried to flush a pool header with .flush() !");
     }
 }

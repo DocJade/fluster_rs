@@ -17,6 +17,7 @@ use crate::pool::disk::generic::block::crc::add_crc_to_block;
 use crate::pool::disk::generic::disk_trait::GenericDiskMethods;
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolHeaderFlags;
+use crate::pool::disk::pool_disk::pool_disk_struct::PoolDisk;
 
 use super::header_struct::PoolDiskHeader;
 use super::header_struct::PoolHeaderError;
@@ -27,6 +28,10 @@ impl PoolDiskHeader {
     /// Reterive the header from the pool disk
     pub fn read() -> Result<Self, FloppyDriveError> {
         read_pool_header_from_disk()
+    }
+    /// Overwrite the current header stored on the pool disk.
+    pub fn write(&self) -> Result<(), FloppyDriveError> {
+        write_pool_header_to_disk(self)
     }
     /// Convert the pool header into a RawBlock
     pub fn to_block(self) -> RawBlock {
@@ -338,4 +343,27 @@ fn new_pool_header() -> PoolDiskHeader {
         latest_inode_write, // This is not persisted on disk.
         block_usage_map,
     }
+}
+
+/// Put that pool away
+fn write_pool_header_to_disk(header: &PoolDiskHeader) -> Result<(), FloppyDriveError> {
+    // Make a block
+    let header_block = header.to_block();
+
+    // Get the pool disk
+    let 
+    mut disk: PoolDisk = match FloppyDrive::open(0)? {
+        DiskType::Pool(pool_disk) => pool_disk,
+        _ => unreachable!("Disk 0 should NEVER be assigned to a non-pool disk!"),
+    };
+
+    // Replace the header
+    disk.header = *header;
+    
+    // Write it.
+    // We cant use the usual disk.flush() since that usually uses cache methods. Pool disk blocks are not cached.
+    disk.unchecked_write_block(&header_block)?;
+
+    // All done.
+    Ok(())
 }

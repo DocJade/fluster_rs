@@ -2,7 +2,7 @@ use std::{thread, time::Duration};
 
 use test_log::test; // We want to see logs while testing.
 use crate::test_common::test_mount_options;
-mod test_common;
+pub mod test_common;
 
 #[test]
 // Try starting up the filesystem

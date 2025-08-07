@@ -15,21 +15,6 @@ pub struct CachedBlockIO {
    // m tea
 }
 
-/// Even higher struct for just flushing the pool
-pub(crate) struct FlushBlockCache {
-    // empty
-}
-
-impl FlushBlockCache {
-    /// Flushes all information in the cache to disk
-    pub fn go() -> Result<(), FloppyDriveError> {
-        BlockCache::flush(0)?;
-        BlockCache::flush(1)?;
-        BlockCache::flush(2)?;
-        Ok(())
-    } 
-}
-
 // Cache methods
 impl CachedBlockIO {
     /// Sometimes you need to forcibly write a disk during initialization procedures, so we need a bypass.
@@ -48,8 +33,6 @@ impl CachedBlockIO {
     /// You better know what you're doing.
     /// 
     /// !! == DANGER == !!
-    /// 
-    /// You must pass in the disk to write to.
     pub fn forcibly_write_a_block(raw_block: &RawBlock) -> Result<(), FloppyDriveError> {
         go_force_write_block(raw_block)
     }
@@ -97,7 +80,12 @@ impl CachedBlockIO {
     }
     /// Flush the entire cache to disk.
     pub fn flush() -> Result<(), FloppyDriveError> {
-        todo!()
+        // There are currently 3 tiers of cache.
+        // ! If that changes, this must be updated !
+        // ! or there will be unflushed data still !
+        BlockCache::flush(0)?;
+        BlockCache::flush(1)?;
+        BlockCache::flush(2)
     }
 }
 

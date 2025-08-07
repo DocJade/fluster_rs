@@ -28,9 +28,9 @@ use std::sync::Mutex;
 // Implementations
 
 impl Pool {
-    /// Sync information about the pool to disk
-    pub fn sync(&self) -> Result<(), ()> {
-        sync(self)
+    /// Flush all info about the pool to the pool disk.
+    pub fn flush() -> Result<(), FloppyDriveError> {
+        flush_pool()
     }
     /// Read in pool information from disk
     /// Returns a handle/pointer/whatever
@@ -52,10 +52,6 @@ impl Pool {
     pub fn get_root_directory() -> Result<DirectoryBlock, FloppyDriveError> {
         pool_get_root_directory()
     }
-    /// Get the location of the inode that holds information about the root directory
-    pub fn get_root_inode_location() -> InodeLocation {
-        pool_get_root_inode_location()
-    }
     /// Get a DirectoryItem that has details about the root directory.
     pub fn get_root_directory_item() -> DirectoryItem {
         pool_get_root_directory_item()
@@ -75,8 +71,22 @@ impl PoolStatistics {
 }
 
 /// Sync information about the pool to disk
-pub(super) fn sync(_pool: &Pool) -> Result<(), ()> {
-    todo!()
+pub(super) fn flush_pool() -> Result<(), FloppyDriveError> {
+    debug!("Flushing pool info to disk...");
+    
+    // Grab the pool
+    debug!("Locking GLOBAL_POOL...");
+    let pool_header:PoolDiskHeader  = GLOBAL_POOL
+        .get()
+        .expect("single threaded")
+        .try_lock()
+        .expect("single threaded")
+        .header;
+
+    // Now write that back to disk.
+    pool_header.write()?;
+    debug!("Pool flushed.");
+    Ok(())
 }
 
 /// Read in pool information from disk.

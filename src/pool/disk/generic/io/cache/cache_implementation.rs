@@ -562,9 +562,10 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
             _ => panic!("Bro there are only 3 cache tiers"),
         };
 
-        // If the tier is empty, there's nothing to do. We should not be
-        // flushing empty tiers
-        assert!(!tier_to_flush.order.is_empty(), "Cannot flush an empty tier!");
+        // If the tier is empty, there's nothing to do.
+        if tier_to_flush.order.is_empty() {
+            return Ok(());
+        }
 
         // Move all items from the tier into our local variable,
         // leaving the cache's tier empty.

@@ -4,7 +4,7 @@ use log::{error, info};
 use test_log::test;
 
 use crate::test_common::test_mount_options; // We want to see logs while testing.
-mod test_common;
+pub mod test_common;
 
 #[test]
 // Try creating a directory

@@ -76,10 +76,10 @@ impl FilesystemMT for FlusterFS {
         info!("Shutting down filesystem...");
         // Flush all of the tiers of cache.
         info!("Flushing cache...");
-        CachedBlockIO::flush().expect("I sure hope flushing works.");
+        CachedBlockIO::flush().expect("I sure hope cache flushing works!");
         // Now flush pool information
-        todo!("Flush pool info to pool disk.");
-        info!("Done.");
+        info!("Flushing pool info...");
+        Pool::flush().expect("I sure hope pool flushing works!");
         info!("Goodbye! .o/");
     }
 
