@@ -519,7 +519,7 @@ impl FilesystemMT for FlusterFS {
         // Where we want to go
         // Where we're coming from (including name of file/folder)
         let destination_full_temp_handle: FileHandle = FileHandle {
-            path: parent.join(newname).into(),
+            path: newparent.join(newname).into(),
             flags: ItemFlag::empty(),
         };
 
@@ -595,12 +595,12 @@ impl FilesystemMT for FlusterFS {
         let maybe_destination_directory_item: Option<DirectoryItem>;
         if source_full_temp_handle.is_file() {
             // both files.
-            maybe_source_directory_item = source_parent_dir.find_item(&NamedItem::Directory(source_item_name.clone()))?;
-            maybe_destination_directory_item = destination_parent_dir.find_item(&NamedItem::Directory(destination_item_name.clone()))?;
-        } else {
-            // both directories.
             maybe_source_directory_item = source_parent_dir.find_item(&NamedItem::File(source_item_name.clone()))?;
             maybe_destination_directory_item = destination_parent_dir.find_item(&NamedItem::File(destination_item_name.clone()))?;
+        } else {
+            // both directories.
+            maybe_source_directory_item = source_parent_dir.find_item(&NamedItem::Directory(source_item_name.clone()))?;
+            maybe_destination_directory_item = destination_parent_dir.find_item(&NamedItem::Directory(destination_item_name.clone()))?;
         };
 
         // we branch depending on if it was a file or directory, handling is slightly different

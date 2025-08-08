@@ -276,10 +276,12 @@ impl DirectoryItem {
         // Flags
         vec.push(self.flags.bits());
 
+        let mut location_update = self.location.clone();
+
         // Make sure that the inode location has None if its on local, and vice versa
         if self.flags.contains(DirectoryFlags::OnThisDisk) {
-            // Make sure that Disk is set to NONE!
-            assert!(self.location.disk.is_none());
+            // Make sure the item has no disk set for serialization.
+            location_update.disk = None;
         }
 
         // Item name length
@@ -289,7 +291,7 @@ impl DirectoryItem {
         vec.extend(self.name.as_bytes());
 
         // location of the inode
-        vec.extend(self.location.to_bytes());
+        vec.extend(location_update.to_bytes());
 
         // All done
         vec
