@@ -105,7 +105,7 @@ lazy_static! {
 use crate::{
     filesystem::{
         error::error_types::*,
-        file_handle::file_handle_struct::FileHandle
+        file_handle::file_handle_struct::FileHandle, item_flag::flag_struct::ItemFlag
     },
     pool::disk::standard_disk::block::{
         directory::directory_struct::{
@@ -159,7 +159,10 @@ impl FileHandle {
         read_handles.release_handle(handle);
     }
 
-    // Check if this handle is a file or a directory.
+    /// Check if this handle is a file or a directory.
+    /// 
+    /// Must provide flags.
+
     pub fn is_file(&self) -> bool {
         // Annoyingly, rust's PathBuf type doesn't have a way to test if itself is a directory
         // without reading from disk, which makes it completely useless for deducing if the passed argument
@@ -169,17 +172,36 @@ impl FileHandle {
         //
         // The approach i'll take is to see if the path ends with a delimiter. good luck lmao
 
-        // The delimiter is platform specific too.
-        static DELIMITER: char = std::path::MAIN_SEPARATOR;
-
-        // If the path is empty, its the root node, which is a directory
-        if self.path.iter().count() == 0 {
-            // This is the root
-            return false;
+        // NEW APPOACH! idgaf anymore
+        // if it dont got a dot, it not a file.
+        let name: &str = self.name();
+        if name.contains('.') {
+            // Has a period. its a file.
+            // Unless this is a dot that refers to the current directory.
+            if name == "." {
+                // dir
+                return false;
+            }
+            true
+        } else {
+            // This is nameless, must be root.
+            // Root is a directory.
+            false
         }
-        
-        // Check if it ends with the delimiter, if it does, its a directory, otherwise its a file.
-        !self.path.as_os_str().to_str().expect("Should be valid utf8").ends_with(DELIMITER)
+
+        // // The delimiter is platform specific too.
+        // static DELIMITER: char = std::path::MAIN_SEPARATOR;
+
+        // // Check 
+
+        // // If the path is empty, its the root node, which is a directory
+        // if self.path.iter().count() == 0 {
+        //     // This is the root
+        //     return false;
+        // }
+        // 
+        // // Check if it ends with the delimiter, if it does, its a directory, otherwise its a file.
+        // !self.path.as_os_str().to_str().expect("Should be valid utf8").ends_with(DELIMITER)
     }
 
     

@@ -8,7 +8,7 @@
 //
 //
 
-use std::{path::Path, time::Duration};
+use std::{ffi::OsString, path::Path, time::Duration};
 
 use fuse_mt::{DirectoryEntry, FileAttr, FileType, FilesystemMT};
 use log::{debug, error, info, warn};
@@ -494,17 +494,6 @@ impl FilesystemMT for FlusterFS {
         // Also in theory, we should be checking if anyone is reading this item and if they are, return busy.
         // but there isnt any infra for that yet, and with the one year timeouts, you would have to wait a while.
         // fun. we will ignore it until something explodes.
-
-        // TODO: NEWNAME IS NOT SET
-        // TODO: NEWNAME IS NOT SET
-        // TODO: NEWNAME IS NOT SET
-        // TODO: NEWNAME IS NOT SET
-        // TODO: NEWNAME IS NOT SET
-        // TODO: NEWNAME IS NOT SET
-        // TODO: NEWNAME IS NOT SET
-        // TODO: NEWNAME IS NOT SET
-        // TODO: NEWNAME IS NOT SET
-        
 
 
 
@@ -1003,7 +992,7 @@ impl FilesystemMT for FlusterFS {
 
         // open() always returns a brand new file handle, regardless if that file was
         // already open somewhere else.
-        let handle: FileHandle = FileHandle {
+        let mut handle: FileHandle = FileHandle {
             path: path.into(),
             flags: converted_flag,
         };
@@ -1015,6 +1004,13 @@ impl FilesystemMT for FlusterFS {
             warn!("File name is too long.");
             // File name was too long.
             return Err(FILE_NAME_TOO_LONG)
+        }
+
+        // If this is the dot directory, we need to go up a level to read ourselves.
+        if handle.name() == "." {
+            // Go up a path.
+            // If this returns none, all is well
+            handle.path = handle.path.parent().unwrap_or(Path::new("")).into();
         }
 
         // Load in info about where the file should be.
@@ -1227,12 +1223,11 @@ impl FilesystemMT for FlusterFS {
         let dir_block = dir_item.get_directory_block()?;
 
         // List the files off
-        // List the files off
         debug!("Listing items...");
         let items = dir_block.list()?;
         
         // Now pull out the names and types
-        let listed_items: Vec<DirectoryEntry> = items.iter().map(|item| {
+        let mut listed_items: Vec<DirectoryEntry> = items.iter().map(|item| {
             let kind = if item.flags.contains(DirectoryFlags::IsDirectory) {
                 FileType::Directory
             } else {
@@ -1244,6 +1239,16 @@ impl FilesystemMT for FlusterFS {
                 kind,
             }
         }).collect();
+
+        // Now add the unix `.` item.
+        listed_items.push(
+            DirectoryEntry {
+                name: std::ffi::OsStr::new(".").into(),
+                kind: FileType::Directory,
+            }
+        );
+
+
         
         // All done!
         debug!("Done. Directory contained `{}` items.", listed_items.len());
