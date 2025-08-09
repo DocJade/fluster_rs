@@ -774,9 +774,14 @@ impl FilesystemMT for FlusterFS {
                 // We are not trying to overwrite a pre-existing file, this makes our lives easier.
                 debug!("Destination item does not exist yet. We will create it.");
 
+                // We must give it the new name first:
+                let mut renamed_source_item = source_item;
+                renamed_source_item.name = destination_item_name.clone();
+                renamed_source_item.name_length = destination_item_name.len() as u8; // Already checked name length.
+
                 // Put the file into the destination
                 debug!("Adding source file to destination directory...");
-                match destination_parent_dir.add_item(&source_item) {
+                match destination_parent_dir.add_item(&renamed_source_item) {
                     Ok(_) => {
                         // That worked
                     },
