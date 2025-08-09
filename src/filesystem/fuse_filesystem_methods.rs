@@ -8,7 +8,7 @@
 //
 //
 
-use std::{ffi::OsString, path::Path, time::Duration};
+use std::{path::Path, time::Duration};
 
 use fuse_mt::{DirectoryEntry, FileAttr, FileType, FilesystemMT};
 use log::{debug, error, info, warn};
@@ -625,7 +625,7 @@ impl FilesystemMT for FlusterFS {
 
             debug!("Checking if destination file already existed...");
             // Check if the destination file already exists, that will change our behavior on failure.
-            if let Some(_) = maybe_destination_directory_item {
+            if maybe_destination_directory_item.is_some() {
                 // Destination item exists, we will be overwriting this, but we will hold onto it just in case.
                 // In theory we should try to put this back if the rename fails.
 
@@ -797,7 +797,7 @@ impl FilesystemMT for FlusterFS {
             }
             // All done.
             debug!("File moved successfully.");
-            return Ok(());
+            Ok(())
         } else {
             //
             // Directory movement.
@@ -958,7 +958,7 @@ impl FilesystemMT for FlusterFS {
 
             // All done!
             debug!("Rename finished, directories renamed/moved.");
-            return Ok(());
+            Ok(())
         }
         // this comment is unreachable, all cases are covered.
     }
@@ -1094,26 +1094,188 @@ impl FilesystemMT for FlusterFS {
     fn read(
         &self,
         _req: fuse_mt::RequestInfo,
-        _path: &std::path::Path,
-        _fh: u64,
-        _offset: u64,
-        _size: u32,
+        path: &std::path::Path,
+        fh: u64,
+        offset: u64,
+        size: u32,
         callback: impl FnOnce(fuse_mt::ResultSlice<'_>) -> fuse_mt::CallbackResult,
     ) -> fuse_mt::CallbackResult {
-        callback(Err(UNIMPLEMENTED))
+        debug!("Reading `{}` bytes from file `{}`", size, path.display());
+
+        // Open the file handle
+        let got_handle = FileHandle::read(fh);
+
+        // Still not sure if we need to check this, but whatever.
+        if got_handle.path != path.into() {
+            // They aren't the same? not sure what to do with that
+            error!("readdir() tried to read a path, but provided a handle to a different path.");
+            error!("fh: `{}` | path: `{}`", got_handle.path.display(), path.display());
+            error!("Not sure what to do here, giving up.");
+            return callback(Err(GENERIC_FAILURE));
+        }
+
+        // Make sure this is a file
+        if !got_handle.is_file() {
+            // Can't read a directory!
+            warn!("Tried to read a directory as a file. Ignoring...");
+            return callback(Err(IS_A_DIRECTORY));
+        }
+
+        // Get the item
+        let named = got_handle.get_named_item();
+
+        // Try to find it.
+        // Cant use the `?` operator in here due to the callback, annoying!
+        let parent: DirectoryBlock = match DirectoryBlock::try_find_directory(got_handle.path.parent()) {
+            Ok(ok) => match ok {
+                Some(found) => found,
+                None => {
+                    // No such parent, therefore no such file.
+                    debug!("No parent for file, returning...");
+                    return callback(Err(NO_SUCH_ITEM))
+                },
+            },
+            Err(error) => {
+                // Lower level error
+                return callback(Err(error.into()))
+            },
+        };
+        
+        // Is the file there?
+        let file = match parent.find_item(&named) {
+            Ok(ok) => match ok {
+                Some(exists) => exists,
+                None => {
+                    // No such file.
+                    debug!("No such file, returning...");
+                    return callback(Err(NO_SUCH_ITEM))
+                },
+            },
+            Err(error) => {
+                // Lower level error
+                warn!("Failed while finding item! Giving up...");
+                return callback(Err(error.into()))
+            },
+        };
+
+        // Found a file!
+        // We need to bound our read by the size of the file, since the read() filesystem call can
+        // try to read past the end.
+        let file_size = match file.get_size() {
+            Ok(ok) => ok,
+            Err(error) => {
+                // Lower level error
+                warn!("Failed to get size of file! Giving up...");
+                return callback(Err(error.into()))
+            },
+        };
+
+        // Subtract the offset to idk man why am i explaining this im sure you understand.
+        // Reads are limited to 4GB long, which should be way above our max read size anyways.
+        let bounded_read_length:u32 = std::cmp::min(size as u64, file_size - offset).try_into().expect("Reads should not be >4GB.");
+
+        // Do the read.
+        // This vec might be HUGE, this is why we need to limit the read size on the filesystem.
+        debug!("Starting read...");
+        let read_buffer: Vec<u8> = match file.read_file(offset, bounded_read_length) {
+            Ok(ok) => ok,
+            Err(error) => {
+                // Lower level error
+                warn!("Failed while reading the file! Giving up...");
+                return callback(Err(error.into()))
+            },
+        };
+        debug!("Read finished.");
+
+        // All done!
+        callback(Ok(&read_buffer))
     }
 
     // Write data to a file using a file handle.
     fn write(
         &self,
         _req: fuse_mt::RequestInfo,
-        _path: &std::path::Path,
-        _fh: u64,
-        _offset: u64,
-        _data: Vec<u8>,
-        _flags: u32,
+        path: &std::path::Path,
+        fh: u64,
+        offset: u64,
+        data: Vec<u8>,
+        flags: u32,
     ) -> fuse_mt::ResultWrite {
-        Err(UNIMPLEMENTED)
+        debug!("Writing `{}` bytes to file `{}`...", data.len(), path.display());
+
+        // Open the file handle
+        let got_handle = FileHandle::read(fh);
+
+        // Still not sure if we need to check this, but whatever.
+        if got_handle.path != path.into() {
+            // They aren't the same? not sure what to do with that
+            error!("readdir() tried to read a path, but provided a handle to a different path.");
+            error!("fh: `{}` | path: `{}`", got_handle.path.display(), path.display());
+            error!("Not sure what to do here, giving up.");
+            return Err(GENERIC_FAILURE);
+        }
+
+        // Make sure this is a file
+        if !got_handle.is_file() {
+            // Can't read a directory!
+            warn!("Tried to read a directory as a file. Ignoring...");
+            return Err(INVALID_ARGUMENT); // write() man page
+        }
+
+        // Get the item
+        let named = got_handle.get_named_item();
+
+        // Try to find it.
+
+        // Parent
+        let parent = if let Some(found) = DirectoryBlock::try_find_directory(got_handle.path.parent())? {
+            // Good
+            found
+        } else {
+            // No such parent.
+            debug!("No parent for file, returning...");
+            return Err(NO_SUCH_ITEM)
+        };
+
+        // File
+        let file = if let Some(found) = parent.find_item(&named)? {
+            // Found it!
+            found
+        } else {
+            // File is not there.
+            debug!("No such file, returning...");
+            return Err(NO_SUCH_ITEM)
+        };
+
+        
+        // man page:
+        // If count is zero and fd refers to a regular file, then write() may
+        // return a failure status if one of the errors below is detected.
+        // If no errors are detected, or error detection is not performed, 0
+        // is returned without causing any other effect.  If count is zero
+        // and fd refers to a file other than a regular file, the results are
+        // not specified.
+        //
+        // So if we want to write zero bytes, do nothing
+        if data.is_empty() {
+            // uh ok then
+            debug!("Caller wanted to write 0 bytes. Skipping write.");
+            return Ok(0);
+        }
+
+
+
+
+        // Now write to the file!
+        debug!("Starting write...");
+        let bytes_written = file.write_file(&data, offset)?;
+        debug!("Write completed.");
+
+        // Make sure it all got written
+        assert_eq!(bytes_written, data.len().try_into().expect("Should be less than a u32"));
+
+        // Return the number of bytes written.
+        Ok(bytes_written)
     }
 
     // Flushing does not do anything, since we manually handle our caching.

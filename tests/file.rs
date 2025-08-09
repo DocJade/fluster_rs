@@ -1,7 +1,6 @@
-use std::{error::Error, ffi::OsStr, thread, time::Duration};
+use std::{thread, time::Duration};
 
-use log::{error, info};
-use rand::{random, rng, rngs::ThreadRng, Rng};
+use rand::{rng, rngs::ThreadRng, Rng, RngCore};
 // We want to see logs while testing.
 use test_log::test;
 
@@ -69,10 +68,14 @@ fn make_file_large() {
     let mut test_dir = mount_point.path().to_path_buf();
     test_dir.push("test.txt");
 
-    // Make some content
+    // The buffer needs to be big enough to store everything.
+    // Arrays cannot be used here, you will overflow the stack.
+    let data_size =  1024*1024*8;
+    let mut bytes: Vec<u8> = vec![0u8; data_size as usize];
+
+    // Fill-er up!
     let mut random: ThreadRng = rng();
-    let mut bytes: [u8; 1024*1024*8] = [0_u8; 1024*1024*8];
-    random.fill(&mut bytes);
+    random.fill_bytes(&mut bytes);
 
     // wait for it to start...
     thread::sleep(Duration::from_millis(500));
@@ -144,7 +147,7 @@ fn make_and_read_file_small() {
 
 
 #[test]
-// Make and read file, make sure the contents match. (512 bytes)
+// Make and read file, make sure the contents match. (8MB)
 fn make_and_read_file_large() {
     let fs = test_common::start_filesystem();
     let mount_point = test_common::get_actually_temp_dir();
@@ -163,16 +166,20 @@ fn make_and_read_file_large() {
     let mut test_dir = mount_point.path().to_path_buf();
     test_dir.push("test.txt");
 
-    // Make some content
+    // The buffer needs to be big enough to store everything.
+    // Arrays cannot be used here, you will overflow the stack.
+    let data_size =  1024*1024*8;
+    let mut bytes: Vec<u8> = vec![0u8; data_size as usize];
+
+    // Fill-er up!
     let mut random: ThreadRng = rng();
-    let mut bytes: [u8; 1024*1024*8] = [0_u8; 1024*1024*8];
-    random.fill(&mut bytes);
+    random.fill_bytes(&mut bytes);
 
     // wait for it to start...
     thread::sleep(Duration::from_millis(500));
     
     // Make test file
-    let write_result = std::fs::write(&test_dir, bytes);
+    let write_result = std::fs::write(&test_dir, &bytes);
 
     // Now read it back in
     let read_result = std::fs::read(&test_dir);
