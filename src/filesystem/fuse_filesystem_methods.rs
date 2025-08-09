@@ -412,14 +412,14 @@ impl FilesystemMT for FlusterFS {
                 // Directory exists.
 
                 // Make sure this is actually a directory
-                if child_dir.flags.contains(DirectoryFlags::IsDirectory) {
+                if !child_dir.flags.contains(DirectoryFlags::IsDirectory) {
                     // Not a dir
                     debug!("Provided item is not a directory.");
                     return Err(NOT_A_DIRECTORY);
                 }
 
                 // Get the block
-                let mut block_to_delete = child_dir.get_directory_block()?;
+                let block_to_delete = child_dir.get_directory_block()?;
 
                 // Make sure it's empty
                 if !block_to_delete.is_empty()? {
@@ -430,7 +430,7 @@ impl FilesystemMT for FlusterFS {
 
                 // Run the deletion.
                 debug!("Deleting directory...");
-                block_to_delete.delete_directory()?;
+                block_to_delete.delete_self(child_dir)?;
                 debug!("Done.");
                 Ok(())
                 
@@ -631,7 +631,7 @@ impl FilesystemMT for FlusterFS {
 
                 // Since the item exists already, we will extract it. To delete the old file we need to have the file in the block. Which
                 // complicates things a bit. So we pull it out, and when we are ready to delete it, we rename it, put it back in, and delete it.
-                let extracted_old = match destination_parent_dir.extract_item(&NamedItem::Directory(destination_item_name.clone())) {
+                let extracted_old = match destination_parent_dir.find_and_extract_item(&NamedItem::Directory(destination_item_name.clone())) {
                     Ok(ok) => match ok {
                         Some(ok) => ok,
                         None => {
@@ -677,7 +677,7 @@ impl FilesystemMT for FlusterFS {
 
                 // Now go to the parent of the source and tell em to slime tf outta the old item
 
-                match source_parent_dir.extract_item(&NamedItem::File(source_item_name.clone())) {
+                match source_parent_dir.find_and_extract_item(&NamedItem::File(source_item_name.clone())) {
                     Ok(ok) => {
                         match ok {
                             Some(_found) => {
@@ -864,7 +864,7 @@ impl FilesystemMT for FlusterFS {
 
             // Extract, and delete. Extraction cleans up anything this used to point to for us.
             debug!("Extracting destination...");
-            let _extracted_dest = match destination_parent_dir.extract_item(&NamedItem::Directory(destination_item_name.clone())) {
+            let _extracted_dest = match destination_parent_dir.find_and_extract_item(&NamedItem::Directory(destination_item_name.clone())) {
                 Ok(ok) => {
                     // Directory had to've been there, right?
                     if let Some(worked) = ok {
@@ -916,7 +916,7 @@ impl FilesystemMT for FlusterFS {
             
             // Now that the data has been safely pointed at from the new location, we will remove the old reference to it.
             debug!("Removing old source...");
-            let ashes = match source_parent_dir.extract_item(&NamedItem::Directory(source_item_name.clone())) {
+            let ashes = match source_parent_dir.find_and_extract_item(&NamedItem::Directory(source_item_name.clone())) {
                 Ok(ash) => ash,
                 Err(err) => {
                     // Drive level issue.

@@ -3,7 +3,7 @@
 use log::{debug, trace};
 
 use crate::pool::{disk::{
-    drive_struct::{FloppyDriveError, JustDiskType}, generic::{generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO}, standard_disk::block::{
+    drive_struct::{FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO}, standard_disk::block::{
         directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem},
         io::directory::types::NamedItem,
     }
@@ -12,12 +12,10 @@ use crate::pool::{disk::{
 impl DirectoryBlock {
     /// Check if this directory contains an item with the provided name and type.
     /// This checks the entire directory, not just the current block.
+    /// 
     /// Returns Option<DirectoryItem> if it exists.
-    /// You must specify which disk this block came from.
     ///
     /// May swap disks.
-    ///
-    /// Optionally returns to a specified disk when done.
     pub fn find_item(
         &self,
         item_to_find: &NamedItem,
@@ -103,25 +101,134 @@ impl DirectoryBlock {
 
     /// Extracts an item from a directory block, blanking out the space it used to occupy.
     /// 
-    /// Actions are flushed to disk.
+    /// This looks for the item in the entire directory, not just the block this was called on.
+    /// Due to this, we assume this is being called on the head of the DirectoryBlock chain.
+    /// 
+    /// Automatically flushes changes to disk if required.
     /// 
     /// If you just want to get the item for reading or minor modifications, use find_item()
     /// 
-    /// Updates the directory block that was passed in, as contents may have changed.
+    /// Updates the passed in directory block.
     /// 
     /// Returns nothing if the item did not exist.
-    pub(crate) fn extract_item(&mut self, item_to_find: &NamedItem) -> Result<Option<DirectoryItem>, FloppyDriveError> {
+    pub(crate) fn find_and_extract_item(&mut self, item_to_find: &NamedItem) -> Result<Option<DirectoryItem>, FloppyDriveError> {
 
-        // Extract the item, if it came from the last directory block in the chain, make sure that
-        // block is not empty. if it is, remove that block and update previous block.
+        // Go find the item.
 
-        // TODO: If we remove an item and the directory block it was in is now empty, but the
-        // block in front of it has items, update the block before us to point to the block after.
+        // Get the blocks
+        let mut blocks: Vec<DirectoryBlock> = get_blocks(self.block_origin)?;
 
-        // Write back all blocks that have changed.
+        // Find the item, and deduce what block it's in.
+        // Index, the item, maybe pointer to the next block
+        let mut find: Option<(usize, DirectoryItem, Option<DiskPointer>)> = None;
+        for (index, block) in blocks.iter_mut().enumerate() {
+            // Is it in here?
+            if let Some(mut found) = block.block_extract_item(item_to_find)? {
+                // Cool!
+                // We may need to add disk information to this item.
+                if found.0.location.disk.is_none() {
+                    // Need to add the disk.
+                    found.0.location.disk = Some(block.block_origin.disk);
+                }
+                find = Some((index, found.0, found.1));
+                break
+            }
 
-        // This should also remove inodes that pointed at this item.
-        todo!();
+        };
+
+        // Did we find it?
+        if find.is_none() {
+            // No we didn't.
+            return Ok(None);
+        }
+
+        // We found the item!
+        // Discombobulate.
+        let (contained_in, found_item, maybe_pointer) = find.expect("Guard.");
+
+        // If we didn't get a pointer, we are done.
+        let after_this_pointer = if let Some(point) = maybe_pointer {
+            point
+        } else {
+            // No pointer, no cleanup.
+            return Ok(Some(found_item));
+        };
+        
+        // We got a pointer. If we got this item from the first block in the chain (the head) we
+        // don't need to do anything.
+        if contained_in == 0 {
+            // Since this happened on the first block, we need to also update the block we got in to operate on.
+            // Due to DirectoryBlocks not supporting copy/clone, we have to do some funky stuff to get it back out
+            // of the vec.
+            // swap_remove is okay since we wont be touching blocks after this.
+            *self = blocks.swap_remove(0);
+            // No cleanup needed.
+            return Ok(Some(found_item));
+        }
+
+        // The block is now empty, and we need to do something about that.
+
+        // We will update the block in front of us to point at the block after us (if there is one).
+        // In theory this could leave a very sparse directory block if things are removed in ways that leave
+        // a lot of blocks with 1 item in them, but since adding items to directories starts from the front, we will
+        // fill that space back up eventually.
+
+        let previous_block = &mut blocks[contained_in - 1];
+            
+        // Set new destination
+        // If there wasn't a block in front of this, this'll just set it to DiskPointer::new_final_pointer() which is
+        // correct, since this would be the new end.
+
+        previous_block.next_block = after_this_pointer;
+        // Write it
+        let raw_ed = previous_block.to_block();
+        CachedBlockIO::update_block(&raw_ed, JustDiskType::Standard)?;
+
+        // Now delete the block that we emptied by freeing it.
+        let release_me = blocks[contained_in].block_origin;
+        let freed = Pool::free_pool_block_from_disk(&[release_me])?;
+        // this should ALWAYS be 1
+        assert_eq!(freed, 1);
+        
+        // All done!
+        // Update the incoming block head
+        *self = blocks.swap_remove(0);
+        Ok(Some(found_item))
+    }
+
+    /// Extract an item from this directory block, if it exists.
+    /// 
+    /// Will flush self to disk if block is updated.
+    /// 
+    /// If the block is now empty, will also return Some() pointer it's next block, regardless
+    /// if that block exists or not (will return a final pointer on the last block).
+    /// 
+    /// Not a public function, use `find_and_extract_item`.
+    fn block_extract_item(&mut self, item_to_find: &NamedItem) -> Result<Option<(DirectoryItem, Option<DiskPointer>)>, FloppyDriveError> {
+        // Do we have the requested item?
+        if let Some(found) = item_to_find.find_in(&self.directory_items) {
+            // Found the item!
+            // Remove it from ourselves.
+            // Only retain items that _dont_ match.
+            self.directory_items.retain_mut(|item| *item != found);
+            // Now flush ourselves to disk
+            let raw_block = self.to_block();
+            CachedBlockIO::update_block(&raw_block, JustDiskType::Standard)?;
+
+            // If we are now empty, also return a pointer to the next block
+            let maybe_pointer: Option<DiskPointer> = if self.get_items().is_empty() {
+                // Yep
+                Some(self.next_block)
+            } else {
+                None
+            };
+
+            // Now return the item, and the possible pointer to the next block
+            return Ok(Some((found, maybe_pointer)))
+        }
+
+        // Not in here.
+        return Ok(None);
     }
 }
 
@@ -133,59 +240,69 @@ fn go_list_directory(
     debug!("Listing a directory...");
     // We need to iterate over the entire directory and get every single item.
     // We assume we are handed the first directory in the chain.
-    let mut items_found: Vec<DirectoryItem> = Vec::new();
-    let mut current_dir_block: &DirectoryBlock = block;
-    // To keep track of what disk an inode is from
-    let mut current_disk: u16 = block.block_origin.disk;
 
-    // Have to hold the next block out here or it will get dropped.
-    let mut next_dir_block: DirectoryBlock;
+    // Get the blocks
+    let blocks = get_blocks(block.block_origin)?;
 
-    // Big 'ol loop, we will break when we hit the end of the directory chain.
-    loop {
-        // Add all of the contents of the current directory to the total
-        // But we will add the disk location data to these structs, it is the responsibility of the caller
-        // to remove these disk locations if they no longer need them.
-        // Otherwise if we didn't add the disk location for every item, it would be impossible
-        // to know where a local pointer goes.
-        let mut new_items = current_dir_block.get_items();
-        for item in &mut new_items {
-            // If the disk location is already there, we wont do anything.
+    // Get the items out of them
+    let mut items_found: Vec<DirectoryItem> = blocks.into_iter().flat_map(move |block| {
+        block.get_items().into_iter().map(move |mut item| {
             if item.location.disk.is_none() {
-                // There was no disk information, it must be local.
-                item.location.disk = Some(current_disk)
+                // Add disk numbers if they do not exist, since callers
+                // expect to have disk pointers no matter what.
+                item.location.disk = Some(block.block_origin.disk);
             }
-            // Otherwise there was already a disk being pointed to.
-            // Overwriting it here would corrupt it.
-        }
+            item
+        }).collect::<Vec<DirectoryItem>>()
+    }).collect();
 
-        items_found.extend_from_slice(&new_items);
-
-        // I want to get off Mr. Bone's wild ride
-        if current_dir_block.next_block.no_destination() {
-            // We're done!
-            trace!("Done getting DirectoryItem(s).");
-            break;
-        }
-
-        trace!("Need to continue on the next block.");
-        // Time to load in the next block.
-        let next_block = current_dir_block.next_block;
-
-        // Update what disk we're on
-        current_disk = next_block.disk;
-
-        let next_block_reader = CachedBlockIO::read_block(next_block, JustDiskType::Standard)?;
-        next_dir_block = DirectoryBlock::from_block(&next_block_reader);
-        current_dir_block = &next_dir_block;
-
-        // Onwards!
-        continue;
-    }
 
     // Sort all of the items by name, not sure what internal order it is, but it will be
     // sorted by whatever comparison function String uses.
     items_found.sort_by_key(|item| item.name.to_lowercase());
 
     Ok(items_found)
+}
+
+
+/// Starting on the head block of a DirectoryBlock, return every block in the chain, in order.
+/// 
+/// Does not take in a directory block, since we would need to consume it.
+/// 
+/// Includes the head block.
+fn get_blocks(start_block_location: DiskPointer) -> Result<Vec<DirectoryBlock>, FloppyDriveError> {
+    // Needing to consume the incoming block would be stinky. But since cloning is not allowed, and we
+    // need to return the head block, we have to go get it ourselves.
+
+    // This must be a valid block
+    assert!(!start_block_location.no_destination());
+    
+    let raw_read: RawBlock = CachedBlockIO::read_block(start_block_location, JustDiskType::Standard)?;
+    let start_block: DirectoryBlock = DirectoryBlock::from_block(&raw_read);
+
+    // We assume we are handed the first directory in the chain.
+    let mut blocks: Vec<DirectoryBlock> = Vec::new();
+    let mut current_dir_block: DirectoryBlock = start_block;
+
+    // Big 'ol loop, we will break when we hit the end of the directory chain.
+    loop {
+        // Remember where the next block is
+        let next_block: DiskPointer = current_dir_block.next_block;
+        // Add the current block to the Vec
+        blocks.push(current_dir_block);
+
+        // I want to get off Mr. Bone's wild ride
+        if next_block.no_destination() {
+            // We're done!
+            break;
+        }
+        
+        // Load in the next block.
+        let next_block_reader = CachedBlockIO::read_block(next_block, JustDiskType::Standard)?;
+        current_dir_block = DirectoryBlock::from_block(&next_block_reader);
+
+        // Onwards!
+        continue;
+    }
+    Ok(blocks)
 }

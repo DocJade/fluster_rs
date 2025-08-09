@@ -72,6 +72,8 @@ impl InodeBlock {
     /// Removes inodes based off of the offset into the block.
     /// Updates the byte usage counter.
     /// This does not remove the data the inode points to. The caller is responsible for propagation.
+    /// 
+    /// Does not flush to disk.
     ///
     /// Returns nothing.
     pub fn try_remove_inode(&mut self, inode_offset: u16) -> Result<(), InodeBlockError> {
@@ -524,6 +526,13 @@ impl InodeLocation {
             disk,
             block,
             offset,
+        }
+    }
+    /// Extract where the inode block is
+    pub fn to_disk_pointer(&self) -> DiskPointer {
+        DiskPointer {
+            disk: self.disk.expect("Read inodes should have a disk set."),
+            block: self.block,
         }
     }
 }

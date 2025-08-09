@@ -374,7 +374,7 @@ impl DirectoryItem {
     /// Turn a directory type DirectoryItem into a DirectoryBlock.
     /// 
     /// Panics if fed a file.
-    pub(crate) fn get_directory_block(self) -> Result<DirectoryBlock, FloppyDriveError> {
+    pub(crate) fn get_directory_block(&self) -> Result<DirectoryBlock, FloppyDriveError> {
         // Grab the inode to work with
         let inode: Inode = self.get_inode()?;
 

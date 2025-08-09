@@ -25,8 +25,8 @@ impl InodeFile {
     }
 }
 
-// Get a file
 impl DirectoryItem {
+    /// Retrieve the inode that refers to this block.
     pub fn get_inode(&self) -> Result<Inode, FloppyDriveError> {
         // read in that inode block
         let pointer: DiskPointer = DiskPointer {

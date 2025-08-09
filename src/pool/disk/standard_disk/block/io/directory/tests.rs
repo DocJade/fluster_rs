@@ -28,8 +28,44 @@ fn add_directory() {
     let _fs = get_filesystem();
     // Now try adding a directory to the pool
     let mut block = Pool::get_root_directory().unwrap();
-    let _ = block.make_directory("test".to_string(),).unwrap();
+    let _ = block.make_directory("test".to_string()).unwrap();
     // We dont even check if its there, we just want to know if writing it failed.
+}
+
+#[test]
+fn add_and_delete_directory() {
+    let _fs = get_filesystem();
+    let mut block = Pool::get_root_directory().unwrap();
+    let _ = block.make_directory("test".to_string()).unwrap();
+    
+    // Now delete that directory
+
+    // Extract it
+    let test_dir_item = block.find_and_extract_item(&NamedItem::Directory("test".to_string())).unwrap().unwrap();
+
+    // Call delete on it
+    test_dir_item.get_directory_block().unwrap().delete_self(test_dir_item).unwrap();
+}
+
+#[test]
+// Make sure directories shrink when items are removed.
+fn deletion_shrinks() {
+    let _fs = get_filesystem();
+    let mut block = Pool::get_root_directory().unwrap();
+    
+    // make a bunch of directories in here with large names to quickly expand the block
+    for i in 0..200 {
+        let _ = block.make_directory(format!("test_this_is_a_long_name_to_use_more_space_lol_{i}")).unwrap();
+    }
+    
+    // Remove all of them.
+    for i in 0..200 {
+        let delete_me = block.find_and_extract_item(&NamedItem::Directory(format!("test_this_is_a_long_name_to_use_more_space_lol_{i}"))).unwrap().unwrap();
+        delete_me.get_directory_block().unwrap().delete_self(delete_me).unwrap()
+    }
+    
+    // Now make sure the empty block is only 1 block large.
+    assert!(block.next_block.no_destination());
 }
 
 #[test]

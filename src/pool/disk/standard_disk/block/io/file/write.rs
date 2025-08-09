@@ -85,7 +85,7 @@ impl DirectoryBlock {
         
         // Extract the item
         let extracted_item: DirectoryItem;
-        if let Some(exists) = self.extract_item(&file)? {
+        if let Some(exists) = self.find_and_extract_item(&file)? {
             // Item was there
             extracted_item = exists
         } else {
@@ -251,17 +251,11 @@ fn go_write(inode_file: &mut InodeFile, bytes: &[u8], seek_point: u64) -> Result
     }
 
     // Done writing bytes!
-    // Update the file size with the new bytes we wrote.
-
-    // Only if we wrote to the end.
-    let before = inode_file.get_size();
-    if before < seek_point {
-        // Seek point is after the old size, we wrote to the end.
-        inode_file.set_size(before + bytes_written as u64);
-    } else {
-        // Seek point was inside of the file, no change.
+    // Update the file size, only if we wrote past the end.
+    let write_end = seek_point + bytes_written as u64;
+    if write_end > inode_file.get_size() {
+        inode_file.set_size(write_end);
     }
-
 
     // Return how many bytes we wrote!
     Ok(bytes_written as u32)

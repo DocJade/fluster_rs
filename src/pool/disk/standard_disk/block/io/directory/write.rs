@@ -9,13 +9,11 @@ use crate::pool::{
             block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer,
             io::cache::cache_io::CachedBlockIO,
         },
-        standard_disk::{
-            block::{
+        standard_disk::block::{
                 directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem},
-                inode::inode_struct::{Inode, InodeDirectory, InodeFlags, InodeTimestamp},
+                inode::inode_struct::{Inode, InodeBlock, InodeDirectory, InodeFlags, InodeTimestamp},
                 io::directory::types::NamedItem,
             },
-        },
     },
     pool_actions::pool_struct::Pool,
 };
@@ -36,9 +34,6 @@ impl DirectoryBlock {
     /// Creates a new directory block, and adds its location to the input block.
     /// Blocks are created and updated as needed.
     ///
-    /// Requires a disk pointer back to the origin of Directory Block
-    /// this was called on.
-    ///
     /// Updates the directory block that was passed in.
     ///
     /// The name of the new directory must be less than 256 characters long.
@@ -55,22 +50,59 @@ impl DirectoryBlock {
     /// Remove a the given directory. Removes all blocks that contained information about this directory, and updates
     /// all other blocks to remove references to this directory.
     /// 
-    /// Caller must take care in ensuring that if this directory was pointed to from another directory (ie, was a folder in another folder)
-    /// that those references are cleaned up. (Done by removing the DirectoryItem that pointed to this.)
+    /// You must also pass in the DirectoryItem that refers to this directory. You should extract it from the parent
+    /// directory.
     /// 
     /// The directory block must be empty of all items.
     /// 
-    /// Updates the incoming directory block, since data may have changed.
+    /// Consumes the incoming block, since it will no longer exist.
     /// 
     /// May swap disks.
     /// 
     /// Returns nothing on success.
-    pub fn delete_directory(&mut self) -> Result<(), FloppyDriveError> {
+    pub fn delete_self(self, self_item: DirectoryItem) -> Result<(), FloppyDriveError> {
+        // In theory, as long as the caller used an extracted directory item to call
+        // this method, even if this call fails, all references to it will now be gone on
+        // a directory level. So even if the inode or the block wasn't freed, its still
+        // "deleted", but just leaked its blocks. Which is unfortunate, but fine.
+
+
         // Make sure the directory is empty.
-        // Find all blocks that this directory currently references.
-        // Remove those blocks.
-        // Remove inode that referred to this directory.
-        todo!();
+        // Caller must check.
+        if !self.list()?.is_empty() {
+            panic!("Cannot delete an non-empty directory!");
+        }
+
+        // Directories should shrink when items are removed. An empty
+        // directory should only be 1 block in size.
+        // Thus, we only have to deallocate ourselves.
+        
+        // Remove our inode.
+        // We need to find it manually, since we will be updating the
+        // inode block.
+        let read: RawBlock = CachedBlockIO::read_block(self_item.location.to_disk_pointer(), JustDiskType::Standard)?;
+        let mut inode_block: InodeBlock = InodeBlock::from_block(&read);
+
+        if let Err(error) = inode_block.try_remove_inode(self_item.location.offset) {
+            // Not good. Something was wrong with the inode pointer.
+            // This is a very very very bad thing.
+            // The inode blocks may be corrupted.
+            // We cannot recover.
+            panic!("Tried to remove an invalid inode. Unrecoverable. {error:#?}")
+        }
+
+        // Write back the updated inode block
+        CachedBlockIO::update_block(&inode_block.to_block(), JustDiskType::Standard)?;
+
+        // Now we can free the block that the directory occupied.
+        let freed = Pool::free_pool_block_from_disk(&[self.block_origin])?;
+        // This should obviously be one.
+        assert_eq!(freed, 1);
+
+        // All done, directory deleted.
+        drop(self); // So long
+        drop(self_item); // Space Cowboy
+        Ok(())
     }
 }
 

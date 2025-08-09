@@ -26,7 +26,7 @@ fn make_file_small() {
 
     // Test dir
     let mut test_dir = mount_point.path().to_path_buf();
-    test_dir.push("test");
+    test_dir.push("test.txt");
 
     // Make some content
     let mut random: ThreadRng = rng();
@@ -44,7 +44,7 @@ fn make_file_small() {
     let unmount_result = mount_thread.join();
     unmount_result.unwrap().unwrap(); // Unmounting the fs should not fail.
 
-    // Make sure it was deleted
+    // Make sure it was written
     assert!(write_result.is_ok());
 }
 
@@ -67,7 +67,7 @@ fn make_file_large() {
 
     // Test dir
     let mut test_dir = mount_point.path().to_path_buf();
-    test_dir.push("test");
+    test_dir.push("test.txt");
 
     // Make some content
     let mut random: ThreadRng = rng();
@@ -85,7 +85,7 @@ fn make_file_large() {
     let unmount_result = mount_thread.join();
     unmount_result.unwrap().unwrap(); // Unmounting the fs should not fail.
 
-    // Make sure it was deleted
+    // Make sure it was written
     assert!(write_result.is_ok());
 }
 
@@ -107,7 +107,7 @@ fn make_and_read_file_small() {
 
     // Test dir
     let mut test_dir = mount_point.path().to_path_buf();
-    test_dir.push("test");
+    test_dir.push("test.txt");
 
     // Make some content
     let mut random: ThreadRng = rng();
@@ -161,7 +161,7 @@ fn make_and_read_file_large() {
 
     // Test dir
     let mut test_dir = mount_point.path().to_path_buf();
-    test_dir.push("test");
+    test_dir.push("test.txt");
 
     // Make some content
     let mut random: ThreadRng = rng();
@@ -213,9 +213,9 @@ fn move_file() {
     });
 
     let mut test_dir = mount_point.path().to_path_buf();
-    test_dir.push("test");
+    test_dir.push("test.txt");
     let mut moved_dir = mount_point.path().to_path_buf();
-    moved_dir.push("moved");
+    moved_dir.push("moved.txt");
     
     // wait for it to start...
     thread::sleep(Duration::from_millis(500));
@@ -258,7 +258,7 @@ fn delete_file() {
     });
 
     let mut test_file = mount_point.path().to_path_buf();
-    test_file.push("test");
+    test_file.push("test.txt");
     
     // wait for it to start...
     thread::sleep(Duration::from_millis(500));

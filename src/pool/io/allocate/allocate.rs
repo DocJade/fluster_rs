@@ -6,8 +6,7 @@ use crate::pool::{
     disk::{
         drive_struct::{DiskType, FloppyDrive, FloppyDriveError, JustDiskType},
         generic::{
-            block::{allocate::block_allocation::BlockAllocation, block_structs::RawBlock, crc::add_crc_to_block},
-            generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO,
+            block::{allocate::block_allocation::BlockAllocation, block_structs::RawBlock, crc::add_crc_to_block}, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO
         },
         standard_disk::standard_disk_struct::StandardDisk,
     },
@@ -68,6 +67,9 @@ impl Pool {
     }
 
     /// Frees a block from a disk in the pool.
+    /// 
+    /// It's not required, but you should sort the order of the blocks to
+    /// reduce drive seeking.
     /// 
     /// All blocks must come from same disk.
     /// 
@@ -264,31 +266,44 @@ fn write_empty_crc(blocks: &[u16], disk: u16) -> Result<(), FloppyDriveError> {
 }
 
 fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, FloppyDriveError> {
+    // We assume the blocks are pre-sorted to reduce disk seeking.
+
     // Make sure all of the blocks came from the same disk
     let starter: DiskPointer = *blocks.first().expect("Why are we getting 0 blocks?");
     let mut extracted_blocks: Vec<u16> = Vec::new();
     for block in blocks {
-        // Make sure all blocks are from the same disk.
+        // Are the disk numbers the same?
         assert_eq!(starter.disk, block.disk);
+        // Also hold onto the block number, need it for disk call.
         extracted_blocks.push(block.block);
     }
 
-    // Remove the blocks from the cache if they exist
-    todo!();
+    // Remove the blocks from the cache if they exist.
+    for block in blocks {
+        CachedBlockIO::remove_block(block);
+    }
 
-    // Go zero out the blocks on the disk
-    todo!();
+    // Go zero out the blocks on the disk, just to be safe.
+    // We will bypass the cache.
 
-    // Now go to that disk and free the blocks
     let mut disk: StandardDisk = match FloppyDrive::open(starter.disk)? {
         DiskType::Standard(standard_disk) => standard_disk,
         _ => unreachable!("Block allocations must be on standard disks!"),
     };
-    
+
+    for block in blocks {
+        let empty: RawBlock = RawBlock {
+            block_origin: *block,
+            data: [0_u8; 512],
+        };
+        disk.unchecked_write_block(&empty)?;
+    }
+
+    // Now go to and free the blocks from the allocation table.
     let blocks_freed = disk.free_blocks(&extracted_blocks)?;
 
-    // If the current disk in the pool is higher than the blocks we just freed, we need to move back
-    // the search start for finding new free blocks.
+    // If the current disk in the pool marked with free blocks is higher than the blocks we just freed,
+    // we need to move back the search start for finding new free blocks.
 
     let probable_disk = GLOBAL_POOL
         .get()
@@ -308,7 +323,6 @@ fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, FloppyDriveEr
             .header
             .disk_with_next_free_block = disk.number;
     }
-
     // Return the number of blocks freed.
     Ok(blocks_freed)
     
