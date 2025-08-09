@@ -78,6 +78,7 @@ fn main() {
         OsStr::new("-oexec"), // Files are executable
         OsStr::new("-osync"), // No async.
         OsStr::new("-odirsync"), // No async
+        OsStr::new("-oallow_other"), // Allow other users to open the mount point (ie windows outisde of WSL)
         OsStr::new("-ofsname=fluster"), // Set the name of the fuse mount
     ];
 

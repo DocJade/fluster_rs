@@ -1173,6 +1173,10 @@ impl FilesystemMT for FlusterFS {
         // Subtract the offset to idk man why am i explaining this im sure you understand.
         // Reads are limited to 4GB long, which should be way above our max read size anyways.
         let bounded_read_length:u32 = std::cmp::min(size as u64, file_size - offset).try_into().expect("Reads should not be >4GB.");
+        if bounded_read_length != size {
+            // size did change.
+            debug!("Read was too large, truncated to `{bounded_read_length}` bytes.");
+        }
 
         // Do the read.
         // This vec might be HUGE, this is why we need to limit the read size on the filesystem.

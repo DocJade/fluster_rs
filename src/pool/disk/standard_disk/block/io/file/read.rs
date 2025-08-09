@@ -153,6 +153,7 @@ fn go_to_extents(
     // We will not sort this vec, since the order matters. The blocks are added to extend the file always at the end.
     // TODO: Assert that this is true ^
 
+    debug!("Extents retrieved.");
     Ok(extents_found)
 }
 

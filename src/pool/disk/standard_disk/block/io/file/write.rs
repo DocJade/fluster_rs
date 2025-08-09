@@ -637,6 +637,13 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
     let mut inode_with_file: Inode = inode_block.try_read_inode(location.offset).expect("Caller guarantee.");
     let mut file: InodeFile = inode_with_file.extract_file().expect("Caller guarantee.");
 
+
+    //TODO: The used blocks logic is wrong, needs to get the pointers to the extents, then
+    // get the blocks in those extents.
+
+    todo!();
+
+
     // Get all of the blocks that the file is stored in.
     let mut used_blocks: Vec<DiskPointer> = file.to_pointers()?;
 
@@ -729,8 +736,9 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
     // Cast to usize is fine since its small.
     let added_zeros: Vec<u8> = vec![0; 512 - DATA_BLOCK_OVERHEAD as usize - new_final_block_byte_index as usize];
 
-    // Go write that to update the new final block;
-    let offset = new_size - added_zeros.len() as u64;
+    // Go write that to update the new final block.
+    // This can attempt to go before the start of the file, so we must do a saturating subtraction.
+    let offset = new_size.saturating_sub(added_zeros.len() as u64);
     let _ = item.write_file(&added_zeros, offset)?;
 
     // Now we need to sneak in and remove the pointer to the next block.
@@ -739,7 +747,7 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
     block_to_update.next_block = DiskPointer::new_final_pointer();
     
     // Write it back
-    CachedBlockIO::write_block(&block_to_update.to_block(), JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&block_to_update.to_block(), JustDiskType::Standard)?;
 
     // Now we will go free all of the unused blocks.
     // Assuming there are any blocks past that point.

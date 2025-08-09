@@ -290,3 +290,176 @@ fn delete_file() {
     assert!(delete_result.is_ok());
     assert!(!removed);
 }
+
+
+#[test]
+// Make and read file, make sure the contents match, then do it again to the same file. (512 bytes, 1MB)
+fn update_file_small() {
+    let fs = test_common::start_filesystem();
+    let mount_point = test_common::get_actually_temp_dir();
+    let thread_mount_path = mount_point.path().to_path_buf();
+    let mount_options = test_mount_options();
+    
+    // fs needs to be mounted in another thread bc it blocks
+    let mount_thread = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(100)); // Pause to let the debugger see the thread
+        // If we dont pause, breakpoints dont work.
+        // This blocks until the unmount happens.
+        fuse_mt::mount(fs, &thread_mount_path, &mount_options)
+    });
+
+    // Test dir
+    let mut test_dir = mount_point.path().to_path_buf();
+    test_dir.push("test.txt");
+
+    // The buffer needs to be big enough to store everything.
+    // Arrays cannot be used here, you will overflow the stack.
+    let data_size =  512;
+    let mut bytes: Vec<u8> = vec![0u8; data_size as usize];
+
+    // Fill-er up!
+    let mut random: ThreadRng = rng();
+    random.fill_bytes(&mut bytes);
+
+    // wait for it to start...
+    thread::sleep(Duration::from_millis(500));
+    
+    // Make test file
+    let write_result = std::fs::write(&test_dir, &bytes);
+
+    // Now read it back in
+    let read_result = std::fs::read(&test_dir);
+
+    // Does it match?
+    let first_matched: bool;
+    if let Ok(ref read) = read_result {
+        first_matched = *read == bytes.to_vec();
+    } else {
+        first_matched = false;
+    }
+    
+
+    //
+    // Now we will update the file
+    //
+
+    // New bytes will also be twice as large
+
+    let mut new_bytes: Vec<u8> = vec![0u8; data_size as usize * 2];
+
+    // Fill-er up!
+    random.fill_bytes(&mut new_bytes);
+
+    // write again
+    let second_write_result = std::fs::write(&test_dir, &new_bytes);
+
+    // read again
+    let second_read_result = std::fs::read(&test_dir);
+
+    let second_matched: bool;
+    if let Ok(ref read) = second_read_result {
+        second_matched = *read == new_bytes.to_vec();
+    } else {
+        second_matched = false;
+    }
+
+    // cleanup
+    test_common::unmount(mount_point.path().to_path_buf());
+    let unmount_result = mount_thread.join();
+    unmount_result.unwrap().unwrap(); // Unmounting the fs should not fail.
+
+    // Did all that work?
+    assert!(write_result.is_ok());
+    assert!(read_result.is_ok());
+    assert!(first_matched);
+    assert!(second_write_result.is_ok());
+    assert!(second_read_result.is_ok());
+    assert_eq!(new_bytes.to_vec(), second_read_result.unwrap());
+    assert!(second_matched);
+}
+
+
+#[test]
+// Make and read file, make sure the contents match, then do it again to the same file. (8MB, 16MB)
+fn update_file_large() {
+    let fs = test_common::start_filesystem();
+    let mount_point = test_common::get_actually_temp_dir();
+    let thread_mount_path = mount_point.path().to_path_buf();
+    let mount_options = test_mount_options();
+    
+    // fs needs to be mounted in another thread bc it blocks
+    let mount_thread = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(100)); // Pause to let the debugger see the thread
+        // If we dont pause, breakpoints dont work.
+        // This blocks until the unmount happens.
+        fuse_mt::mount(fs, &thread_mount_path, &mount_options)
+    });
+
+    // Test dir
+    let mut test_dir = mount_point.path().to_path_buf();
+    test_dir.push("test.txt");
+
+    // The buffer needs to be big enough to store everything.
+    // Arrays cannot be used here, you will overflow the stack.
+    let data_size =  1024*1024*8;
+    let mut bytes: Vec<u8> = vec![0u8; data_size as usize];
+
+    // Fill-er up!
+    let mut random: ThreadRng = rng();
+    random.fill_bytes(&mut bytes);
+
+    // wait for it to start...
+    thread::sleep(Duration::from_millis(500));
+    
+    // Make test file
+    let write_result = std::fs::write(&test_dir, &bytes);
+
+    // Now read it back in
+    let read_result = std::fs::read(&test_dir);
+
+    // Does it match?
+    let first_matched: bool;
+    if let Ok(ref read) = read_result {
+        first_matched = *read == bytes.to_vec();
+    } else {
+        first_matched = false;
+    }
+    
+
+    //
+    // Now we will update the file
+    //
+
+    // New bytes will also be twice as large
+
+    let mut new_bytes: Vec<u8> = vec![0u8; data_size as usize * 2];
+
+    // Fill-er up!
+    random.fill_bytes(&mut new_bytes);
+
+    // write again
+    let second_write_result = std::fs::write(&test_dir, &new_bytes);
+
+    // read again
+    let second_read_result = std::fs::read(&test_dir);
+
+    let second_matched: bool;
+    if let Ok(ref read) = second_read_result {
+        second_matched = *read == new_bytes.to_vec();
+    } else {
+        second_matched = false;
+    }
+
+    // cleanup
+    test_common::unmount(mount_point.path().to_path_buf());
+    let unmount_result = mount_thread.join();
+    unmount_result.unwrap().unwrap(); // Unmounting the fs should not fail.
+
+    // Did all that work?
+    assert!(write_result.is_ok());
+    assert!(read_result.is_ok());
+    assert!(first_matched);
+    assert!(second_write_result.is_ok());
+    assert!(second_read_result.is_ok());
+    assert!(second_matched);
+}
