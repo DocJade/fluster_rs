@@ -3,7 +3,7 @@
 // We will take in InodeFile(s) instead of Extent related types, since we need info about how big files are so they are easier to extend.
 // Creating files is handles on the directory side, since new files just have a name and location.
 
-use std::{cmp::max, u16};
+use std::{cmp::max, ops::{Div, Rem}, u16};
 
 use crate::pool::{
     disk::{
@@ -19,8 +19,7 @@ use crate::pool::{
             generic_structs::pointer_struct::DiskPointer,
             io::cache::cache_io::CachedBlockIO
         },
-        standard_disk::{
-            block::{
+        standard_disk::block::{
                 directory::directory_struct::{
                     DirectoryBlock,
                     DirectoryFlags,
@@ -35,15 +34,10 @@ use crate::pool::{
                     }
                 },
                 inode::inode_struct::{
-                    Inode,
-                    InodeBlock,
-                    InodeFile,
-                    InodeFlags,
-                    InodeTimestamp
+                    Inode, InodeBlock, InodeFile, InodeFlags, InodeLocation, InodeTimestamp
                 },
                 io::directory::types::NamedItem
-            },
-        }
+            }
     },
     pool_actions::pool_struct::Pool
 };
@@ -80,7 +74,7 @@ impl DirectoryBlock {
     /// Deletes an file by deallocating every block the file used to take up, and removing it
     /// from the directory.
     /// 
-    /// If you are looking to truncate the file, you need to call 
+    /// If you are looking to truncate a file, you need to call truncate() on the actual directory item.
     /// 
     /// Returns `None` if the file did not exist.
     ///
@@ -171,11 +165,9 @@ impl DirectoryItem {
         Ok(num_bytes_written)
     }
 
-    /// Truncates a file. Deallocates every block that used to hold data for this file.
+    /// Truncates a file to a specified byte length.
     /// 
     /// No action needs to be taken after this method.
-    /// 
-    /// Does not delete the origin FileExtent block.
     /// 
     /// Panics if fed a directory.
     pub fn truncate(&self, new_size: u64) -> Result<(), FloppyDriveError> {
@@ -260,8 +252,16 @@ fn go_write(inode_file: &mut InodeFile, bytes: &[u8], seek_point: u64) -> Result
 
     // Done writing bytes!
     // Update the file size with the new bytes we wrote.
+
+    // Only if we wrote to the end.
     let before = inode_file.get_size();
-    inode_file.set_size(before + bytes_written as u64);
+    if before < seek_point {
+        // Seek point is after the old size, we wrote to the end.
+        inode_file.set_size(before + bytes_written as u64);
+    } else {
+        // Seek point was inside of the file, no change.
+    }
+
 
     // Return how many bytes we wrote!
     Ok(bytes_written as u32)
@@ -604,15 +604,27 @@ fn go_make_new_file(directory_block: &mut DirectoryBlock, name: String) -> Resul
 
 // Will only truncate if delete is false.
 fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<u64>) -> Result<(), FloppyDriveError> {
-
-    // todo, variable size truncation.
-    todo!("truncation");
-
     // Is this a file?
-        if item.flags.contains(DirectoryFlags::IsDirectory) {
-            // Uh, no it isn't why did you give me a dir?
-            panic!("Tried to read a directory as a file!")
+    if item.flags.contains(DirectoryFlags::IsDirectory) {
+        // Uh, no it isn't why did you give me a dir?
+        panic!("Tried to read a directory as a file!");
+    }
+
+    // Load the size of the directory item
+    let file_size: u64 = item.get_size()?;
+
+    // If we aren't deleting, and the size is the same as the current size, we can skip truncation.
+    if let Some(the_new_size) = new_size {
+        // Make sure delete flag is not set.
+        // In theory, None means delete is set.
+        if !delete && the_new_size == file_size {
+            // Skip
+            return Ok(());
         }
+    } else {
+        // Truncation size is not set, make sure delete flag is set.
+        assert!(delete)
+    }
 
     // Extract out the file
     assert!(item.location.disk.is_some());
@@ -635,68 +647,147 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
     let mut used_blocks: Vec<DiskPointer> = file.to_pointers()?;
 
     // Now we need to get all of the blocks that the extents take up
-
     let first_extent: DiskPointer = file.pointer;
 
     let mut current_extent_block: FileExtentBlock = FileExtentBlock::from_block(&CachedBlockIO::read_block(first_extent, JustDiskType::Standard)?);
 
     // Loop over the extents, adding the blocks until we hit the end
-    while !current_extent_block.next_block.no_destination() {
+    let mut next_extent_pointer = current_extent_block.next_block;
+    while !next_extent_pointer.no_destination() {
         // Have a destination, add it to the pile.
         used_blocks.push(current_extent_block.next_block);
         // Next
+        let raw_block = CachedBlockIO::read_block(next_extent_pointer, JustDiskType::Standard)?;
+        let next_extent_block = FileExtentBlock::from_block(&raw_block);
+        next_extent_pointer = next_extent_block.next_block;
         current_extent_block = FileExtentBlock::from_block(&CachedBlockIO::read_block(first_extent, JustDiskType::Standard)?);
     }
 
+    // We wont order them by disk, we need to keep them in their internal file order for now.
+
     // Now we will free all of those blocks
-
-    // But not the first extent if we are not deleting.
-    if !delete {
-        // Remove the first extent block from the list to delete
-        // This has to work, the loop HAD to've added it
-        let index_of_first = used_blocks.iter().position(|pointer| *pointer == first_extent).expect("Should have first pointer");
-        let _ = used_blocks.swap_remove(index_of_first);
-    }
-
-    // Sort blocks by disk and block order
-    used_blocks.sort_unstable_by_key(|block| (block.disk, block.block));
-
-    // Split into sections based on when the disk changes
-    // I feel like i already wrote this but i cant find it. lol
-    // But i know i didn't do it this way before! suck it past me!
-
-    let chunked = used_blocks.chunk_by(|a, b| a == b);
-
-
-    // Now go free all of those blocks.
-    // This will zero out the blocks, and remove them from the cache for us.
-    for chunk in chunked {
-        let freed = Pool::free_pool_block_from_disk(chunk)?;
-        assert_eq!(freed as usize, chunk.len());
-    }
-
-    // Now all of those blocks have been freed.
-
-    // If we are deleting the file, we dont need to do anything else, since the caller will just discard the directory item.
+    // If we are deleting, we don't have to do any special logic and can step out early.
     if delete {
+        // We are deleting all of the blocks
+        // We dont have to worry about updating the underlying block, since the deletion call
+        // will discard the item automagically.
+
+        // Sort the blocks to reduce swap
+        used_blocks.sort_unstable_by_key(|block| (block.disk, block.block));
+
+        // Chunk by disk.
+        let chunked = used_blocks.chunk_by(|a, b| a.disk == b.disk);
+
+        // Delete all the blocks by freeing all of them.
+        for chunk in chunked {
+            let freed = Pool::free_pool_block_from_disk(chunk)?;
+            assert_eq!(freed as usize, chunk.len());
+        }
+
+        // All done!
+        return Ok(());
+    }
+
+    // Since delete has been finished, we know we must be doing a resize operation.
+    let new_size = new_size.expect("Size must be set if not deleting.");
+
+
+    // Truncation can also grow files, check if the truncation is larger than the current size
+    if file_size < new_size {
+        // Growing is easy, we just write zeros to make it the new size.
+
+        // The difference
+        let grow_size: usize = (new_size - file_size).try_into().expect("usize should be u64 anyways.");
+        
+        // We need to do this in a loop, since would be consuming as much ram as the write is big, which isn't great.
+        // So we will do it in 1KB chunks, but this may change in the future if its too slow.
+        const CHUNK_SIZE: usize = 1024;
+        let zero_chunk: Vec<u8> = vec![0; CHUNK_SIZE];
+
+        // Write to the end of the file with the zeros.
+        let mut seek_point = file_size;
+        for _ in 0..grow_size.div(CHUNK_SIZE) {
+            // Yeah... Keep eating...
+            let _ = item.write_file(&zero_chunk, seek_point)?;
+            seek_point += CHUNK_SIZE as u64;
+        }
+
+        // Final write if there are any remaining bytes.
+        let remainder = grow_size.rem(CHUNK_SIZE);
+        if remainder != 0 {
+            let final_zeros: Vec<u8> = vec![0; remainder];
+            let _ = item.write_file(&final_zeros, seek_point)?;
+        }
+        
+        // Make sure the new size is correct
+        assert_eq!(new_size, item.get_size().expect("HAS to be there."));
+        
         // All done.
         return Ok(());
     }
 
-    // If we're still here, we need to truncate the directory item we were handed.
-        
-        
-    // Go reset the first extent block
-    let new_extent_start: FileExtentBlock = FileExtentBlock::new(first_extent);
-    CachedBlockIO::update_block(&new_extent_start.to_block(), JustDiskType::Standard)?;
-        
-    // Update the inode
-    // Set the file to a size of 0
-    file.set_size(0);
+    // We are shrinking a file.
+    let (new_final_block_index, new_final_block_byte_index) = InodeFile::byte_finder(new_size);
+
+    // Update the new final block by writing enough zeros at the offset to go to the end of the block;
+    // 512 - DATA_BLOCK_OVERHEAD - offset = bytes after the offset.
+    
+    // Cast to usize is fine since its small.
+    let added_zeros: Vec<u8> = vec![0; 512 - DATA_BLOCK_OVERHEAD as usize - new_final_block_byte_index as usize];
+
+    // Go write that to update the new final block;
+    let offset = new_size - added_zeros.len() as u64;
+    let _ = item.write_file(&added_zeros, offset)?;
+
+    // Now we need to sneak in and remove the pointer to the next block.
+    let raw: RawBlock = CachedBlockIO::read_block(used_blocks[new_final_block_index], JustDiskType::Standard)?;
+    let mut block_to_update: FileExtentBlock = FileExtentBlock::from_block(&raw);
+    block_to_update.next_block = DiskPointer::new_final_pointer();
+    
+    // Write it back
+    CachedBlockIO::write_block(&block_to_update.to_block(), JustDiskType::Standard)?;
+
+    // Now we will go free all of the unused blocks.
+    // Assuming there are any blocks past that point.
+    let block_freeing_index: usize = new_final_block_index + 1;
+    let previous_file_blocks_length: usize = used_blocks.len();
+    
+    // If there isn't anything to free, skip.
+    if block_freeing_index == previous_file_blocks_length {
+        // Nothing to free, skip.
+    } else {
+        // Need to free some blocks.
+        // Split the vec at the freeing point
+        let mut to_free: Vec<DiskPointer> = used_blocks.split_at(block_freeing_index).1.to_vec();
+
+        // Sort those for less disk swapping
+        to_free.sort_unstable_by_key(|block| (block.disk, block.block));
+
+        // Free them
+        // Split into sections based on when the disk changes.
+        // I feel like i already wrote this but i cant find it. lol
+        // But i know i didn't do it this way before! suck it past me!
+
+        let chunked = to_free.chunk_by(|a, b| a.disk == b.disk);
+
+        // Now go free all of those blocks.
+        // This will zero out the blocks, and remove them from the cache for us.
+        for chunk in chunked {
+            let freed = Pool::free_pool_block_from_disk(chunk)?;
+            assert_eq!(freed as usize, chunk.len());
+        }
+    }
+
+    // Now go update the InodeFile with it's new size, and we modified it, so set that too.
+    
+    // Update the size
+    file.set_size(new_size);
     inode_with_file.file = Some(file);
-    // Update the modification time
+
+    // The time
     inode_with_file.modified = InodeTimestamp::now();
-    // Put the inode back in the block it came from, this will write for us.
+
+    // Now write that inode back to the block it came from.
     inode_block.update_inode(location.offset, inode_with_file)?;
 
     // All done!

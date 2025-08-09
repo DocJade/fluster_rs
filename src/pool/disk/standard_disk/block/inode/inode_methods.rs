@@ -556,6 +556,8 @@ impl InodeFile {
         self.size
     }
     /// Set the size of the file
+    /// 
+    /// Does not flush change to disk.
     pub fn set_size(&mut self, size: u64) {
         self.size = size;
     }

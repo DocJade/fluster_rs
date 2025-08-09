@@ -1377,7 +1377,7 @@ impl FilesystemMT for FlusterFS {
         debug!("Checking if file already exists...");
         let converted_name: String = name.to_str().expect("Should be valid UTF8.").to_string();
         // Will bail if needed.
-        if let Some(_exists) = containing_dir_block.find_item(&NamedItem::File(converted_name.clone()))? {
+        if let Some(exists) = containing_dir_block.find_item(&NamedItem::File(converted_name.clone()))? {
             debug!("File already exists.");
             // But do we care?
             if deduced_flags.contains(ItemFlag::CREATE_EXCLUSIVE) {
@@ -1397,6 +1397,12 @@ impl FilesystemMT for FlusterFS {
             
             // Get the innards of the handle
             let handle_inner: FileHandle = FileHandle::read(file_handle);
+
+            // Truncate if needed (open(2) syscall)
+            // Must be a file
+            if deduced_flags.contains(ItemFlag::TRUNCATE) && !exists.flags.contains(DirectoryFlags::IsDirectory) {
+                self.truncate(req, constructed_path, Some(file_handle), 0)?; // Truncate to 0
+            }
             
             // Get the metadata from that
             debug!("Getting file attributes...");
@@ -1418,7 +1424,7 @@ impl FilesystemMT for FlusterFS {
         // File did not exist, actually creating it...
         debug!("Creating file...");
         let resulting_item: DirectoryItem = containing_dir_block.new_file(converted_name)?;
-        debug!("Creating file...");
+        debug!("Created file.");
 
         // Full item path
         let constructed_path: &Path = &parent.join(name);
