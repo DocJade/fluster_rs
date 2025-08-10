@@ -653,8 +653,8 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
         let grow_size: usize = (extracted_new_size - file_size).try_into().expect("usize should be u64 anyways.");
         
         // We need to do this in a loop, since would be consuming as much ram as the write is big, which isn't great.
-        // So we will do it in 1KB chunks, but this may change in the future if its too slow.
-        const CHUNK_SIZE: usize = 1024;
+        // So we will do it in 1MB chunks, but this may change in the future if its too slow.
+        const CHUNK_SIZE: usize = 1024*1024;
         let zero_chunk: Vec<u8> = vec![0; CHUNK_SIZE];
 
         // Write to the end of the file with the zeros.

@@ -35,7 +35,8 @@ pub fn start_filesystem() -> FuseMT<FlusterFS> {
     let fs_options = FilesystemOptions::new(Some(temp_dir.path().to_path_buf()), floppy_drive);
     let started = FlusterFS::start(&fs_options);
     // MT thing that is actually used for mounting.
-    fuse_mt::FuseMT::new(started, 1)
+    // Zero threads for fully sync.
+    fuse_mt::FuseMT::new(started, 0)
 }
 
 pub fn unmount(mount_point: PathBuf) {

@@ -88,8 +88,8 @@ fn main() {
 
     // Internal fuse_mt startup stuff i think, no comments on the function implementation.
     // takes in the filesystem, and the number of threads the filesystem will use
-    // Fluster! Is single threaded.
-    let mt_thing = fuse_mt::FuseMT::new(filesystem, 1);
+    // Fluster! Is single threaded, so we actually set it to 0 threads. Weirdly.
+    let mt_thing = fuse_mt::FuseMT::new(filesystem, 0);
 
 
     match fuse_mt::mount(mt_thing, &mount_point, &fuse_options) {
