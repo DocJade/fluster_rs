@@ -339,15 +339,16 @@ fn expand_file(inode_file: InodeFile, blocks: u16) -> Result<Vec<DiskPointer>, F
 /// 
 /// Sets the new destination in incoming block.
 fn expand_extent_block(block: &mut FileExtentBlock) -> Result<(), FloppyDriveError> {
-    // Get a new block from the pool
-    let the_finder = Pool::find_free_pool_blocks(1)?;
+    // Get a new block from the pool.
+    // No need for crc, we will immediately write over it.
+    let the_finder = Pool::find_and_allocate_pool_blocks(1, false)?;
     let new_block_location = the_finder.last().expect("Asked for 1.");
 
     // Put the a block there
     let new_block: RawBlock = FileExtentBlock::new(*new_block_location).to_block();
 
     // Write, since we looked for a free block, didn't reserve it yet.
-    CachedBlockIO::write_block(&new_block, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&new_block, JustDiskType::Standard)?;
 
     // Now update the block we came in here with
     block.next_block = *new_block_location;
@@ -526,7 +527,8 @@ fn go_make_new_file(directory_block: &mut DirectoryBlock, name: String) -> Resul
     // Timestamp for file creation
     let right_now: InodeTimestamp = InodeTimestamp::now();
     
-    let in_progress = Pool::find_free_pool_blocks(1)?;
+    // No need for CRC, we will be writing over it.
+    let in_progress = Pool::find_and_allocate_pool_blocks(1, false)?;
     let reserved_block: DiskPointer = *in_progress.last().expect("Only asked for one block.");
     
     // Now that we have the new block we need a FileExtentBlock to write into it.
@@ -537,7 +539,7 @@ fn go_make_new_file(directory_block: &mut DirectoryBlock, name: String) -> Resul
     // Now let's write that new block
     let raw: RawBlock = new_block.to_block();
     // Block is not marked as reserved, so this is a write.
-    CachedBlockIO::write_block(&raw, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&raw, JustDiskType::Standard)?;
 
     // Construct the file that we'll be returning.
     let finished_new_file: InodeFile = InodeFile::new(reserved_block);

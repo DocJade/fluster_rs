@@ -205,13 +205,14 @@ fn go_make_directory(
 /// May swap disks, does not return to original disk.
 fn go_make_new_directory_block() -> Result<DiskPointer, FloppyDriveError> {
     // Ask the pool for a new block
-    let get_block = Pool::find_free_pool_blocks(1)?;
+    // No crc, will overwrite.
+    let get_block = Pool::find_and_allocate_pool_blocks(1, false)?;
     let new_directory_location = get_block.first().expect("1 = 1");
 
     // Open the new block and write that bastard
     let new_directory_block: RawBlock = DirectoryBlock::new(*new_directory_location).to_block();
 
-    CachedBlockIO::write_block(&new_directory_block,JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&new_directory_block,JustDiskType::Standard)?;
 
     // All done!
     Ok(*new_directory_location)

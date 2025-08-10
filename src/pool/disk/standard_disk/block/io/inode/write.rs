@@ -197,7 +197,8 @@ fn get_next_block(current_block: InodeBlock) -> Result<DiskPointer, FloppyDriveE
 /// We need a new inode block, we will reach upwards and get a new block made for us.
 fn make_new_inode_block() -> Result<DiskPointer, FloppyDriveError> {
     // Ask the pool for a new block pwease
-    let ask_nicely = Pool::find_free_pool_blocks(1)?;
+    // No need for crc since we'll be overwriting it immediately.
+    let ask_nicely = Pool::find_and_allocate_pool_blocks(1, false)?;
     // And you shall receive.
     let new_block_location = ask_nicely.first().expect("Asked for 1.");
 
@@ -208,7 +209,7 @@ fn make_new_inode_block() -> Result<DiskPointer, FloppyDriveError> {
     // Write it Ralph!
     // I'm gonna write it!
     // New block, so standard write.
-    CachedBlockIO::write_block(&but_raw, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&but_raw, JustDiskType::Standard)?;
 
     // Now throw it back, I mean the pointer
     Ok(*new_block_location)

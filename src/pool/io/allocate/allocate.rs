@@ -16,31 +16,6 @@ use crate::pool::{
 impl Pool {
     /// Finds blocks across the entire pool.
     /// 
-    /// == WARNING ==
-    /// 
-    /// You should really only be calling this for singular blocks, or when you know that you will write all of these blocks
-    /// without possibly allocating another one. Since the blocks returned are not marked as allocated yet, in theory while you
-    /// are writing to them, you may call this function again form another method (think expanding inodes) which would use one of
-    /// the blocks that you will be assuming are free. If you need to know that these blocks wont move, you should reserve them
-    /// ahead of time with find_and_allocate_pool_blocks() !
-    /// 
-    /// == WARNING ==
-    ///
-    /// The blocks will be searched for only on Standard disks, all other allocations have to be done on the individual disk.
-    ///
-    /// This does not mark the blocks as allocated, it only finds them.
-    ///
-    /// If there are not enough blocks, new disks will be added as needed.
-    ///
-    /// May swap disks, will not return to where it started.
-    ///
-    /// Returns disk pointers for the found blocks, or a disk error.
-    pub fn find_free_pool_blocks(blocks: u16) -> Result<Vec<DiskPointer>, FloppyDriveError> {
-        // We will not be marking the blocks as used.
-        go_find_free_pool_blocks(blocks, false, false)
-    }
-    /// Finds blocks across the entire pool.
-    /// 
     /// Can only allocate a maximum of 32MB worth of blocks in one go.
     /// If you are asking for that many, something is 100% wrong.
     /// Writes should be limited to 1MB so this should never happen.
@@ -63,7 +38,7 @@ impl Pool {
     pub fn find_and_allocate_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointer>, FloppyDriveError> {
         // This is just an abstraction to force a different function name, even though
         // the function it calls is the same as find_free_pool_blocks()
-        go_find_free_pool_blocks(blocks, true, add_crc)
+        go_find_free_pool_blocks(blocks, add_crc)
     }
 
     /// Frees a block from a disk in the pool.
@@ -81,10 +56,8 @@ impl Pool {
     }
 }
 
-fn go_find_free_pool_blocks(blocks: u16, mark: bool, add_crc: bool) -> Result<Vec<DiskPointer>, FloppyDriveError> {
+fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointer>, FloppyDriveError> {
     debug!("Attempting to allocate {blocks} blocks across the pool...");
-    debug!("We _{}_ be marking the blocks as used.", if mark {"will"} else {"will not"});
-
 
     debug!("Locking GLOBAL_POOL...");
     let probable_disk = GLOBAL_POOL
@@ -141,25 +114,22 @@ fn go_find_free_pool_blocks(blocks: u16, mark: bool, add_crc: bool) -> Result<Ve
                 // We're done!
                 free_blocks.append(&mut block_indexes_to_pointers(&ok, disk_to_check));
 
-                // Allocate those blocks if needed.
-                if mark {
-                    let _ = disk.allocate_blocks(&ok)?;
-                    // We also need to update the global pool to say these were marked as used, otherwise we would never know.
-                    // Trust me I found out the hard way.
-                    debug!("Updating the pool's free block count...");
-                    debug!("Locking GLOBAL_POOL...");
-                    GLOBAL_POOL
-                        .get()
-                        .expect("single threaded")
-                        .try_lock()
-                        .expect("single threaded")
-                        .header
-                        .pool_standard_blocks_free -= ok.len() as u16;
-                }
+                // Allocate those blocks.
+                let _ = disk.allocate_blocks(&ok)?;
+                // We also need to update the global pool to say these were marked as used, otherwise we would never know.
+                // Trust me I found out the hard way.
+                debug!("Updating the pool's free block count...");
+                debug!("Locking GLOBAL_POOL...");
+                GLOBAL_POOL
+                    .get()
+                    .expect("single threaded")
+                    .try_lock()
+                    .expect("single threaded")
+                    .header
+                    .pool_standard_blocks_free -= ok.len() as u16;
 
                 // Add crc to blocks if requested.
-                // You must have already marked the new block.
-                if add_crc && mark {
+                if add_crc {
                     write_empty_crc(&ok, disk.number)?;
                 }
 
@@ -179,23 +149,22 @@ fn go_find_free_pool_blocks(blocks: u16, mark: bool, add_crc: bool) -> Result<Ve
                 free_blocks.append(&mut block_indexes_to_pointers(&blockie_doos, disk_to_check));
 
                 // Allocate those blocks if needed.
-                if mark {
-                    let _ = disk.allocate_blocks(&blockie_doos)?;
-                    // We also need to update the global pool to say these were marked as used, otherwise we would never know.
-                    // Trust me I found out the hard way.
-                    debug!("Updating the pool's free block count...");
-                    debug!("Locking GLOBAL_POOL...");
-                    GLOBAL_POOL
-                        .get()
-                        .expect("single threaded")
-                        .try_lock()
-                        .expect("single threaded")
-                        .header
-                        .pool_standard_blocks_free -= blockie_doos.len() as u16;
-                }
+                
+                let _ = disk.allocate_blocks(&blockie_doos)?;
+                // We also need to update the global pool to say these were marked as used, otherwise we would never know.
+                // Trust me I found out the hard way.
+                debug!("Updating the pool's free block count...");
+                debug!("Locking GLOBAL_POOL...");
+                GLOBAL_POOL
+                    .get()
+                    .expect("single threaded")
+                    .try_lock()
+                    .expect("single threaded")
+                    .header
+                    .pool_standard_blocks_free -= blockie_doos.len() as u16;
+                
                 // Add crc to blocks if requested
-                // You must have already marked the new block.
-                if add_crc && mark {
+                if add_crc {
                     write_empty_crc(&blockie_doos, disk.number)?;
                 }
 
