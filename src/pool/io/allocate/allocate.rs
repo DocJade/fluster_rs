@@ -323,6 +323,17 @@ fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, FloppyDriveEr
             .header
             .disk_with_next_free_block = disk.number;
     }
+
+    // Update the free count, since new blocks are available.
+    GLOBAL_POOL
+    .get()
+    .expect("single threaded")
+    .try_lock()
+    .expect("single threaded")
+    .header
+    .pool_standard_blocks_free += blocks_freed as u16;
+
+
     // Return the number of blocks freed.
     Ok(blocks_freed)
     

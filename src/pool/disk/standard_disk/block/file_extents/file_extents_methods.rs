@@ -62,7 +62,12 @@ impl FileExtentBlock {
             block_origin,
         }
     }
-    /// Reterieves all extents within this block.
+    /// Retrieves all extents within this _block_. NOT THE ENTIRE FILE.
+    /// 
+    /// If you want all of the extents that a file contains, you should be calling
+    /// methods on the InodeFile itself.
+    /// 
+    /// Returned extents may not contain the disk component of their pointers.
     pub(crate) fn get_extents(&self) -> Vec<FileExtent> {
         // Just a layer of abstraction to prevent direct access.
         self.extents.clone()
@@ -86,6 +91,51 @@ impl FileExtentBlock {
         // This truncates the value.
         // if you are somehow about to write a buffer of >22 floppy disks in one go, you have bigger issues.
         blocks as u16
+    }
+    /// Forcibly replace the extents in a FileExtentBlock.
+    /// 
+    /// This will also canonicalize the incoming extents. IE, if the disk in the extent matches the
+    /// disk this block comes from, we will remove the disk and update flags.
+    /// 
+    /// You must ensure that the provided extents will fit. Otherwise this will panic.
+    /// If you aren't sure that the new items will fit,
+    /// you should NOT be calling this method.
+    /// 
+    /// This can only be called on the last extent in the chain.
+    /// 
+    /// Will automatically recalculate size.
+    pub(in super::super::super::block) fn force_replace_extents(&mut self, new_extents: Vec<FileExtent>) {
+        // Since outside callers cannot manually drain the extents from a block, this lets us make sure
+        // that if you NEED to update extents, you can do that safely, and recalculate the size automatically.
+
+        // Pull the extents in so we can modify them as needed.
+        let mut to_add = new_extents;
+
+        // Where are we?
+        let our_disk = self.block_origin.disk;
+        
+        // Empty ourselves
+        self.extents = Vec::with_capacity(to_add.len());
+        
+        // Yes this is a silly way to see what the default capacity of an extent block is, but im sure
+        // the compiler will just optimize all of it away.
+        let default_free = FileExtentBlock::new(DiskPointer::new_final_pointer()).bytes_free;
+
+        self.bytes_free = default_free;
+        
+        // Now add the new extents, fixing the disk numbers as needed.
+        for new in &mut to_add {
+            // if the disk is the same as the block origin, we will set the local flag and such.
+            if let Some(extent_disk) = new.disk_number && extent_disk == our_disk {
+                // Disk matched, update the extent
+                new.disk_number = None;
+                new.flags.insert(ExtentFlags::OnThisDisk);
+            }
+
+            // Add it
+            self.add_extent(*new).expect("Should be last extent, and new items shouldn't be too big.")
+        }
+        // All done.
     }
 }
 
@@ -312,6 +362,33 @@ impl FileExtent {
             start_block,
             length,
         }
+    }
+
+    /// Helper function that extracts all of the blocks that this extent refers to.
+    /// 
+    /// Only gets info about this specific extent, does no traversal.
+    /// 
+    /// Needs to know what disk this FileExtent came from.
+    pub(crate) fn get_pointers(&self, origin_disk: u16) -> Vec<DiskPointer> {
+        // Set the disk number if needed
+        let disk_number: u16 = if let Some(present) = self.disk_number {
+            // already there.
+            present
+        } else {
+            // Use the passed in disk
+            origin_disk
+        };
+        
+        // Each block that the extent references
+        let mut pointers: Vec<DiskPointer> = Vec::with_capacity(self.length.into());
+        for n in 0..self.length {
+            pointers.push(DiskPointer {
+                disk: disk_number,
+                block: self.start_block + n as u16
+            });
+        };
+
+        pointers
     }
 }
 

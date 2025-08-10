@@ -11,8 +11,6 @@ impl InodeFile {
         go_to_pointers(self)
     }
     /// Extract all of the extents.
-    /// 
-    /// Optionally returns to provided disk.
     pub(super) fn to_extents(&self) -> Result<Vec<FileExtent>, FloppyDriveError> {
         let root = self.get_root_block()?;
         go_to_extents(&root)
