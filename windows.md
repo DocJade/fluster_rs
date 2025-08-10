@@ -64,6 +64,11 @@ This will be the path that you use when starting Fluster.
 My floppy disks were completely blank (every byte had been zeroed out), if your disks arent completely blank, im unsure if this will effect mounting the drive.
 If your floppy already has a mountpoint, unmount it before continuing.
 
+# Step 2.5:
+You need to allow `other user` mounting in fuse to let you access Fluster! from windows through WSL.
+`sudo nano /etc/fuse.conf`
+Uncomment `#user_allow_other`
+
 
 
 # Step 3: Building and running: 
