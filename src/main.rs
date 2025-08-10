@@ -25,7 +25,7 @@ struct Cli {
 
 fn main() {
     // Start the logger
-    env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("error")).init();
 
     // Get the block device that the user specifies is their floppy drive
     let cli = Cli::parse();
