@@ -4,7 +4,28 @@ use std::fs::File;
 #[cfg(unix)]
 use std::fs::OpenOptions;
 
-use crate::pool::disk::{drive_struct::{DiskBootstrap, DiskType, FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::{allocate::block_allocation::BlockAllocation, block_structs::RawBlock}, generic_structs::pointer_struct::DiskPointer, io::cache::cache_implementation::{BlockCache, CachedBlock}}, standard_disk::standard_disk_struct::StandardDisk};
+use crate::pool::disk::{
+    drive_struct::{
+        DiskBootstrap,
+        DiskType,
+        FloppyDrive,
+        FloppyDriveError,
+        JustDiskType
+    },
+    generic::{
+        block::{
+            allocate::block_allocation::BlockAllocation,
+            block_structs::RawBlock
+        },
+        generic_structs::pointer_struct::DiskPointer,
+        io::cache::{
+            cache_implementation::{
+                BlockCache, CachedBlock
+            }
+        }
+    },
+    standard_disk::standard_disk_struct::StandardDisk
+};
 
 pub(super) fn cached_allocation(raw_block: &RawBlock, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
     // We can create a fake disk to do our allocation against that actually updates the
@@ -101,7 +122,7 @@ fn the_sidestep(block_to_allocate: &RawBlock, header_block: CachedBlock) -> Resu
 
     #[cfg(unix)]
     let spoofed_file: File = OpenOptions::new().read(true).write(true).open("/dev/null").expect("If /dev/null is missing, you have bigger issues.");
-    let mut spoofed_disk: StandardDisk = StandardDisk::from_header(header_block.to_raw(), spoofed_file);
+    let mut spoofed_disk: StandardDisk = StandardDisk::from_header(header_block.into_raw(), spoofed_file);
 
     // With our new loaded gun, point it directly at foot.
     let blocks_allocated: u16 = spoofed_disk.allocate_blocks(&[block_to_allocate.block_origin.block].to_vec())?;
@@ -110,5 +131,6 @@ fn the_sidestep(block_to_allocate: &RawBlock, header_block: CachedBlock) -> Resu
     assert_eq!(blocks_allocated, 1);
 
     // This flushes to cache for us already, we are done!
+    // - allocate_blocks() calls set_allocation_table() which updates the block in the cache.
     Ok(())
 }

@@ -7,7 +7,7 @@ use std::fs::File;
 use log::error;
 
 use crate::pool::disk::{
-    drive_struct::{DiskBootstrap, FloppyDriveError, JustDiskType},
+    drive_struct::{DiskBootstrap, FloppyDriveError},
     generic::{
         block::{
             allocate::block_allocation::BlockAllocation,
@@ -15,7 +15,7 @@ use crate::pool::disk::{
             crc::check_crc,
         },
         disk_trait::GenericDiskMethods,
-        io::{cache::cache_io::CachedBlockIO, read::read_block_direct, write::write_block_direct},
+        io::{read::read_block_direct, write::write_block_direct},
     },
     pool_disk::block::header::header_struct::PoolDiskHeader,
 };

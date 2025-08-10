@@ -20,6 +20,9 @@ impl<T: BlockAllocation + GenericDiskMethods> CheckedIO for T {}
 pub(super) trait CheckedIO: BlockAllocation + GenericDiskMethods {
     /// Read a block from the disk, ensuring it has already been allocated, as to not read junk.
     /// Panics if block was not allocated.
+    /// 
+    /// This should ONLY be used in the cache implementation. If you are dealing with disks directly, you are
+    /// doing it wrong.
     fn checked_read(&self, block_number: u16) -> Result<RawBlock, FloppyDriveError> {
         trace!("Performing checked read on block {block_number}...",);
         // Block must be allocated

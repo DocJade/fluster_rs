@@ -28,9 +28,6 @@ impl FileExtentBlock {
     pub(super) fn extents_to_bytes(&self) -> Vec<u8> {
         extents_to_bytes(&self.extents)
     }
-    pub(super) fn bytes_to_extents(&mut self, bytes: &[u8]) {
-        self.extents = bytes_to_extents(bytes)
-    }
     pub(crate) fn from_block(block: &RawBlock) -> Self {
         from_bytes(block)
     }
@@ -335,8 +332,6 @@ impl FileExtent {
         offset += 1;
 
         let disk_number: Option<u16>;
-        let start_block: u16;
-        let length: u8;
 
         // Disk number
         if flags.contains(ExtentFlags::OnThisDisk) {
@@ -350,11 +345,11 @@ impl FileExtent {
         }
         
         // Start block
-        start_block = u16::from_le_bytes(bytes[offset..offset + 2].try_into().expect("2 = 2 "));
+        let start_block: u16 = u16::from_le_bytes(bytes[offset..offset + 2].try_into().expect("2 = 2 "));
         offset += 2;
 
         // Length
-        length = bytes[offset];
+        let length: u8 = bytes[offset];
 
         FileExtent {
             flags,

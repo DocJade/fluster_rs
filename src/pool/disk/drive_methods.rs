@@ -235,7 +235,7 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, FloppyDriveError> {
                         block: 0,
                     };
 
-                    if let Some(cached) = CachedBlockIO::try_read(header_location) {
+                    if CachedBlockIO::try_read(header_location).is_some() {
                         // This block was read from the cache, we did not actually swap disks.
                         // Do nothing.
                     } else {

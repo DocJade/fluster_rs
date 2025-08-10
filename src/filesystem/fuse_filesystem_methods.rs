@@ -1203,7 +1203,7 @@ impl FilesystemMT for FlusterFS {
         fh: u64,
         offset: u64,
         data: Vec<u8>,
-        flags: u32,
+        _flags: u32, // hehe
     ) -> fuse_mt::ResultWrite {
         debug!("Writing `{}` bytes to file `{}`...", data.len(), path.display());
 

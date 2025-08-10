@@ -33,6 +33,7 @@
 use std::{collections::{HashMap, VecDeque}, sync::Mutex};
 
 use lazy_static::lazy_static;
+use log::debug;
 
 //
 // =========
@@ -156,9 +157,6 @@ impl BlockCache {
 
     /// Reserve a block on a disk, skipping the disk if possible.
     /// 
-    /// You must provide the actual disk to allocate to, but reading in the disk may be cached, so
-    /// even if you have to call FloppyDrive::Open() to get it, this could still save swaps.
-    /// 
     /// Panics if block was already allocated.
     pub(super) fn cached_block_allocation(raw_block: &RawBlock, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
         // Another level of indirection, how fun
@@ -241,7 +239,7 @@ impl TieredCache {
 // Nice to haves for the CachedBlocks
 impl CachedBlock {
     /// Turn a CachedBlock into a RawBlock
-    pub(super) fn to_raw(self) -> RawBlock {
+    pub(super) fn into_raw(self) -> RawBlock {
         RawBlock {
             block_origin: self.block_origin,
             data: self.data.try_into().expect("Should be 512 bytes."),
@@ -541,14 +539,15 @@ fn go_get_tier_worst(tier: &mut TieredCache) -> Option<CachedBlock> {
 }
 
 fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
+    debug!("Flushing tier {tier_number} of the cache...");
     // We will be flushing all data from this tier of the cache to disk.
     // This can be used on any tier, but will usually be called on tier 0.
-
+    
     // We will extract all of the cache items at once, leaving the tier empty.
     let items_map_to_flush: HashMap<DiskPointer, CachedBlock>;
     let items_order_to_flush: VecDeque<DiskPointer>;
     // We only get the order just to discard it.
-
+    
     // Keep the cache locked within just this area.
     {
         // Get the block cache
@@ -561,30 +560,30 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
             2 => &mut cache.tier_2,
             _ => panic!("Bro there are only 3 cache tiers"),
         };
-
+        
         // If the tier is empty, there's nothing to do.
         if tier_to_flush.order.is_empty() {
             return Ok(());
         }
-
+        
         // Move all items from the tier into our local variable,
         // leaving the cache's tier empty.
-
+        
         // In theory, if the flush fails, we would now lose data...
         // just dont fail lol, good luck
-
+        
         items_map_to_flush = std::mem::take(&mut tier_to_flush.items_map);
         items_order_to_flush = std::mem::take(&mut tier_to_flush.order);
     }
-
+    
     let _ = items_order_to_flush;
-
+    
     // Cache is now unlocked
-
+    
     // first we grab all of the items and sort them by disk, low to high, and also sort the blocks
     // within those disks to be in order. Since if the blocks are in order, the head doesn't have to move around
     // the disk as much.
-
+    
     // Get the items from the hashmap
     let mut items: Vec<CachedBlock> = items_map_to_flush.into_values().collect();
     // Sort
@@ -592,12 +591,12 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
     
     // Now to reduce head movement even further, we don't want to check the allocation table
     // while making our writes. Since that would require seeking to block 0 after each write.
-
+    
     // You might be thinking, "Why can't we use the cache for the allocation tables?", darn good idea,
     // but we cannot access the cache from down here, since that would require locking the entire cache
     // a second time. Also we might be out of room in the cache for the read required to get the table,
     // which would cause us to flush the tier again, which we are already doing. Bad news.
-
+    
     // But there are some assumptions we can make about the items we are flushing:
     // - We assume the items within the cache are valid. (A given, but can't hurt to mention)
     // - If an item is contained within a cache tier, the block it came from must
@@ -610,30 +609,30 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
     // - When an item is removed from the cache manually, it must have been flushed to disk.
     // - Invalidated items on cache levels higher than 0 will put their invalidated item into
     //    tier zero, thus they will be flushed to disk when it is cleared.
-
+    
     // Basically, we don't have to care about the allocation table AT ALL down here. If
     // we have a block, we know it is allocated. When a block is freed, it must be removed
     // from the cache entirely.
-
+    
     // Therefore, we can make all of our writes in one pass per disk, and never have to look at
     // the allocation table at all!
-
-
+    
+    
     // To properly allow lazy-loading disks into the drive, we allow the disk loading routine to use cached blocks
     // if they exist.
-
+    
     // The problem is, this causes the disk check to always return true if the header is in the cache, meaning
     // in theory, an incorrect disk can be in the drive.
-
+    
     // To solve this, down here we must grab the header from the cache if it is there, then 
     // we hold onto that, load the disk (which now has to do a proper block read to check if its the right disk), then
     // update the disk if its the correct one.
-
+    
     // Open the first disk to write to
-
+    
     let mut current_disk: StandardDisk = disk_load_header_invalidation(items.first().expect("We know we have at least 1 item").block_origin.disk)?;
     
-
+    
     for block in items {
         // Right disk?
         if current_disk.get_disk_number() != block.block_origin.disk {
@@ -643,11 +642,12 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
             current_disk = disk_load_header_invalidation(block.block_origin.disk)?;
         }
         // Write the block
-        current_disk.unchecked_write_block(&block.to_raw())?;
+        current_disk.unchecked_write_block(&block.into_raw())?;
     }
-
+    
     // All done, don't need to do any cleanup for previously stated reasons
-
+    debug!("Done flushing tier {tier_number} of the cache.");
+    
     Ok(())
 }
 

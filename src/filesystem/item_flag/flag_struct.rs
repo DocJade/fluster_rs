@@ -1,8 +1,6 @@
 use bitflags::bitflags;
 use libc::c_int;
-use log::{error, warn};
-
-use crate::filesystem::error::error_types::*;
+use log::warn;
 
 //
 //
@@ -38,7 +36,9 @@ bitflags! {
         
         /// Async, fluster does not support this. Thus we will not
         /// add this bit to the flags.
-        // const O_ASYNC = libc::O_ASYNC;
+        /// 
+        /// Has no effect.
+        const O_ASYNC = libc::O_ASYNC as u32;
 
         /// Has to do with closing when executing, ignoring, good luck.
         /// 
@@ -71,7 +71,7 @@ bitflags! {
         /// Deals with filesizes with offsets that can be greated than off_t (I think that's 32 bit)
         /// 
         /// If you need files that big, fluster is not the tool for you.
-        /// Thus we will not allow this flag.
+        /// Has no effect.
         const O_LARGEFILE = libc::O_LARGEFILE as u32;
         
         /// Do not update file access time.
@@ -81,23 +81,27 @@ bitflags! {
         /// Has no effect.
         const O_NOATIME = libc::O_NOATIME as u32;
 
-        /// Do this operation in a non-blocking way.
-        /// 
-        /// Too bad, we block for everything.
-        const O_NONBLOCK = libc::O_NONBLOCK as u32;
-
         /// If path is a terminal device, do not control it or whatever.
         /// 
         /// Fluster! does not have terminal devices.
-        // const O_NOCTTY = libc::O_NOCTTY;
+        /// Has no effect.
+        const O_NOCTTY = libc::O_NOCTTY as u32;
 
         /// Symbolic link related. We do not support links.
         // const O_NOFOLLOW = libc::O_NOFOLLOW;
         
         /// Open in non-blocking mode.
         /// Fluster is single threaded. EVERYTHING blocks dawg.
-        // const O_NONBLOCK = libc::O_NONBLOCK;
-        // const O_NDELAY = libc::O_NDELAY; // Alternate name for same flag
+        /// 
+        /// Has no effect.
+        const O_NONBLOCK = libc::O_NONBLOCK as u32;
+        const O_NDELAY = libc::O_NDELAY as u32; // Alternate name for same flag
+
+        /// Dont follow symlinks.
+        /// 
+        /// Fluster does not have symlinks.
+        /// Has no effect.
+        const O_NOFOLLOW = libc::O_NOFOLLOW as u32; // Alternate name for same flag
         
         /// Gets file descriptor for this path but not the actual file.
         /// 
@@ -116,7 +120,8 @@ bitflags! {
         /// Creates unnamed tempfiles.
         /// 
         /// We do not support this.
-        // const O_SYNC = libc::O_SYNC;
+        /// Has no effect.
+        const O_TMPFILE  = libc::O_TMPFILE as u32;
         
         /// If the file already exists, truncate it.
         /// 

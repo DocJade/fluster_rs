@@ -39,17 +39,6 @@ impl DirectoryBlock {
         directory_block_try_add_item(self, item)
     }
 
-    /// Try to remove a item from a directory.
-    /// The item on the directory must match the item provided exactly.
-    ///
-    /// Returns nothing.
-    pub(super) fn try_remove_item(
-        &mut self,
-        item: DirectoryItem,
-    ) -> Result<(), DirectoryBlockError> {
-        directory_block_try_remove_item(self, item)
-    }
-
     /// Create a new directory block.
     /// 
     /// Requires the location/destination of this block.
@@ -75,30 +64,6 @@ impl DirectoryBlock {
 }
 
 // funtions for those impls
-
-fn directory_block_try_remove_item(
-    block: &mut DirectoryBlock,
-    incoming_item: DirectoryItem,
-) -> Result<(), DirectoryBlockError> {
-    // Attempt to remove an item
-
-    // attempt the removal
-    if let Some(index) = block
-        .directory_items
-        .iter()
-        .position(|item| *item == incoming_item)
-    {
-        // Item exists.
-        // update the free bytes counter
-        block.bytes_free += incoming_item.to_bytes().len() as u16;
-
-        // We can use swap_remove here since the ordering of items does not matter.
-        let _ = block.directory_items.swap_remove(index);
-        Ok(())
-    } else {
-        Err(DirectoryBlockError::NoSuchItem)
-    }
-}
 
 fn directory_block_try_add_item(
     block: &mut DirectoryBlock,
@@ -381,7 +346,7 @@ impl DirectoryItem {
         if let Some(dir) = inode.extract_directory() {
             // Get the directory block
             let raw_block: RawBlock = CachedBlockIO::read_block(dir.pointer, JustDiskType::Standard)?;
-            return Ok(DirectoryBlock::from_block(&raw_block))
+            Ok(DirectoryBlock::from_block(&raw_block))
         } else {
             // This was not a file.
             panic!("Attempted to turn a DirectoryItem of File type into a DirectoryBlock!")

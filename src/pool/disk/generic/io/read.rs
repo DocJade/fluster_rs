@@ -7,7 +7,6 @@
 // Imports
 
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
-use crate::pool::disk::generic::io::cache::cache_io::CachedBlockIO;
 
 use super::super::block::block_structs::BlockError;
 use super::super::block::block_structs::RawBlock;
@@ -15,6 +14,12 @@ use super::super::block::crc::check_crc;
 use std::{fs::File, os::unix::fs::FileExt};
 
 // Implementations
+
+// DONT USE THE CACHE DOWN HERE!
+// We rely on this call to _actually_ read from the disk, not just parrot back what's in the cache.
+// The cache calls this when an item isn't found. Checking again down here is pointless. If it was
+// in the cache, we wouldn't be here.
+
 
 /// Read a block on the currently inserted disk in the floppy drive
 /// ONLY FOR LOWER LEVEL USE, USE CHECKED_READ()!
@@ -36,22 +41,8 @@ pub(crate) fn read_block_direct(
     // Calculate the offset into the disk
     let read_offset: u64 = block_index as u64 * 512;
 
-    // Skip reading the disk if the block happens to be in the cache already
-    let disk_pointer: DiskPointer = DiskPointer {
-        disk: originating_disk,
-        block: block_index,
-    };
-
-    
-    if let Some(block) = CachedBlockIO::try_read(disk_pointer) {
-        // The block was already in the cache!
-        read_buffer = block.data;
-    } else {
-        // The block was not in the cache, hit the disk as usual
-
-        // Seek to the requested block and read 512 bytes from it
-        disk_file.read_exact_at(&mut read_buffer, read_offset)?;
-    }
+    // Seek to the requested block and read 512 bytes from it
+    disk_file.read_exact_at(&mut read_buffer, read_offset)?;
 
 
     // Check the CRC, unless the user disabled it on this call.

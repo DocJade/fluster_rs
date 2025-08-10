@@ -43,7 +43,7 @@ impl CachedBlockIO {
     pub fn try_read(block_origin: DiskPointer) -> Option<RawBlock> {
         if let Some(cached) = BlockCache::try_find(block_origin) {
             // Was there!
-            return Some(cached.to_raw())
+            return Some(cached.into_raw())
         }
         // Missing.
         None
@@ -102,7 +102,7 @@ fn go_read_cached_block(block_location: DiskPointer, expected_disk_type: JustDis
     
     if let Some(found_block) = BlockCache::try_find(block_location) {
         // It was in the cache! Return the block...
-        return Ok(found_block.to_raw());
+        return Ok(found_block.into_raw());
     }
 
     // The block was not in the cache, we need to go get it old-school style.

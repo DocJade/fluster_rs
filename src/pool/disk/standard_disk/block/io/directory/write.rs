@@ -1,6 +1,6 @@
 // Write a new directory into a directory block
 
-use log::{debug, error, trace};
+use log::{debug, error};
 
 use crate::pool::{
     disk::{
