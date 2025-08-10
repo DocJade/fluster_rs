@@ -84,7 +84,7 @@ fn add_and_remove_to_directory_block() {
         test_block.try_add_item(&random_item.clone()).unwrap();
         // Make sure that went in
         assert!(!test_block.directory_items.is_empty());
-        test_block.try_remove_item(random_item).unwrap();
+        test_block.try_remove_item(&random_item).unwrap();
         // Make sure it was removed
         assert!(test_block.directory_items.is_empty());
     }
@@ -105,7 +105,7 @@ fn adding_and_removing_updates_size() {
         test_block.try_add_item(&random_item).unwrap();
         let added_free = test_block.bytes_free;
 
-        test_block.try_remove_item(random_item).unwrap();
+        test_block.try_remove_item(&random_item).unwrap();
         let removed_free = test_block.bytes_free;
 
         // Added should have less space

@@ -1,13 +1,29 @@
 // Higher level abstractions for reading directories.
 
-use log::{debug, trace};
+use log::debug;
 
-use crate::pool::{disk::{
-    drive_struct::{FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO}, standard_disk::block::{
-        directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem},
-        io::directory::types::NamedItem,
-    }
-}, pool_actions::pool_struct::Pool};
+use crate::pool::{
+    disk::{
+        drive_struct::{
+            FloppyDriveError,
+            JustDiskType
+        },
+        generic::{
+            block::block_structs::RawBlock,
+            generic_structs::pointer_struct::DiskPointer,
+            io::cache::cache_io::CachedBlockIO
+        },
+        standard_disk::block::{
+            directory::directory_struct::{
+                DirectoryBlock,
+                DirectoryFlags,
+                DirectoryItem
+            },
+            io::directory::types::NamedItem,
+        }
+    },
+    pool_actions::pool_struct::Pool
+};
 
 impl DirectoryBlock {
     /// Check if this directory contains an item with the provided name and type.
@@ -209,8 +225,7 @@ impl DirectoryBlock {
         if let Some(found) = item_to_find.find_in(&self.directory_items) {
             // Found the item!
             // Remove it from ourselves.
-            // Only retain items that _dont_ match.
-            self.directory_items.retain_mut(|item| *item != found);
+            self.try_remove_item(&found).expect("Guard");
             // Now flush ourselves to disk
             let raw_block = self.to_block();
             CachedBlockIO::update_block(&raw_block, JustDiskType::Standard)?;
@@ -228,7 +243,7 @@ impl DirectoryBlock {
         }
 
         // Not in here.
-        return Ok(None);
+        Ok(None)
     }
 }
 

@@ -39,6 +39,17 @@ impl DirectoryBlock {
         directory_block_try_add_item(self, item)
     }
 
+    /// Try to remove a item from a directory.
+    /// The item on the directory must match the item provided exactly.
+    ///
+    /// Returns nothing.
+    pub(in super::super) fn try_remove_item(
+        &mut self,
+        item: &DirectoryItem,
+    ) -> Result<(), DirectoryBlockError> {
+        directory_block_try_remove_item(self, item)
+    }
+
     /// Create a new directory block.
     /// 
     /// Requires the location/destination of this block.
@@ -64,6 +75,30 @@ impl DirectoryBlock {
 }
 
 // funtions for those impls
+
+fn directory_block_try_remove_item(
+    block: &mut DirectoryBlock,
+    incoming_item: &DirectoryItem,
+) -> Result<(), DirectoryBlockError> {
+    // Attempt to remove an item
+
+    // attempt the removal
+    if let Some(index) = block
+        .directory_items
+        .iter()
+        .position(|item| item == incoming_item)
+    {
+        // Item exists.
+        // update the free bytes counter
+        block.bytes_free += incoming_item.to_bytes().len() as u16;
+
+        // We can use swap_remove here since the ordering of items does not matter.
+        let _ = block.directory_items.swap_remove(index);
+        Ok(())
+    } else {
+        Err(DirectoryBlockError::NoSuchItem)
+    }
+}
 
 fn directory_block_try_add_item(
     block: &mut DirectoryBlock,
