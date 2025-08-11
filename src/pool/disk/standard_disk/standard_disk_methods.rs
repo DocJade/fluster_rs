@@ -5,7 +5,7 @@ use log::debug;
 
 use crate::pool::{
     disk::{
-        drive_struct::{DiskBootstrap, DiskType, FloppyDrive, FloppyDriveError, JustDiskType},
+        drive_struct::{DiskBootstrap, DiskType, FloppyDrive, FloppyDriveError},
         generic::{
             block::{
                 allocate::block_allocation::BlockAllocation,
@@ -74,7 +74,7 @@ impl DiskBootstrap for StandardDisk {
         };
         let inode_block = InodeBlock::new(inode_block_origin);
         let inode_writer = inode_block.to_block();
-        CachedBlockIO::write_block(&inode_writer, JustDiskType::Standard)?;
+        CachedBlockIO::write_block(&inode_writer)?;
         
         // Create the directory block
         
@@ -86,7 +86,7 @@ impl DiskBootstrap for StandardDisk {
         };
         let directory_block: DirectoryBlock = DirectoryBlock::new(directory_block_origin);
         let the_directory_block: RawBlock = directory_block.to_block();
-        CachedBlockIO::write_block(&the_directory_block, JustDiskType::Standard)?;
+        CachedBlockIO::write_block(&the_directory_block)?;
 
         // Now we need to manually add the inode that points to it. Because the inode at the 0 index
         // of block 1 is the inode that points to the root directory
@@ -117,6 +117,7 @@ impl DiskBootstrap for StandardDisk {
         // All done!
         debug!("Done bootstrapping standard disk.");
         // Since we wrote information to it, we need to read in that disk again before returning it
+        #[allow(deprecated)] // We do not use the cache while bootstrapping.
         let finished_disk: StandardDisk = match FloppyDrive::open(disk_number)? {
             DiskType::Standard(standard_disk) => standard_disk,
             _ => unreachable!("I would eat my shoes if this happened."),
@@ -127,7 +128,7 @@ impl DiskBootstrap for StandardDisk {
     fn from_header(block: RawBlock, file: File) -> Self {
         // load in the header
         let header: StandardDiskHeader =
-            StandardDiskHeader::from_block(&block).expect("Already checked type.");
+            StandardDiskHeader::from_block(&block);
         let mut in_progress = StandardDisk {
             number: header.disk_number,
             disk_file: file,
@@ -142,7 +143,7 @@ impl DiskBootstrap for StandardDisk {
 
         if let Some(cached_header_block) = CachedBlockIO::try_read(block.block_origin) {
             // There is info about this disk in the cache! Snag that.
-            in_progress.header = StandardDiskHeader::from_block(&cached_header_block).expect("This actually can't fail. Check the function lol");
+            in_progress.header = StandardDiskHeader::from_block(&cached_header_block);
         }
 
         in_progress
@@ -293,6 +294,6 @@ impl GenericDiskMethods for StandardDisk {
     #[doc = " Headers and such."]
     fn flush(&mut self) -> Result<(), FloppyDriveError> {
         // Not really to disk, but if nobody is looking...
-        CachedBlockIO::update_block(&self.header.to_block(), JustDiskType::Standard)
+        CachedBlockIO::update_block(&self.header.to_block())
     }
 }

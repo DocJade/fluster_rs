@@ -1,7 +1,6 @@
 // Imports
 
 use crate::pool::disk::{
-    drive_struct::FloppyDriveError,
     generic::{block::{block_structs::RawBlock, crc::add_crc_to_block}, generic_structs::pointer_struct::DiskPointer},
     standard_disk::block::header::header_struct::{StandardDiskHeader, StandardHeaderFlags},
 };
@@ -9,7 +8,7 @@ use crate::pool::disk::{
 // Implementations
 
 impl StandardDiskHeader {
-    pub fn from_block(raw_block: &RawBlock) -> Result<StandardDiskHeader, FloppyDriveError> {
+    pub fn from_block(raw_block: &RawBlock) -> StandardDiskHeader {
         extract_header(raw_block)
     }
     pub fn to_block(&self) -> RawBlock {
@@ -18,10 +17,8 @@ impl StandardDiskHeader {
 }
 
 // Impl the conversion from a RawBlock to a DiskHeader
-impl TryFrom<RawBlock> for StandardDiskHeader {
-    type Error = FloppyDriveError;
-
-    fn try_from(value: RawBlock) -> Result<Self, Self::Error> {
+impl From<RawBlock> for StandardDiskHeader {
+    fn from(value: RawBlock) -> Self {
         extract_header(&value)
     }
 }
@@ -29,7 +26,7 @@ impl TryFrom<RawBlock> for StandardDiskHeader {
 // Functions
 
 /// Extract header info from a disk
-fn extract_header(raw_block: &RawBlock) -> Result<StandardDiskHeader, FloppyDriveError> {
+fn extract_header(raw_block: &RawBlock) -> StandardDiskHeader {
     // Time to pull apart the header!
 
     // Bit flags
@@ -44,11 +41,11 @@ fn extract_header(raw_block: &RawBlock) -> Result<StandardDiskHeader, FloppyDriv
         .try_into()
         .expect("Impossible.");
 
-    Ok(StandardDiskHeader {
+    StandardDiskHeader {
         flags,
         disk_number,
         block_usage_map,
-    })
+    }
 }
 
 /// Converts the header type into its equivalent 512 byte block

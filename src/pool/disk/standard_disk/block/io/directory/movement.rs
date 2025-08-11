@@ -4,14 +4,19 @@ use std::path::{Component, Path};
 
 use log::{debug, info};
 
-use crate::pool::{disk::{
-    drive_struct::{FloppyDriveError, JustDiskType},
-    generic::{generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO},
-    standard_disk::block::{
-        directory::directory_struct::DirectoryBlock, inode::inode_struct::InodeBlock,
-        io::directory::types::NamedItem,
+use crate::pool::{
+    disk::{
+        drive_struct::FloppyDriveError,
+        generic::{
+            generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO
+        },
+        standard_disk::block::{
+            directory::directory_struct::DirectoryBlock, inode::inode_struct::InodeBlock,
+            io::directory::types::NamedItem,
+        },
     },
-}, pool_actions::pool_struct::Pool};
+    pool_actions::pool_struct::Pool
+};
 
 impl DirectoryBlock {
     /// Attempts to open a directory in the current directory block.
@@ -59,7 +64,7 @@ impl DirectoryBlock {
             block: final_destination.block,
         };
 
-        let inode_block = InodeBlock::from_block(&CachedBlockIO::read_block(pointer, JustDiskType::Standard)?);
+        let inode_block = InodeBlock::from_block(&CachedBlockIO::read_block(pointer)?);
 
         // Now read in the inode
         let inode = inode_block
@@ -75,7 +80,7 @@ impl DirectoryBlock {
 
         // Go go go!
         let new_dir_block: DirectoryBlock =
-            DirectoryBlock::from_block(&CachedBlockIO::read_block(actual_next_block, JustDiskType::Standard)?);
+            DirectoryBlock::from_block(&CachedBlockIO::read_block(actual_next_block)?);
 
         // All done! Enjoy the new block.
         Ok(Some(new_dir_block))

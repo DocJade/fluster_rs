@@ -320,10 +320,9 @@ fn new_pool_header() -> PoolDiskHeader {
     // The highest known disk for a brand new pool is the root disk itself, zero.
     let highest_known_disk: u16 = 0;
 
-    // The disk with the next free block set to the pool disk itself.
-    // The pool block allocator will skip any disks that are not Standard,
-    // So it will just skip over this the first time we use it.
-    let disk_with_next_free_block: u16 = 0;
+    // The disk with the next free block.
+    // Starts at one to skip the pool disk.
+    let disk_with_next_free_block: u16 = 1;
 
     // How many pool blocks are free? None! We only have the root disk!
     let pool_standard_blocks_free: u16 = 0;
@@ -351,8 +350,8 @@ fn write_pool_header_to_disk(header: &PoolDiskHeader) -> Result<(), FloppyDriveE
     let header_block = header.to_block();
 
     // Get the pool disk
-    let 
-    mut disk: PoolDisk = match FloppyDrive::open(0)? {
+    #[allow(deprecated)] // Pool disks cannot use the cache.
+    let mut disk: PoolDisk = match FloppyDrive::open(0)? {
         DiskType::Pool(pool_disk) => pool_disk,
         _ => unreachable!("Disk 0 should NEVER be assigned to a non-pool disk!"),
     };

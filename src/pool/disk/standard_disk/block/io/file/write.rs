@@ -10,10 +10,7 @@ use log::error;
 
 use crate::pool::{
     disk::{
-        drive_struct::{
-            FloppyDriveError,
-            JustDiskType
-        },
+        drive_struct::FloppyDriveError,
         generic::{
             block::{
                 block_structs::{BlockError, RawBlock},
@@ -139,7 +136,7 @@ impl DirectoryItem {
             block: location.block,
         };
 
-        let read: RawBlock = CachedBlockIO::read_block(the_pointer_in_question, JustDiskType::Standard)?;
+        let read: RawBlock = CachedBlockIO::read_block(the_pointer_in_question)?;
         let mut inode_block: InodeBlock = InodeBlock::from_block(&read);
 
         // Get the actual file
@@ -292,7 +289,7 @@ fn update_block(block: DiskPointer, bytes: &[u8], offset: u16) -> Result<usize, 
 
 
     // load the block
-    let mut block_copy: RawBlock = CachedBlockIO::read_block(block, JustDiskType::Standard)?;
+    let mut block_copy: RawBlock = CachedBlockIO::read_block(block)?;
     
     // Modify that sucker
     // Skip the first byte with the flag
@@ -305,7 +302,7 @@ fn update_block(block: DiskPointer, bytes: &[u8], offset: u16) -> Result<usize, 
     add_crc_to_block(&mut block_copy.data);
 
     // Write that sucker
-    CachedBlockIO::update_block(&block_copy, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&block_copy)?;
 
     // Return the number of bytes we wrote.
     Ok(bytes_to_write)
@@ -348,7 +345,7 @@ fn expand_extent_block(block: &mut FileExtentBlock) -> Result<(), FloppyDriveErr
     let new_block: RawBlock = FileExtentBlock::new(*new_block_location).to_block();
 
     // Write, since we looked for a free block, didn't reserve it yet.
-    CachedBlockIO::update_block(&new_block, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&new_block)?;
 
     // Now update the block we came in here with
     block.next_block = *new_block_location;
@@ -375,7 +372,7 @@ fn expanding_add_extents(file: InodeFile, extents: &[FileExtent]) -> Result<(), 
     let mut current_disk: u16 = u16::MAX;
     
     // Read in the initial block
-    let raw_read: RawBlock = CachedBlockIO::read_block(file.pointer, JustDiskType::Standard)?;
+    let raw_read: RawBlock = CachedBlockIO::read_block(file.pointer)?;
     current_extent_block = FileExtentBlock::from_block(&raw_read);
 
     loop {
@@ -383,7 +380,7 @@ fn expanding_add_extents(file: InodeFile, extents: &[FileExtent]) -> Result<(), 
         if !current_extent_block.next_block.no_destination() {
             // No it isn't. We need to load the next block.
             // Get the block.
-            let reader_mc_deeder: RawBlock = CachedBlockIO::read_block(current_extent_block.next_block, JustDiskType::Standard)?;
+            let reader_mc_deeder: RawBlock = CachedBlockIO::read_block(current_extent_block.next_block)?;
             current_extent_block = FileExtentBlock::from_block(&reader_mc_deeder);
             current_disk = current_extent_block.next_block.disk;
             // Try again.
@@ -539,7 +536,7 @@ fn go_make_new_file(directory_block: &mut DirectoryBlock, name: String) -> Resul
     // Now let's write that new block
     let raw: RawBlock = new_block.to_block();
     // Block is not marked as reserved, so this is a write.
-    CachedBlockIO::update_block(&raw, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&raw)?;
 
     // Construct the file that we'll be returning.
     let finished_new_file: InodeFile = InodeFile::new(reserved_block);
@@ -636,7 +633,7 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
         block: file_inode_location.block,
     };
 
-    let read: RawBlock = CachedBlockIO::read_block(the_pointer_in_question, JustDiskType::Standard)?;
+    let read: RawBlock = CachedBlockIO::read_block(the_pointer_in_question)?;
     let mut inode_block: InodeBlock = InodeBlock::from_block(&read);
 
     // Get the actual file
@@ -770,7 +767,7 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
 
     // Now we can loop through the FileExtentBlocks, tracking how many data blocks we've seen so far
     // Get the first extent block
-    let read: RawBlock = CachedBlockIO::read_block(file.pointer, JustDiskType::Standard)?;
+    let read: RawBlock = CachedBlockIO::read_block(file.pointer)?;
     let first_extent_block = FileExtentBlock::from_block(&read);
 
     // Go find the block, also keep track of what extent caused us to be full, since
@@ -828,7 +825,7 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
         
         // Need to keep going, get the next block.
         // Dont need to check if this is a final pointer, since we would crash if it was, and it shouldn't be.
-        let read: RawBlock = CachedBlockIO::read_block(new_final_extent_block.next_block, JustDiskType::Standard)?;
+        let read: RawBlock = CachedBlockIO::read_block(new_final_extent_block.next_block)?;
         let next = FileExtentBlock::from_block(&read);
         new_final_extent_block = next;
     }
@@ -850,7 +847,7 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
     // jk, we already know that hehe, its in new_final_block_byte_index
 
     // Now load in the old block so we can update it
-    let mut updated_final_data_block: RawBlock = CachedBlockIO::read_block(pointer_to_new_final_data_block, JustDiskType::Standard)?;
+    let mut updated_final_data_block: RawBlock = CachedBlockIO::read_block(pointer_to_new_final_data_block)?;
 
     // Now blank it out.
     // Currently, the last 4 bytes of the block are the checksum. but since we're going to be updating the block anyways, we can write
@@ -962,8 +959,8 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
     // ...Until something tries to extend the file, new blocks will pointlessly be added, and writing may skip over blocks,
     // resulting in the next read containing old data from pre-truncation.
 
-    let extent_block_result = CachedBlockIO::update_block(&finished_extent_block, JustDiskType::Standard);
-    let data_block_result = CachedBlockIO::update_block(&updated_final_data_block, JustDiskType::Standard);
+    let extent_block_result = CachedBlockIO::update_block(&finished_extent_block);
+    let data_block_result = CachedBlockIO::update_block(&updated_final_data_block);
     
     // Update the file
     file.set_size(new_size);
@@ -1092,7 +1089,7 @@ fn truncate_cleanup(pre_collected: Vec<DiskPointer>, next_extent_block: DiskPoin
 
     while !next_extent_block.no_destination() {
         // Open the extent
-        let raw: RawBlock = CachedBlockIO::read_block(next_extent_block, JustDiskType::Standard)?;
+        let raw: RawBlock = CachedBlockIO::read_block(next_extent_block)?;
         let read: FileExtentBlock = FileExtentBlock::from_block(&raw);
 
         // get the extents
@@ -1147,7 +1144,7 @@ fn flush_to_disk(block: &FileExtentBlock) -> Result<(), FloppyDriveError> {
     // Raw it
     let raw = block.to_block();
     // Write it.
-    CachedBlockIO::update_block(&raw, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&raw)?;
     Ok(())
 }
 

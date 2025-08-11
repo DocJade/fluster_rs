@@ -4,9 +4,23 @@ use log::debug;
 
 use crate::pool::{
     disk::{
-        drive_struct::{DiskType, FloppyDrive, FloppyDriveError, JustDiskType},
+        drive_struct::{
+            DiskType,
+            FloppyDrive,
+            FloppyDriveError
+        },
         generic::{
-            block::{allocate::block_allocation::BlockAllocation, block_structs::RawBlock, crc::add_crc_to_block}, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO
+            block::{
+                allocate::block_allocation::BlockAllocation,
+                block_structs::RawBlock,
+                crc::add_crc_to_block
+            },
+            disk_trait::GenericDiskMethods,
+            generic_structs::pointer_struct::DiskPointer,
+            io::cache::{
+                cache_io::CachedBlockIO,
+                cached_allocation::CachedAllocationDisk
+            }
         },
         standard_disk::standard_disk_struct::StandardDisk,
     },
@@ -86,25 +100,22 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
 
     // Now we loop until we find enough free blocks.
     loop {
-        let mut disk: StandardDisk;
+        // Since we use a mix of real and fake disks in here, we need to have a type that we can use for our allocation
+        // methods. So we will box it up. Yes this is kinda evil.
+        let mut disk: Box<dyn BlockAllocation>;
         // Check if the disk we are about to load is out of range
         if disk_to_check > new_highest_disk {
             debug!("Ran out of room, creating new disk...");
             // We need to make this disk before trying to allocate blocks on it.
-            disk = Pool::new_disk::<StandardDisk>()?;
+            let new_disk: StandardDisk = Pool::new_disk::<StandardDisk>()?;
+            disk = Box::new(new_disk);
             // increment the highest known disk
             new_highest_disk += 1;
         } else {
-            // We are loading a pre-existing disk.
-            disk = match FloppyDrive::open(disk_to_check)? {
-                DiskType::Standard(standard_disk) => standard_disk,
-                _ => {
-                    // cant allocate to a non-standard disk, so we must ask for yet another disk.
-                    disk_to_check += 1;
-                    continue;
-                }
-            };
-        }
+            // We are loading a pre-existing disk, hit up the cache for it.
+            let new_disk: CachedAllocationDisk = CachedAllocationDisk::open(disk_to_check)?;
+            disk = Box::new(new_disk);
+        };
 
         // Check if this disk has enough room.
         // we will grab all we can.
@@ -130,7 +141,7 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
 
                 // Add crc to blocks if requested.
                 if add_crc {
-                    write_empty_crc(&ok, disk.number)?;
+                    write_empty_crc(&ok, disk_to_check)?;
                 }
 
                 break;
@@ -165,7 +176,7 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
                 
                 // Add crc to blocks if requested
                 if add_crc {
-                    write_empty_crc(&blockie_doos, disk.number)?;
+                    write_empty_crc(&blockie_doos, disk_to_check)?;
                 }
 
                 // Waiter! Waiter! More disks please!
@@ -227,7 +238,7 @@ fn write_empty_crc(blocks: &[u16], disk: u16) -> Result<(), FloppyDriveError> {
             data: empty_data,
         };
 
-        CachedBlockIO::update_block(&empty_raw_block, JustDiskType::Standard)?;
+        CachedBlockIO::update_block(&empty_raw_block)?;
     }
 
     // All of the blocks now have a empty block with a crc on it.
@@ -254,7 +265,7 @@ fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, FloppyDriveEr
 
     // Go zero out the blocks on the disk, just to be safe.
     // We will bypass the cache.
-
+    #[allow(deprecated)] // Freeing blocks should be immediately done. Why? Idk i feel like it.
     let mut disk: StandardDisk = match FloppyDrive::open(starter.disk)? {
         DiskType::Standard(standard_disk) => standard_disk,
         _ => unreachable!("Block allocations must be on standard disks!"),
@@ -269,6 +280,7 @@ fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, FloppyDriveEr
     }
 
     // Now go to and free the blocks from the allocation table.
+    // This updates the header of the disk, and puts it in the cache.
     let blocks_freed = disk.free_blocks(&extracted_blocks)?;
 
     // If the current disk in the pool marked with free blocks is higher than the blocks we just freed,

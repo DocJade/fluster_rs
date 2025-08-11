@@ -4,10 +4,7 @@ use log::{debug, error, warn};
 
 use crate::pool::{
     disk::{
-        drive_struct::{
-            FloppyDriveError,
-            JustDiskType
-        },
+        drive_struct::FloppyDriveError,
         generic::{
             block::block_structs::{BlockError, RawBlock},
             generic_structs::pointer_struct::DiskPointer,
@@ -198,7 +195,7 @@ impl DirectoryBlock {
         previous_block.next_block = after_this_pointer;
         // Write it
         let raw_ed = previous_block.to_block();
-        CachedBlockIO::update_block(&raw_ed, JustDiskType::Standard)?;
+        CachedBlockIO::update_block(&raw_ed)?;
 
         // Now delete the block that we emptied by freeing it.
         let release_me = blocks[contained_in].block_origin;
@@ -228,7 +225,7 @@ impl DirectoryBlock {
             self.try_remove_item(&found).expect("Guard");
             // Now flush ourselves to disk
             let raw_block = self.to_block();
-            CachedBlockIO::update_block(&raw_block, JustDiskType::Standard)?;
+            CachedBlockIO::update_block(&raw_block)?;
 
             // If we are now empty, also return a pointer to the next block
             let maybe_pointer: Option<DiskPointer> = if self.get_items().is_empty() {
@@ -352,7 +349,7 @@ fn get_blocks(start_block_location: DiskPointer) -> Result<Vec<DirectoryBlock>, 
     // This must be a valid block
     assert!(!start_block_location.no_destination());
     
-    let raw_read: RawBlock = CachedBlockIO::read_block(start_block_location, JustDiskType::Standard)?;
+    let raw_read: RawBlock = CachedBlockIO::read_block(start_block_location)?;
     let start_block: DirectoryBlock = DirectoryBlock::from_block(&raw_read);
 
     // We assume we are handed the first directory in the chain.
@@ -373,7 +370,7 @@ fn get_blocks(start_block_location: DiskPointer) -> Result<Vec<DirectoryBlock>, 
         }
         
         // Load in the next block.
-        let next_block_reader = CachedBlockIO::read_block(next_block, JustDiskType::Standard)?;
+        let next_block_reader = CachedBlockIO::read_block(next_block)?;
         current_dir_block = DirectoryBlock::from_block(&next_block_reader);
 
         // Onwards!

@@ -30,10 +30,42 @@
 //  top, previously I used bubble sort, which could lead to slightly less used items to
 //  not promote away from the bottom of the queue fast enough.
 
-use std::{collections::{HashMap, VecDeque}, sync::Mutex};
+use std::{
+    collections::{
+        HashMap,
+        VecDeque
+    },
+    sync::Mutex
+};
 
 use lazy_static::lazy_static;
 use log::debug;
+
+use crate::pool::disk::{
+    drive_struct::{
+        DiskType,
+        FloppyDrive,
+        FloppyDriveError
+    },
+    generic::{
+        block::{allocate::block_allocation::BlockAllocation,
+            block_structs::RawBlock
+        },
+        disk_trait::{
+            GenericDiskMethods
+        },
+        generic_structs::pointer_struct::DiskPointer,
+        io::{
+            cache::{
+                cache_io::CachedBlockIO,
+                cached_allocation::CachedAllocationDisk,
+                statistics::BlockCacheStatistics
+            },
+            checked_io::CheckedIO
+        }
+    },
+    standard_disk::standard_disk_struct::StandardDisk
+};
 
 //
 // =========
@@ -54,8 +86,6 @@ lazy_static! {
 // STRUCTS
 // =========
 //
-
-use crate::pool::disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::{cache::{cache_io::CachedBlockIO, statistics::BlockCacheStatistics}, checked_io::CheckedIO}}, standard_disk::standard_disk_struct::StandardDisk};
 
 /// The wrapper around all the cache tiers
 /// Only avalible within the cache folder,
@@ -90,8 +120,6 @@ struct TieredCache {
 pub(super) struct CachedBlock {
     /// Where this block came from.
     block_origin: DiskPointer,
-    /// The type of disk this came from.
-    disk_type: JustDiskType,
     /// The content of the block.
     data: Vec<u8>,
 }
@@ -158,9 +186,11 @@ impl BlockCache {
     /// Reserve a block on a disk, skipping the disk if possible.
     /// 
     /// Panics if block was already allocated.
-    pub(super) fn cached_block_allocation(raw_block: &RawBlock, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
-        // Another level of indirection, how fun
-        super::cached_allocation::cached_allocation(raw_block, expected_disk_type)
+    pub(super) fn cached_block_allocation(raw_block: &RawBlock) -> Result<(), FloppyDriveError> {
+        let mut cache_disk: CachedAllocationDisk = CachedAllocationDisk::open(raw_block.block_origin.disk)?;
+        let _ = cache_disk.allocate_blocks(&vec![raw_block.block_origin.block])?;
+        // Shouldn't even need to check if it allocated one block, no way it could allocate more.
+        Ok(())
     }
     
     /// Flushes all information in a tier to disk.
@@ -248,10 +278,9 @@ impl CachedBlock {
     /// Turn a RawBlock into a CachedBlock
     /// 
     /// Expects the raw block to already have a disk set.
-    pub(super) fn from_raw(block: &RawBlock, disk_type: JustDiskType) -> Self {
+    pub(super) fn from_raw(block: &RawBlock) -> Self {
         Self {
             block_origin: block.block_origin,
-            disk_type,
             data: block.data.to_vec(),
         }
     }
@@ -391,7 +420,7 @@ fn go_add_or_update_item_cache(block: CachedBlock) -> Result<(), FloppyDriveErro
         // We don't have room, so we need to wipe the cache.
         drop(cache);
         BlockCache::flush(0)?;
-        let cache = &mut CASHEW.try_lock().expect("Single threaded.");
+        let cache: &mut std::sync::MutexGuard<'_, BlockCache> = &mut CASHEW.try_lock().expect("Single threaded.");
         cache.tier_0.add_item(block);
         return Ok(());
     }
@@ -617,7 +646,6 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
     // Therefore, we can make all of our writes in one pass per disk, and never have to look at
     // the allocation table at all!
     
-    
     // To properly allow lazy-loading disks into the drive, we allow the disk loading routine to use cached blocks
     // if they exist.
     
@@ -627,6 +655,8 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
     // To solve this, down here we must grab the header from the cache if it is there, then 
     // we hold onto that, load the disk (which now has to do a proper block read to check if its the right disk), then
     // update the disk if its the correct one.
+
+    // This is the only place that actual disk writes ever happen in normal operation outside of disk initialization.
     
     // Open the first disk to write to
     
@@ -655,8 +685,11 @@ fn go_check_tier_full(tier: &TieredCache) -> bool {
     tier.order.len() == tier.size
 }
 
-// Function for handling the possibility of cached disk headers
-pub(super) fn disk_load_header_invalidation(disk_number: u16) -> Result<StandardDisk, FloppyDriveError> {
+/// Function for handling the possibility of cached disk headers.
+/// This can only be used in the cache.
+/// 
+/// This should be used in place of direct disk opening to ensure headers are up to date.
+pub(in super::super::cache) fn disk_load_header_invalidation(disk_number: u16) -> Result<StandardDisk, FloppyDriveError> {
     // Try to find the header for this disk in the cache
 
     let header_pointer: DiskPointer = DiskPointer {
@@ -676,10 +709,19 @@ pub(super) fn disk_load_header_invalidation(disk_number: u16) -> Result<Standard
     }
 
     // Now we can load in the disk without worrying about the header being cached already.
+    
 
-    let mut disk = match FloppyDrive::open(disk_number)? {
-        DiskType::Standard(standard_disk) => standard_disk,
-        _ => unreachable!("Cache does not happen on non-standard disks."),
+    #[allow(deprecated)] // This is being used for the cache.
+    let mut disk: DiskType = match FloppyDrive::open(disk_number)? {
+        // Due to the caching nature of writing headers, blank disks dont
+        // immediately get their header written, even though they are now
+        // standard disks, this also applies to unknown disks.
+        // Thus, unless its a pool disk, it gets let through.
+        // // Maybe, commented out others to see...
+        DiskType::Standard(standard_disk) => DiskType::Standard(standard_disk),
+        // DiskType::Blank(blank) => DiskType::Blank(blank),
+        // DiskType::Unknown(unknown) => DiskType::Unknown(unknown),
+        _ => unreachable!("Cache cannot be used for pool disks."),
     };
 
     // Update the header on the disk if needed.
@@ -688,12 +730,18 @@ pub(super) fn disk_load_header_invalidation(disk_number: u16) -> Result<Standard
         disk.checked_update(&cached_block)?;
 
         // Now the disk is out of sync, we need to load it in _again_
-        disk = match FloppyDrive::open(disk_number)? {
-            DiskType::Standard(standard_disk) => standard_disk,
-            _ => unreachable!("Cache does not happen on non-standard disks."),
+        #[allow(deprecated)] // This is being used for the cache.
+        let some_disk = FloppyDrive::open(disk_number)?;
+        disk = match some_disk {
+            DiskType::Standard(standard_disk) => DiskType::Standard(standard_disk),
+            // We dont put blank here again, since the header must be written at this point.
+            _ => unreachable!("Cache cannot be used for non-standard disks."),
         };
     }
 
+    // At this point, this must be a standard disk.
+    let standard_disk: StandardDisk = disk.try_into().expect("Must be standard at this point");
+
     // The header on the disk is now up to date.
-    Ok(disk)
+    Ok(standard_disk)
 }

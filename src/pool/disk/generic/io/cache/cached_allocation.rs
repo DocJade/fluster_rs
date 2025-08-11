@@ -1,16 +1,12 @@
 // Sidestep the disk if possible when marking a block as allocated.
 
-use std::fs::File;
-#[cfg(unix)]
-use std::fs::OpenOptions;
+use std::process::exit;
+
+use log::error;
 
 use crate::pool::disk::{
     drive_struct::{
-        DiskBootstrap,
-        DiskType,
-        FloppyDrive,
         FloppyDriveError,
-        JustDiskType
     },
     generic::{
         block::{
@@ -18,119 +14,83 @@ use crate::pool::disk::{
             block_structs::RawBlock
         },
         generic_structs::pointer_struct::DiskPointer,
-        io::cache::{
-            cache_implementation::{
-                BlockCache, CachedBlock
-            }
-        }
+        io::cache::cache_io::CachedBlockIO
     },
-    standard_disk::standard_disk_struct::StandardDisk
+    standard_disk::{
+        block::header::header_struct::StandardDiskHeader
+    }
 };
 
-pub(super) fn cached_allocation(raw_block: &RawBlock, expected_disk_type: JustDiskType) -> Result<(), FloppyDriveError> {
-    // We can create a fake disk to do our allocation against that actually updates the
-    // cache instead of the physical disk, assuming the header block is cached, which is very
-    // likely.
-
-    // You can only use the allocator on standard disks.
-    assert_eq!(expected_disk_type, JustDiskType::Standard);
-
-    // If the disk we are attempting the allocation is already inserted, there's no point in
-    // trying to cache it, since the disk would just get out of sync immediately.
-    if FloppyDrive::currently_inserted_disk_number() == raw_block.block_origin.disk {
-
-        // The disk is currently in the drive. We'll update it normally.
-
-        // This will actually check the cache for the header block again,
-        // which is fine, all that matters is that we don't need to swap the disk.
-
-        let mut disk: StandardDisk = match FloppyDrive::open(raw_block.block_origin.disk)? {
-            DiskType::Standard(standard_disk) => standard_disk,
-            _ => unreachable!("No allocations on non-standard disks."),
-        };
-
-        let allocated = disk.allocate_blocks(&[raw_block.block_origin.block].to_vec())?;
-        
-        // Make sure that worked
-        assert_eq!(allocated, 1);
-        return Ok(());
-    }
-
-
-    // Now, is the header in the cache?
-    // The header is block 0 of the disk that this new block wants to allocate
-    let header: DiskPointer = DiskPointer {
-        disk: raw_block.block_origin.disk,
-        block: 0,
-    };
-
-    if let Some(header_block) = BlockCache::try_find(header) {
-        // Header is cached! We can sneak around the disk access.
-        the_sidestep(raw_block, header_block)?;
-
-        // Now that we have that spoofed disk, we need to update the real disks table, otherwise
-        // it would be out of sync immediately after this function.
-
-        // BUT! That only needs to happen if the disk is currently inserted.
-        // Otherwise the disk will load in the new header when it gets inserted later.
-
-        // Since we already know the disk isn't inserted, we don't have to do anything.
-        return Ok(());
-    }
-
-    // Well, the block was not in the cache, we need to do the allocation normally.
-    // Sad.
-
-    let mut disk: StandardDisk = match FloppyDrive::open(header.disk)? {
-        DiskType::Standard(standard_disk) => standard_disk,
-        _ => panic!("Expected disk was standard, got the unexpected!"),
-    };
-
-    // Run the allocation
-    let blocks_allocated: u16 = disk.allocate_blocks(&[raw_block.block_origin.block].to_vec())?;
-
-    // make sure we did allocate the block
-    assert_eq!(blocks_allocated, 1);
-
-    // We did the allocation on the actual disk, so we dont need to do any further updates.
-
-    // All done.
-    Ok(())
-
+// To not require a rewrite of pool block allocation logic, we will make fake disks for it to use.
+pub(crate) struct CachedAllocationDisk {
+    /// The header of the disk we are imitating
+    imitated_header: StandardDiskHeader
 }
 
-// Returns the spoofed standard disk
-fn the_sidestep(block_to_allocate: &RawBlock, header_block: CachedBlock) -> Result<(), FloppyDriveError> {
-    // We will spoof the disk.
-    // This is super risky, maybe,
-    // but the speedup and the reduction in disk swapping should be well worth it
+impl CachedAllocationDisk {
+    /// Attempt to create a new cached disk for allocation.
+    pub(crate) fn open(disk_number: u16) -> Result<Self, FloppyDriveError> {
+        // Go get the header for this disk. Usually this is cached, but
+        // will fall through if needed.
+        let header_pointer: DiskPointer = DiskPointer {
+            disk: disk_number,
+            block: 0,
+        };
 
-    // Hilariously, at the lowest level, flushing a standard disk actually flushes its header to the cache.
-    // the entire allocation process never needs to touch the disk file, or the number of the disk. It just
-    // needs the block usage map!
+        let read: RawBlock = CachedBlockIO::read_block(header_pointer)?;
+        let imitated_header: StandardDiskHeader = StandardDiskHeader::from_block(&read);
+        Ok(
+            Self {
+            imitated_header
+            }
+        )
+    }
+}
 
-    // But for ease of use, we can just extract the entire header from the cached block and construct a disk from that.
-    // Luckily I already had a function for this, go figure lmao
+// We need to support all of the allocation methods that disks normally use.
 
-    // The allocator never touches the disk file, so we can give it a fake one by just pointing at /dev/null.
+impl BlockAllocation for CachedAllocationDisk {
+    #[doc = " Get the block allocation table"]
+    fn get_allocation_table(&self) -> &[u8] {
+        &self.imitated_header.block_usage_map
+    }
 
-    // If you are reading this with the intent of porting to a non-unix platform, first of all:
-    // dear god what are you doing
+    #[doc = " Update and flush the allocation table to disk."]
+    fn set_allocation_table(&mut self,new_table: &[u8]) -> Result<(),FloppyDriveError> {
+        self.imitated_header.block_usage_map = new_table
+            .try_into()
+            .expect("Incoming table should be the same as outgoing.");
+        Ok(())
+    }
+}
 
-    // Second: you just need to point this at literally any file, since it wont ever actually read or write to it,
-    // it just needs a valid handle. Making a tempfile would probably be too slow tho, good luck!
-
-    #[cfg(unix)]
-    let spoofed_file: File = OpenOptions::new().read(true).write(true).open("/dev/null").expect("If /dev/null is missing, you have bigger issues.");
-    let mut spoofed_disk: StandardDisk = StandardDisk::from_header(header_block.into_raw(), spoofed_file);
-
-    // With our new loaded gun, point it directly at foot.
-    let blocks_allocated: u16 = spoofed_disk.allocate_blocks(&[block_to_allocate.block_origin.block].to_vec())?;
-
-    // make sure we did allocate the block
-    assert_eq!(blocks_allocated, 1);
-
-    // This flushes to cache for us already, we are done!
-    // - allocate_blocks() calls set_allocation_table() which updates the block in the cache.
-    Ok(())
+// When these fake disks are dropped, their updated (if updated) blocks need to go into the cache
+impl Drop for CachedAllocationDisk {
+    fn drop(&mut self) {
+        // Put our fake header in the cache.
+        let updated = self.imitated_header.to_block();
+        // If this fails we are major cooked, we will try 10 times.
+        for i in (1..=10).rev() {
+            let result = CachedBlockIO::update_block(&updated);
+            if let Err(bad) = result {
+                // UH OH
+                error!("Attempting to flush a CachedAllocationDisk is failing!");
+                error!("{bad:#?}");
+                // If we are out of attempts, we must die.
+                let remaining_attempts = i - 1;
+                if remaining_attempts == 0 {
+                    // Cooked.
+                    error!("Well.. Shit!");
+                    error!("Filesystem is in an unrecoverable state!");
+                    error!("Giving up.");
+                    exit(1) // bye bye!
+                }
+                error!("{remaining_attempts} attempts remaining!")
+            } else {
+                // Worked! All done.
+                break
+            }
+        }
+        // Block has been put in the cache.
+    }
 }

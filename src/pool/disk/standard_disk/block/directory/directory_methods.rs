@@ -5,7 +5,7 @@
 // Implementations
 
 use crate::pool::disk::{
-    drive_struct::{FloppyDriveError, JustDiskType}, generic::{
+    drive_struct::FloppyDriveError, generic::{
         block::{block_structs::RawBlock, crc::add_crc_to_block},
         generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO,
     }, standard_disk::block::{
@@ -349,7 +349,7 @@ impl DirectoryItem {
         let inode_directory: InodeDirectory = inode.extract_directory().expect("Guard.");
 
         // Load the block
-        let raw_block: RawBlock = CachedBlockIO::read_block(inode_directory.pointer, JustDiskType::Standard)?;
+        let raw_block: RawBlock = CachedBlockIO::read_block(inode_directory.pointer)?;
 
         let directory: DirectoryBlock = DirectoryBlock::from_block(&raw_block);
 
@@ -380,7 +380,7 @@ impl DirectoryItem {
 
         if let Some(dir) = inode.extract_directory() {
             // Get the directory block
-            let raw_block: RawBlock = CachedBlockIO::read_block(dir.pointer, JustDiskType::Standard)?;
+            let raw_block: RawBlock = CachedBlockIO::read_block(dir.pointer)?;
             Ok(DirectoryBlock::from_block(&raw_block))
         } else {
             // This was not a file.

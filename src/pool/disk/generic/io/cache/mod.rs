@@ -1,4 +1,4 @@
 mod cache_implementation;
-pub mod cache_io;
+pub(crate) mod cache_io;
 mod statistics;
-mod cached_allocation;
+pub(crate) mod cached_allocation;

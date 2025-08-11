@@ -4,14 +4,25 @@ use log::{debug, error};
 
 use crate::pool::{
     disk::{
-        drive_struct::{FloppyDriveError, JustDiskType},
+        drive_struct::FloppyDriveError,
         generic::{
-            block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer,
+            block::block_structs::RawBlock,
+            generic_structs::pointer_struct::DiskPointer,
             io::cache::cache_io::CachedBlockIO,
         },
         standard_disk::block::{
-                directory::directory_struct::{DirectoryBlock, DirectoryFlags, DirectoryItem},
-                inode::inode_struct::{Inode, InodeBlock, InodeDirectory, InodeFlags, InodeTimestamp},
+                directory::directory_struct::{
+                    DirectoryBlock,
+                    DirectoryFlags,
+                    DirectoryItem
+                },
+                inode::inode_struct::{
+                    Inode,
+                    InodeBlock,
+                    InodeDirectory,
+                    InodeFlags,
+                    InodeTimestamp
+                },
                 io::directory::types::NamedItem,
             },
     },
@@ -80,7 +91,7 @@ impl DirectoryBlock {
         // Remove our inode.
         // We need to find it manually, since we will be updating the
         // inode block.
-        let read: RawBlock = CachedBlockIO::read_block(self_item.location.to_disk_pointer(), JustDiskType::Standard)?;
+        let read: RawBlock = CachedBlockIO::read_block(self_item.location.to_disk_pointer())?;
         let mut inode_block: InodeBlock = InodeBlock::from_block(&read);
 
         if let Err(error) = inode_block.try_remove_inode(self_item.location.offset) {
@@ -92,7 +103,7 @@ impl DirectoryBlock {
         }
 
         // Write back the updated inode block
-        CachedBlockIO::update_block(&inode_block.to_block(), JustDiskType::Standard)?;
+        CachedBlockIO::update_block(&inode_block.to_block())?;
 
         // Now we can free the block that the directory occupied.
         let freed = Pool::free_pool_block_from_disk(&[self.block_origin])?;
@@ -212,7 +223,7 @@ fn go_make_new_directory_block() -> Result<DiskPointer, FloppyDriveError> {
     // Open the new block and write that bastard
     let new_directory_block: RawBlock = DirectoryBlock::new(*new_directory_location).to_block();
 
-    CachedBlockIO::update_block(&new_directory_block,JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&new_directory_block)?;
 
     // All done!
     Ok(*new_directory_location)
@@ -265,7 +276,7 @@ fn go_add_item(
         }
 
         // Load the new directory
-        let read_block: RawBlock = CachedBlockIO::read_block(new_block_origin, JustDiskType::Standard)?;
+        let read_block: RawBlock = CachedBlockIO::read_block(new_block_origin)?;
         next_directory = DirectoryBlock::from_block(&read_block);
         current_directory = &mut next_directory;
 
@@ -276,7 +287,7 @@ fn go_add_item(
     // Now that the loop has ended, we need to write the block that we just updated.
     // We assume the block has already been reserved, we are simply updating it.
     let to_write: RawBlock = current_directory.to_block();
-    CachedBlockIO::update_block(&to_write, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&to_write)?;
 
     debug!("Item added.");
     // Done!
@@ -307,7 +318,7 @@ fn go_find_next_or_extend_block(
     directory.next_block = block_to_load;
 
     let raw_block: RawBlock = directory.to_block();
-    CachedBlockIO::update_block(&raw_block, JustDiskType::Standard)?;
+    CachedBlockIO::update_block(&raw_block)?;
 
     // All done.
     Ok(block_to_load)

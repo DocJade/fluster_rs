@@ -1,8 +1,35 @@
 // Reading a block is way easier than writing it.
+// Must use cached IO, does not touch disk directly.
 
 use log::{debug, trace};
 
-use crate::pool::disk::{drive_struct::{DiskType, FloppyDrive, FloppyDriveError, JustDiskType}, generic::{block::block_structs::RawBlock, generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO}, standard_disk::{block::{directory::directory_struct::{DirectoryFlags, DirectoryItem}, file_extents::{file_extents_methods::DATA_BLOCK_OVERHEAD, file_extents_struct::{FileExtent, FileExtentBlock}}, inode::inode_struct::{InodeBlock, InodeFile}}, standard_disk_struct::StandardDisk}};
+use crate::pool::disk::{
+    drive_struct::FloppyDriveError,
+    generic::{
+        block::block_structs::RawBlock,
+        generic_structs::pointer_struct::DiskPointer,
+        io::cache::cache_io::CachedBlockIO
+    },
+    standard_disk::{
+        block::{
+            directory::directory_struct::{
+                DirectoryFlags,
+                DirectoryItem
+            },
+            file_extents::{
+                file_extents_methods::DATA_BLOCK_OVERHEAD,
+                file_extents_struct::{
+                    FileExtent,
+                    FileExtentBlock
+                }
+            },
+            inode::inode_struct::{
+                InodeBlock,
+                InodeFile
+            }
+        }
+    }
+};
 
 impl InodeFile {
     // Local functions
@@ -55,7 +82,7 @@ impl DirectoryItem {
             block: location.block,
         };
 
-        let raw_block: RawBlock = CachedBlockIO::read_block(pointer, JustDiskType::Standard)?;
+        let raw_block: RawBlock = CachedBlockIO::read_block(pointer)?;
         let inode_block: InodeBlock = InodeBlock::from_block(&raw_block);
 
         // Get the actual file
@@ -141,7 +168,7 @@ fn go_to_extents(
 
         // Update what disk we're on
         current_disk = next_block.disk;
-        let raw_block: RawBlock = CachedBlockIO::read_block(next_block, JustDiskType::Standard)?;
+        let raw_block: RawBlock = CachedBlockIO::read_block(next_block)?;
         current_dir_block = FileExtentBlock::from_block(&raw_block);
 
         // Onwards!
@@ -159,7 +186,7 @@ fn go_to_extents(
 fn go_get_root_block(file: &InodeFile) -> Result<FileExtentBlock, FloppyDriveError> {
     // Make sure this actually goes somewhere
     assert!(!file.pointer.no_destination());
-    let raw_block: RawBlock = CachedBlockIO::read_block(file.pointer, JustDiskType::Standard)?;
+    let raw_block: RawBlock = CachedBlockIO::read_block(file.pointer)?;
     let block = FileExtentBlock::from_block(&raw_block);
     Ok(block)
 }
@@ -182,10 +209,8 @@ fn go_read_file(file: &InodeFile, seek_point: u64, size: u32) -> Result<Vec<u8>,
     let mut current_block: usize = block_index;
     let mut collected_bytes: Vec<u8> = Vec::new();
 
-    let mut disk: StandardDisk = match FloppyDrive::open(blocks[current_block].disk)? {
-        DiskType::Standard(standard_disk) => standard_disk,
-        _ => unreachable!("Why did we try to read from a non-standard disk?"),
-    };
+    // We dont need to deal with the disk at all at this level, we will use
+    // the cache for all IO
 
     loop {
         // Are we done reading?
@@ -193,15 +218,6 @@ fn go_read_file(file: &InodeFile, seek_point: u64, size: u32) -> Result<Vec<u8>,
             // All done!
             break
         }
-        // Are we on the right disk
-        if blocks[current_block].disk != disk.number {
-            // Need to go to another disk
-            disk = match FloppyDrive::open(blocks[current_block].disk)? {
-                DiskType::Standard(standard_disk) => standard_disk,
-                _ => unreachable!("Why did the block point to a non-standard disk?"),
-            };
-        }
-        // We're on the right disk
         let mut read_bytes = read_bytes_from_block(blocks[current_block], byte_index, bytes_remaining)?;
         // After the first read, we are now aligned to the start of blocks
         byte_index = 0;
@@ -248,7 +264,7 @@ fn read_bytes_from_block(block: DiskPointer, offset: u16, bytes_to_read: u32) ->
 
 
     // load the block
-    let block_copy: RawBlock = CachedBlockIO::read_block(block, JustDiskType::Standard)?;
+    let block_copy: RawBlock = CachedBlockIO::read_block(block)?;
     
     // Read that sucker
     // Skip the first byte with the flag
