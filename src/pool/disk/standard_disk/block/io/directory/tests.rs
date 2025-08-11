@@ -33,6 +33,24 @@ fn add_directory() {
 }
 
 #[test]
+// Make sure creating a file only makes one entry.
+fn creating_only_makes_one_directory() {
+    // Use the filesystem starter to get everything in the right spots
+    let _fs = get_filesystem();
+    // Now try adding a directory to the pool
+    let mut block = Pool::get_root_directory().unwrap();
+    let result = block.make_directory("test".to_string()).unwrap();
+
+    let listed = block.list().unwrap();
+
+    // There should only be one directory.
+    assert_eq!(listed.len(), 1);
+    
+    // The returned item should be the same
+    assert_eq!(listed[0], result);
+}
+
+#[test]
 fn add_and_delete_directory() {
     let _fs = get_filesystem();
     let mut block = Pool::get_root_directory().unwrap();
@@ -45,6 +63,9 @@ fn add_and_delete_directory() {
 
     // Call delete on it
     test_dir_item.get_directory_block().unwrap().delete_self(test_dir_item).unwrap();
+
+    // Directory should now be empty
+    assert!(block.list().unwrap().is_empty());
 }
 
 #[test]
@@ -66,6 +87,9 @@ fn deletion_shrinks() {
     
     // Now make sure the empty block is only 1 block large.
     assert!(block.next_block.no_destination());
+
+    // Should also contain nothing
+    assert!(block.list().unwrap().is_empty());
 }
 
 #[test]
@@ -110,6 +134,12 @@ fn nested_directory_hell() {
                 // Incentivize deep nesting.
                 // not going any further.
                 break;
+            }
+            // Random chance to go back to the root for more chaos.
+            if random.random_bool(0.05) {
+                // Back to root!
+                where_are_we = Pool::get_root_directory().unwrap();
+                continue;
             }
             // Looks like we're entering a new directory.
             let destination = square_holes
