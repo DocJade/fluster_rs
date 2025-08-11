@@ -603,6 +603,52 @@ impl FilesystemMT for FlusterFS {
             maybe_destination_directory_item = destination_parent_dir.find_item(&NamedItem::Directory(destination_item_name.clone()))?;
         };
 
+        // The following complicated move logic requires that the two parent directories be different. If the source and 
+        // destination directories are the same, we can just rename the inode, skipping all of the fancier operations.
+
+        if parent == newparent {
+            // Sweet!
+            // We dont even need the destination info
+            drop(maybe_destination_directory_item);
+            drop(destination_full_temp_handle);
+            drop(destination_parent_dir);
+
+            // Source must exist.
+            let source = match maybe_source_directory_item {
+                Some(ok) => ok,
+                None => {
+                    // Can't rename nothing.
+                    return Err(NO_SUCH_ITEM);
+                },
+            };
+
+            // Type does not matter, we can just update the name in the directory, since inodes do not hold that info.
+            // Explicitly check the error, silently returning when this fails is bad.
+            let rename_result = match source_parent_dir.try_rename_item(&source.into(), destination_item_name) {
+                Ok(ok) => ok,
+                Err(err) => {
+                    // Renaming failed for a lower level issue!
+                    warn!("Item rename failed! Why?");
+                    warn!("`{err:#?}`");
+                    // Bail out
+                    return Err(err.into());
+                },
+            };
+
+
+            if rename_result {
+                // rename worked.
+                debug!("Item renamed successfully.");
+                return Ok(())
+            } else {
+                // Somehow the item was not there anymore? This should never happen.
+                unreachable!("Item to rename disappeared!")
+            }
+        }
+
+        // This rename moves the item between directories.
+
+
         // we branch depending on if it was a file or directory, handling is slightly different
         if source_full_temp_handle.is_file() {
             //
@@ -793,7 +839,23 @@ impl FilesystemMT for FlusterFS {
                         return Err(err.into())
                     },
                 }
-                debug!("File added.")
+                debug!("File added.");
+
+                // Now we need to remove the old item.
+                match source_parent_dir.delete_file(NamedItem::File(source_item_name)) {
+                    Ok(ok) => {
+                        // if ok is none, the item disappeared, which should not happen.
+                        assert!(ok.is_some(), "File should not disappear.")
+                    },
+                    Err(err) => {
+                        // The file made it to the destination, but removing the original failed.
+                        // The old item may still be there, or it leaked blocks due to failed cleanup.
+                        warn!("Failed to delete source item, it may still be there.");
+                        warn!("Blocks were probably leaked.");
+                        warn!("Non-critical failure, we will keep going.");
+                        // Good enough.
+                    },
+                }
             }
             // All done.
             debug!("File moved successfully.");
@@ -878,11 +940,10 @@ impl FilesystemMT for FlusterFS {
                     } else {
                         // What
                         warn!("Tried to delete the destination directory to prepare for swap, but it was no longer there.");
-                        // Nothing we can do
-                        // There isn't a special error for this case, but no data has been destroyed, so it can safely be retried.
-                        return Err(TRY_AGAIN);
+                        // This should be impossible.
+                        unreachable!();
                     }
-                    // We will hold onto it just in case
+                    // We will hold onto it just in case, even though it's empty.
                 },
                 Err(err) => {
                     // Drive level issue.
@@ -913,7 +974,7 @@ impl FilesystemMT for FlusterFS {
                     warn!("Failed at a level lower than us. Unknown state.");
                     // Attempt to uphold POSIX standard (like hell the rest of fluster is compliant) by
                     // at least attempting to put the original directory back again.
-                    // ...or not actually, I dont wanna clone the parent again for no reason. lol.
+                    // We dont actually need to though, since it hasn't been extracted yet.
                     return Err(err.into())
                 },
             }

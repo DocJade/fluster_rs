@@ -1,6 +1,6 @@
 // Higher level abstractions for reading directories.
 
-use log::debug;
+use log::{debug, error, warn};
 
 use crate::pool::{
     disk::{
@@ -9,7 +9,7 @@ use crate::pool::{
             JustDiskType
         },
         generic::{
-            block::block_structs::RawBlock,
+            block::block_structs::{BlockError, RawBlock},
             generic_structs::pointer_struct::DiskPointer,
             io::cache::cache_io::CachedBlockIO
         },
@@ -244,6 +244,66 @@ impl DirectoryBlock {
 
         // Not in here.
         Ok(None)
+    }
+
+    /// Rename an item in place.
+    /// 
+    /// Searches entire directory for the item.
+    /// 
+    /// Assumes that the passed in directory block is the head.
+    /// 
+    /// Returns true if the item existed and was renamed.
+    /// 
+    /// Flushes change to disk.
+    pub(crate) fn try_rename_item(&mut self, to_rename: &NamedItem, new_name: String) -> Result<bool, FloppyDriveError> {
+
+        // Since the size of the item might change (name length change) we cant just update the name directly, we have to
+        // extract the item and re-add it.
+
+        // We also take in the directory item instead of the named item, since you shouldn't be holding onto it after this.
+
+        // Make sure the name is valid.
+        assert!(new_name.len() <= 255);
+
+        // Get the item
+        if let Some(mut exists) = self.find_and_extract_item(to_rename)? {
+            // Copy it, just in case...
+            let copy = exists.clone();
+            // Now rename it and put it back
+            exists.name_length = new_name.len() as u8;
+            exists.name = new_name;
+            // If this doesn't work, the item is now gone forever lol, thus
+            // we will check the result of this operation and try to put the item back if we can.
+            let add_result = self.add_item(&exists);
+            if add_result.is_ok() {
+                // All good.
+                Ok(true)
+            } else {
+                // Addition failed!
+                warn!("Adding item during rename failed.");
+                warn!("Attempting to restore non-renamed item...");
+                if self.add_item(&copy).is_ok() {
+                    // That worked
+                    warn!("Old item restored.")
+                } else {
+                    error!("Failed to restore old item during rename failure! Item has been lost!");
+                    // Well shit. Not much we can do.
+                    println!("Fluster has just lost your file/folder named `{}`, sorry!", copy.name);
+                    // we have to give up.
+                    panic!("File lost during rename.");
+                }
+                // We need to fail tests even if the item was restored.
+                if cfg!(test) {
+                    panic!("Rename failure. Addition failed.")
+                }
+                // Now we are... fine? The item is still there, it just 
+                // wasn't renamed.
+                Err(FloppyDriveError::BlockError(BlockError::DeviceBusy))
+            }
+        } else {
+            // No such item.
+            Ok(false)
+        }
     }
 }
 

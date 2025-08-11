@@ -5,15 +5,13 @@
 use std::path::PathBuf;
 
 use log::debug;
-use rand::{Rng, rngs::ThreadRng, seq::IndexedRandom};
+use rand::{rngs::ThreadRng, seq::{IndexedRandom, SliceRandom}, Rng};
 use tempfile::{TempDir, tempdir};
 
 use crate::{
     filesystem::filesystem_struct::{FilesystemOptions, FlusterFS},
     pool::{
-        disk::{
-            standard_disk::block::io::directory::types::NamedItem,
-        },
+        disk::standard_disk::block::{directory::directory_struct::DirectoryItem, io::directory::types::NamedItem},
         pool_actions::pool_struct::Pool,
     },
 };
@@ -90,6 +88,51 @@ fn deletion_shrinks() {
 
     // Should also contain nothing
     assert!(block.list().unwrap().is_empty());
+}
+
+#[test]
+// Try renaming some items
+fn rename_items() {
+    let _fs = get_filesystem();
+    let mut block = Pool::get_root_directory().unwrap();
+    
+    // A lot of directories
+    let mut directories: Vec<DirectoryItem> = Vec::new();
+    for i in 0..100 {
+        directories.push(block.make_directory(format!("dir_{i}")).unwrap());
+    }
+
+    // A lot of files
+    let mut files: Vec<DirectoryItem> = Vec::new();
+    for i in 0..100 {
+        files.push(block.new_file(format!("file_{i}.txt")).unwrap());
+    }
+
+    // Shuffle for fun
+    let mut all_items: Vec<DirectoryItem> = Vec::new();
+    all_items.extend(directories);
+    all_items.extend(files);
+
+    let mut random: ThreadRng = rand::rng();
+
+    all_items.shuffle(&mut random);
+
+    // How many do we have
+    let number_made: usize = all_items.len();
+
+
+
+    // Go rename all of them
+    for item in all_items {
+        // need a new name... hmmmmm
+        let new_name: String = format!("new_{}", item.name);
+        let renamed = block.try_rename_item(&item.into(), new_name).unwrap();
+        assert!(renamed)
+    }
+
+    // Make sure the directory still contains the correct number of items. (ie we didn't duplicate anything.)
+    let list = block.list().unwrap();
+    assert_eq!(number_made, list.len());
 }
 
 #[test]

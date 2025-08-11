@@ -1,6 +1,7 @@
 use std::{error::Error, ffi::OsStr, thread, time::Duration};
 
 use log::{error, info};
+use rand::{rngs::ThreadRng, seq::SliceRandom};
 // We want to see logs while testing.
 use test_log::test;
 
@@ -279,4 +280,140 @@ fn directory_creation_and_removal() {
 
     // Make sure it was deleted
     assert!(deleted.is_ok());
+}
+
+#[test]
+// Higher level renaming test
+fn rename_lots_of_items() {
+    let fs = test_common::start_filesystem();
+    let mount_point = test_common::get_actually_temp_dir();
+    let thread_mount_path = mount_point.path().to_path_buf();
+    let mount_options = test_mount_options();
+    
+    // fs needs to be mounted in another thread bc it blocks
+    let mount_thread = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(100)); // Pause to let the debugger see the thread
+        // If we dont pause, breakpoints dont work.
+        // This blocks until the unmount happens.
+        fuse_mt::mount(fs, &thread_mount_path, &mount_options)
+    });
+
+    // wait for it to start...
+    thread::sleep(Duration::from_millis(500));
+
+    // Hilariously we will just collect all the results we get so we can check
+    // them all at the end after unmount.
+    let mut results: Vec<std::io::Result<()>> = Vec::new();
+    
+    // A lot of directories
+    let mut directories: Vec<String> = Vec::new();
+    for i in 0..1000 {
+        let mut new_dir = mount_point.path().to_path_buf();
+        let dir_name = format!("dir_{i}");
+        new_dir.push(dir_name.clone());
+        directories.push(dir_name);
+        let go = std::fs::create_dir(&new_dir);
+        results.push(go);
+    }
+
+    // A lot of files
+    let mut files: Vec<String> = Vec::new();
+    for i in 0..1000 {
+        let mut new_file = mount_point.path().to_path_buf();
+        let dir_name = format!("file_{i}.txt");
+        new_file.push(dir_name.clone());
+        files.push(dir_name);
+        // Doesn't need any particular content.
+        let go = std::fs::write(new_file, [1,2,3,4]);
+        results.push(go);
+    }
+    
+    // Shuffle for fun
+    let mut all_items: Vec<String> = Vec::new();
+    all_items.extend(directories);
+    all_items.extend(files);
+    
+    let mut random: ThreadRng = rand::rng();
+    all_items.shuffle(&mut random);
+    
+    // How many do we have
+    let number_made: usize = all_items.len();
+    
+    // Go rename all of them
+    for name in all_items {
+        let new_name: String = format!("new_{name}");
+        let mut previous = mount_point.path().to_path_buf();
+        let mut new = mount_point.path().to_path_buf();
+        previous.push(name);
+        new.push(new_name);
+        let go = std::fs::rename(previous, new);
+        results.push(go);
+    }
+
+    // Make sure the directory still contains the correct number of items. (ie we didn't duplicate anything.)
+    // Listing also returns `.`, but rust (or linux?) drops it here if the directory is not empty.
+    
+    // We also cant error out before the unmount, so we get a lil goofy here.
+    let mut list_count: usize = 0;
+    let mut list_names: Vec<String> = Vec::new();
+    let list = std::fs::read_dir(&mount_point);
+    if let Ok(listed) = list {
+        // listing was ok
+        for i in listed {
+            if let Err(error) = i {
+                // Something is amiss about this entry
+                results.push(Err(error));
+            } else {
+                list_count += 1;
+                list_names.push(i.unwrap().file_name().to_string_lossy().into_owned());
+            }
+        };
+    } else {
+        // Listing failed
+        results.push(Err(std::io::Error::other("Listing failed.")));
+    }
+    
+    // Now, because somebody thought this was a good idea (it probably is overall, just not great for FS work) the
+    // returned Result<> from filesystem operations seems to be holding references to the currently open filesystem.
+    // So we have to extract everything. We will turn the errors into strings if they exist.
+
+    // Loop over them, and only on the errors, make strings
+    // Tried doing this with iter, but couldn't finish writing it bc rust analyzer kept crashing lmao
+    let mut error_strings: Vec<String> = Vec::new();
+    for result in &results {
+        if let Err(error) = result {
+            // Make a string from that
+            let strung = error.to_string();
+            error_strings.push(strung);
+        }
+    }
+
+    // now drop the old results, we cant hold them past the unmount
+    drop(results);
+    
+    // cleanup
+    test_common::unmount(mount_point.path().to_path_buf());
+    let unmount_result = mount_thread.join();
+    unmount_result.unwrap().unwrap(); // Unmounting the fs should not fail.
+    
+    // Check all the results
+    if !error_strings.is_empty() {
+        // Something failed
+        for string in error_strings {
+            error!("{string}");
+        }
+        panic!();
+    };
+
+    // Make sure there are no duplicates
+    list_names.sort_unstable();
+    let old_list_len: usize = list_names.len();
+    list_names.dedup();
+    assert_eq!(old_list_len, list_names.len());
+    
+    // Make sure we have the correct number of items.
+    assert_eq!(number_made, list_count);
+
+    // Every item should contain the word `new`
+    assert!(!list_names.iter().all(|i| i.contains("new")));
 }
