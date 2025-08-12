@@ -11,10 +11,10 @@ use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct FileExtent {
-    pub(crate) flags: ExtentFlags,
-    pub(crate) disk_number: Option<u16>, // not included on local blocks
-    /// The block this file's section starts on. Inclusive.
-    pub(crate) start_block: u16,
+    /// Callers should never have to care about the flags.
+    pub(super) flags: ExtentFlags,
+    /// Points to the first block of the extent. Inclusive.
+    pub(crate) start_block: DiskPointer,
     /// How many blocks in a row starting from the start block
     /// are data blocks for this file.
     /// 
@@ -25,7 +25,10 @@ pub struct FileExtent {
 bitflags! {
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct ExtentFlags: u8 {
-        const OnThisDisk = 0b00000010;
+        // While the returned extents will always have their disk number set, at a lower level
+        // we save bytes by tossing the disk bytes if the extent is local. The disk number is
+        // then reconstructed on read.
+        const LocalExtent = 0b00000001;
         const MarkerBit = 0b10000000;
     }
 }
@@ -45,6 +48,7 @@ pub struct FileExtentBlock {
 bitflags! {
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct FileExtentBlockFlags: u8 {
+        // Currently unused.
     }
 }
 

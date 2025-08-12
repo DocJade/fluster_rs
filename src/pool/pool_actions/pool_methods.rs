@@ -14,7 +14,7 @@ use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 use crate::pool::disk::generic::io::cache::cache_io::CachedBlockIO;
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolDiskHeader;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryBlock;
-use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryFlags;
+use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryItemFlags;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryItem;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
 use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
@@ -232,11 +232,11 @@ fn pool_get_root_directory() -> Result<DirectoryBlock, FloppyDriveError> {
 
 /// Grabs the root inode location, duh
 fn pool_get_root_inode_location() -> InodeLocation {
-    InodeLocation {
-        disk: Some(1),
+    let pointer = DiskPointer {
+        disk: 1,
         block: 1,
-        offset: 0,
-    }
+    };
+    InodeLocation::new(pointer, 0)
 }
 
 /// Constructs a directory item with info about the root.
@@ -244,7 +244,7 @@ fn pool_get_root_directory_item() -> DirectoryItem {
     // The name of the root directory entry is always the delimiter.
     static DELIMITER: char = std::path::MAIN_SEPARATOR;
     DirectoryItem {
-        flags: DirectoryFlags::IsDirectory,
+        flags: DirectoryItemFlags::IsDirectory,
         name_length: 0,
         name: DELIMITER.into(),
         location: pool_get_root_inode_location(),

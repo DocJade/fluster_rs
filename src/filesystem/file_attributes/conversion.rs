@@ -9,7 +9,7 @@ use crate::{
         drive_struct::FloppyDriveError,
         standard_disk::block::{
             directory::directory_struct::{
-                DirectoryFlags,
+                DirectoryItemFlags,
                 DirectoryItem
             }
         }
@@ -53,19 +53,18 @@ fn go_get_metadata(item: DirectoryItem) -> Result<FileAttr, FloppyDriveError> {
     
     
     // How big is it
+    debug!("Getting size...");
     let size: u64 = item.get_size()?;
-    debug!("`{size}` bytes...");
-    
     
     // extract the times
-    let creation_time: SystemTime = item.get_created_time()?.into();
     debug!("Created at...");
-    let modified_time: SystemTime = item.get_modified_time()?.into();
+    let creation_time: SystemTime = item.get_created_time()?.into();
     debug!("Modified at...");
+    let modified_time: SystemTime = item.get_modified_time()?.into();
     
     // "What kind of item is this?"
     // https://www.tiktok.com/@ki2myyysc6/video/7524954406438161694
-    let file_kind: FileType = if item.flags.contains(DirectoryFlags::IsDirectory) {
+    let file_kind: FileType = if item.flags.contains(DirectoryItemFlags::IsDirectory) {
         // "This is a directory, used for holding items in a filesystem, such as files or other directories."
         debug!("Is a directory...");
         FileType::Directory

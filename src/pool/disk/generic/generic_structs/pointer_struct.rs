@@ -41,23 +41,3 @@ impl DiskPointer {
         self.disk == u16::MAX || self.block == u16::MAX
     }
 }
-
-// Quick function to turn a u16 and flags into a DiskPointer
-pub(in crate::pool::disk) fn u16_to_disk_pointer(
-    number: u16,
-    is_local: bool,
-    current_disk: u16,
-    default_block: u16,
-) -> DiskPointer {
-    if is_local {
-        DiskPointer {
-            disk: current_disk,
-            block: number,
-        }
-    } else {
-        DiskPointer {
-            disk: number,
-            block: default_block,
-        }
-    }
-}

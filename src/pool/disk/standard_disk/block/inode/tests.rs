@@ -6,15 +6,16 @@
 
 // Tests
 
-use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::Inode;
-use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeBlock;
-use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeBlockError;
-use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeDirectory;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeFile;
+use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeBlock;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeFlags;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeDirectory;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeTimestamp;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeBlockError;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeOffsetPacking;
 use rand::Rng;
 use rand::rngs::ThreadRng;
 
@@ -148,6 +149,18 @@ fn add_and_read_inode() {
 }
 
 #[test]
+// Make sure the offsets are working correctly
+fn inode_location_consistency() {
+    for _ in 0..1000 {
+        let new: InodeLocation = InodeLocation::get_random();
+        let disk_number: u16 = new.pointer.disk;
+        let frosted_flaked = new.to_bytes(disk_number);
+        let (_, we_have_the_technology) = InodeLocation::from_bytes(&frosted_flaked, disk_number);
+        assert_eq!(new, we_have_the_technology);
+    }
+}
+
+#[test]
 // Ensure inodes are the correct size for their subtype
 fn inode_correct_sizes() {
     for _ in 0..1000 {
@@ -261,17 +274,16 @@ impl InodeLocation {
     #[cfg(test)]
     pub(crate) fn get_random() -> Self {
         let mut random = rand::rng();
-        let disk: Option<u16> = if random.random_bool(0.5) {
-            Some(random.random())
-        } else {
-            None
+        let pointer: DiskPointer = DiskPointer {
+            disk: random.random(),
+            block: random.random(),
         };
 
-        Self {
-            disk,
-            block: random.random(),
-            offset: random.random(),
-        }
+        // random offset
+        // Not testing the entire range but whatever
+        let offset: u16 = random.random_range(0..250);
+
+        InodeLocation::new(pointer, offset)
     }
 }
 

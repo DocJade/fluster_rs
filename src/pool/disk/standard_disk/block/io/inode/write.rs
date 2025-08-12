@@ -62,10 +62,7 @@ impl Pool {
 
         let result = go_add_inode(inode, start_block)?;
         // Where that ended up needs to be known
-        let success_write_pointer: DiskPointer = DiskPointer {
-            disk: result.disk.expect("That function should return some here."),
-            block: result.block,
-        };
+        let success_write_pointer: DiskPointer = result.pointer;
 
         // Update the pool with new successful write.
         trace!("Locking GLOBAL_POOL...");
@@ -102,10 +99,7 @@ impl Pool {
 
         let result = go_add_inode(inode, start_block)?;
         // Where that ended up needs to be known
-        let success_write_pointer: DiskPointer = DiskPointer {
-            disk: result.disk.expect("That function should return some here."),
-            block: result.block,
-        };
+        let success_write_pointer: DiskPointer = result.pointer;
 
         // Update the pool with new successful write.
         trace!("Locking GLOBAL_POOL...");
@@ -172,11 +166,14 @@ fn go_add_inode(inode: Inode, start_block: InodeBlock) -> Result<InodeLocation, 
     CachedBlockIO::update_block(&block_to_write)?;
 
     // All done! Now we can return where that inode eventually ended up
-    Ok(InodeLocation {
-        disk: Some(current_disk),
+    let pointer: DiskPointer = DiskPointer {
+        disk: current_disk,
         block: current_block_number,
-        offset: inode_offset,
-    })
+    };
+
+    let new_location: InodeLocation = InodeLocation::new(pointer, inode_offset);
+
+    Ok(new_location)
 }
 
 fn get_next_block(current_block: InodeBlock) -> Result<DiskPointer, FloppyDriveError> {

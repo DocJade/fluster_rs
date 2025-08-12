@@ -23,6 +23,8 @@ use crate::pool::disk::generic::{
     block::block_structs::RawBlock, generic_structs::find_space::BytePingPong,
 };
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeOffsetPacking;
+use crate::pool::disk::standard_disk::block::inode::inode_struct::PackedInodeLocationFlags;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::{
     InodeDirectory, InodeFile, InodeTimestamp,
 };
@@ -121,7 +123,6 @@ impl InodeBlock {
         self.inodes_data[inode_offset as usize..inode_offset as usize + old_size].copy_from_slice(&updated_inode.to_bytes());
 
         // Now we need to flush these updates to disk
-
         let raw = self.to_block();
         CachedBlockIO::update_block(&raw)?;
 
@@ -487,51 +488,103 @@ impl InodeFlags {
 }
 
 impl InodeLocation {
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self, destination_disk: u16) -> Vec<u8> {
         let mut vec: Vec<u8> = Vec::with_capacity(6); // Max size of this type
 
-        // Disk number
-        if self.disk.is_some() {
-            vec.extend_from_slice(&self.disk.expect("Already checked").to_le_bytes());
+        // We can ignore the offset contained within self, since we dont write that value, we
+        // write it with packed instead.
+
+        // Calculate the flags
+        let (mut flags, offset) = self.packed.extract();
+
+        // Can we make this a diskless location?
+        if destination_disk == self.pointer.disk {
+            // Yes
+            flags.insert(PackedInodeLocationFlags::RequiresDisk);
+        } else {
+            // No
+            flags.remove(PackedInodeLocationFlags::RequiresDisk);
+        }
+
+        // Pack that back down to update the flags.
+        let packed = InodeOffsetPacking::new(flags, offset);
+
+        // The packed offset stuffs
+        vec.extend_from_slice(&packed.inner.to_le_bytes());
+
+        // Disk number, if required.
+        if !flags.contains(PackedInodeLocationFlags::RequiresDisk) {
+            vec.extend_from_slice(&self.pointer.disk.to_le_bytes());
         }
 
         // Block on disk
-        vec.extend_from_slice(&self.block.to_le_bytes());
-
-        // index into the block
-        vec.extend_from_slice(&self.offset.to_le_bytes());
+        vec.extend_from_slice(&self.pointer.block.to_le_bytes());
 
         vec
     }
-    pub fn from_bytes(bytes: &[u8]) -> Self {
-        // Disk number
+    /// Turn the location into bytes. Takes in as many bytes as needed, and no more.
+    /// 
+    /// Returns how many bytes it took to create this.
+    /// 
+    /// Assumes its fed valid bytes, will panic if not.
+    /// 
+    /// Must pass in the disk this came from.
+    pub fn from_bytes(bytes: &[u8], origin_disk: u16) -> (u8, Self) {
         let mut index: usize = 0;
-        // we need to extract the disk number if length is 6
-        let disk: Option<u16> = if bytes.len() == 6 {
-            index += 2; // Offset by 2 bytes, since the next items are relative to this
-            Some(u16::from_le_bytes(bytes[..2].try_into().expect("2 = 2")))
-        } else {
-            None
-        };
 
-        // Block on disk
+        // Extract the flags
+        let packed_number = u16::from_le_bytes(bytes[index..index + 2].try_into().expect("2 = 2"));
+        let packed = InodeOffsetPacking::from_u16(packed_number);
+        let (flags, offset) = packed.extract();
+
+        index += 2;
+
+        // Make sure this is a valid InodeLocation
+        assert!(flags.contains(PackedInodeLocationFlags::MarkerBit));
+
+        
+        // Disk number
+        // Only need to grab if flag is set
+        let disk: u16 = if flags.contains(PackedInodeLocationFlags::RequiresDisk) {
+            origin_disk
+        } else {
+            // Go get it
+            let tmp = u16::from_le_bytes(bytes[index..index + 2].try_into().expect("2 = 2"));
+            index += 2;
+            tmp
+        };
+        
+        // The block
         let block: u16 = u16::from_le_bytes(bytes[index..index + 2].try_into().expect("2 = 2"));
         index += 2;
 
-        // Index into Inode block
-        let offset: u16 = u16::from_le_bytes(bytes[index..index + 2].try_into().expect("2 = 2"));
-
-        Self {
+        // Make the pointer
+        let pointer: DiskPointer = DiskPointer {
             disk,
             block,
-            offset,
-        }
+        };
+
+        // Re-assemble packed, we dont use any flags besides the marker bit outside of here.
+        let fit_girl_repacked = InodeOffsetPacking::new(PackedInodeLocationFlags::MarkerBit, offset);
+
+        // All done.
+        let done = InodeLocation {
+            packed: fit_girl_repacked,
+            pointer,
+            offset
+        };
+
+        (index as u8, done)
     }
-    /// Extract where the inode block is
-    pub fn to_disk_pointer(&self) -> DiskPointer {
-        DiskPointer {
-            disk: self.disk.expect("Read inodes should have a disk set."),
-            block: self.block,
+
+    /// Make a new one!
+    pub fn new(pointer: DiskPointer, offset: u16) -> Self {
+        // In theory the flags are not read, they are calculated on write.
+        // Just set the marker bit.
+        Self {
+            packed: InodeOffsetPacking::new(PackedInodeLocationFlags::MarkerBit, offset),
+            pointer,
+            offset,
         }
     }
 }
@@ -578,8 +631,16 @@ impl Inode {
     pub fn extract_file(&self) -> Option<InodeFile> {
         self.file
     }
-     pub fn extract_directory(&self) -> Option<InodeDirectory> {
+    pub fn extract_directory(&self) -> Option<InodeDirectory> {
         self.directory
+    }
+    /// All inodes point somewhere.
+    pub fn get_pointer(&self) -> DiskPointer {
+        if let Some(dir) = self.extract_directory() {
+            dir.pointer
+        } else {
+            self.extract_file().expect("Guard.").pointer
+        }
     }
 }
 
@@ -596,5 +657,46 @@ impl From<InodeTimestamp> for SystemTime {
         
         // 88MPH
         epoch.checked_add(duration).expect("This will break in 2038. Until then, hi mom!")
+    }
+}
+
+
+// Deconstruct packed InodeLocation information to get the flags and inode offset
+impl InodeOffsetPacking {
+    /// Extract the flags and an offset.
+    pub(super) const fn extract(&self) -> (PackedInodeLocationFlags, u16) {
+        // First we get the flags, the flags expect 8 bits, so we nab those.
+        // Shift right 8 times to bring the flags in line.
+        let flag_bits: u8 = (self.inner >> 8) as u8;
+
+        // This can leave a trailing bit at the end, but truncating will remove it.
+        let flags: PackedInodeLocationFlags = PackedInodeLocationFlags::from_bits_truncate(flag_bits);
+
+        // Now we need the number, which we can get by laying the flags back on top of the inner value.
+        // get the flag bits, invert them, shift them back over, then mask em out
+        // The only remaining bits must be the offset value.
+        let truncated_flag_bits: u16 = !((flags.bits() as u16) << 8);
+        let offset: u16 = self.inner & truncated_flag_bits;
+
+        // All done.
+        (flags, offset)
+    }
+
+    /// Make a new one
+    /// This can only be used down here, you should be using InodeLocation::new().
+    const fn new(flags: PackedInodeLocationFlags, offset: u16) -> Self {
+        // See extract() for more docs about what is goin on here.
+        let inner: u16 = offset | ((flags.bits() as u16) << 8);
+        Self {
+            inner,
+        }
+    }
+
+    /// From a u16.
+    /// 
+    /// Yes this is silly.
+    #[inline]
+    pub(super) const fn from_u16(incoming: u16) -> Self {
+        Self { inner: incoming }
     }
 }

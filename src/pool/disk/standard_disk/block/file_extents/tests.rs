@@ -18,12 +18,15 @@ use test_log::test; // We want to see logs while testing.
 fn random_extents_serialization() {
     // Make some random extents and de/serialize them
     for _ in 0..1000 {
+        // Need a test disk number for the serialization to happen on
+        let origin_disk: u16 = 42;
         let test_extent = FileExtent::random();
-        let serialized = test_extent.to_bytes();
-        let deserialized = FileExtent::from_bytes(&serialized);
-        let re_serialized = deserialized.to_bytes();
-        let re_deserialized = FileExtent::from_bytes(&re_serialized);
-        assert_eq!(deserialized, re_deserialized)
+        let serialized = test_extent.to_bytes(origin_disk);
+        let (de_len, deserialized) = FileExtent::from_bytes(&serialized, origin_disk);
+        let re_serialized = deserialized.to_bytes(origin_disk);
+        let (re_de_len, re_deserialized) = FileExtent::from_bytes(&re_serialized, origin_disk);
+        assert_eq!(deserialized, re_deserialized);
+        assert_eq!(de_len, re_de_len);
     }
 }
 
@@ -111,29 +114,14 @@ impl FileExtentBlock {
 impl FileExtent {
     fn random() -> Self {
         let mut random: ThreadRng = rand::rng();
-        // Decide what kind of disk
-        let mut flags = ExtentFlags::new();
-        let disk_number: Option<u16>;
-        let start_block: u16;
-        let length: u8;
-
-        if random.random_bool(0.5) {
-            // Local
-            flags.insert(ExtentFlags::OnThisDisk);
-            disk_number = None;
-            start_block = random.random();
-            length = random.random();
-        } else {
-            // Non-local
-            disk_number = Some(random.random());
-            start_block = random.random();
-            length = random.random();
-        };
+        // Flags do not matter, they are auto deduced.
+        let flags = ExtentFlags::new();
+        let length: u8 = random.random();
+        let start_block: DiskPointer = DiskPointer::get_random();
 
         // All done.
         FileExtent {
             flags,
-            disk_number,
             start_block,
             length,
         }

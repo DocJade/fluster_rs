@@ -1,7 +1,7 @@
 // Helper types.
 
 use crate::pool::disk::standard_disk::block::directory::directory_struct::{
-    DirectoryFlags, DirectoryItem,
+    DirectoryItemFlags, DirectoryItem,
 };
 
 // Need a way to search for either a file or a directory
@@ -44,7 +44,7 @@ impl NamedItem {
 /// Helper to turn DirectoryItem(s) into NamedItem(s)
 impl From<DirectoryItem> for NamedItem {
     fn from(value: DirectoryItem) -> Self {
-        if value.flags.contains(DirectoryFlags::IsDirectory) {
+        if value.flags.contains(DirectoryItemFlags::IsDirectory) {
             NamedItem::Directory(value.name)
         } else {
             NamedItem::File(value.name)

@@ -13,7 +13,7 @@ use crate::pool::{
         standard_disk::block::{
                 directory::directory_struct::{
                     DirectoryBlock,
-                    DirectoryFlags,
+                    DirectoryItemFlags,
                     DirectoryItem
                 },
                 inode::inode_struct::{
@@ -91,7 +91,7 @@ impl DirectoryBlock {
         // Remove our inode.
         // We need to find it manually, since we will be updating the
         // inode block.
-        let read: RawBlock = CachedBlockIO::read_block(self_item.location.to_disk_pointer())?;
+        let read: RawBlock = CachedBlockIO::read_block(self_item.location.pointer)?;
         let mut inode_block: InodeBlock = InodeBlock::from_block(&read);
 
         if let Err(error) = inode_block.try_remove_inode(self_item.location.offset) {
@@ -160,33 +160,15 @@ fn go_make_directory(
 
     // Go put it somewhere.
     debug!("Adding the inode for the new directory...");
-    let mut inode_result = Pool::fast_add_inode(inode)?;
+    let inode_result = Pool::fast_add_inode(inode)?;
 
     // Now we add this newly created directory to the calling directory.
-    // Flags change depending on wether the new directory ended up on this disk.
-    // We also may need to update the location to remove the disk information.
-    let mut flags: DirectoryFlags = DirectoryFlags::MarkerBit;
+    let mut flags: DirectoryItemFlags = DirectoryItemFlags::MarkerBit;
     // We also must mark it as a directory, not a normal file.
-    flags.insert(DirectoryFlags::IsDirectory);
-
-    let disk_it_ended_up_on = inode_result
-        .disk
-        .expect("Writing an inode always returns what disk it was put on.");
-
-    if disk_it_ended_up_on == directory.block_origin.disk {
-        // New inode is on the same disk as we started on.
-        flags.insert(DirectoryFlags::OnThisDisk);
-        // Remove the disk information from the inode location
-        inode_result.disk = None;
-    } else {
-        // New inode is on a different disk
-        flags.remove(DirectoryFlags::OnThisDisk);
-        // Set what disk its from.
-        inode_result.disk = Some(disk_it_ended_up_on);
-    }
+    flags.insert(DirectoryItemFlags::IsDirectory);
 
     // Put it all together
-    let mut final_directory_item = DirectoryItem {
+    let final_directory_item = DirectoryItem {
         flags,
         name_length: name.len() as u8,
         name,
@@ -197,12 +179,6 @@ fn go_make_directory(
     // We dont need to pass in a return disk, since we will return ourselves next if needed.
     debug!("Adding the new directory to the caller...");
     directory.add_item(&final_directory_item)?;
-
-    // Now that we've added it to the directory block, since we are returning the directory item again, we need
-    // to put the disk number back if we just removed it, since new item that comes out of this function needs
-    // to act just like a freshly read item.
-
-    final_directory_item.location.disk = Some(disk_it_ended_up_on);
 
     // All done!
     debug!("Done creating directory.");
@@ -237,16 +213,18 @@ fn go_add_item(
     debug!("Adding new item to directory...");
 
     // Added items must have their flag set.
-    assert!(item.flags.contains(DirectoryFlags::MarkerBit));
+    assert!(item.flags.contains(DirectoryItemFlags::MarkerBit));
+
+    // Added items must have a valid location
+    assert!(!item.location.pointer.no_destination());
 
     // Persistent vars
     // We may load in other blocks, so these may change
-    let original_location: DiskPointer = directory.block_origin;
     let mut new_block_origin: DiskPointer;
     let mut current_directory: &mut DirectoryBlock = directory;
     // If we swap disks, we need to update the item to not be on the local disk anymore.
     // We clone here so higher up we can keep directory items that are added to directories instead of consuming them on write.
-    let mut item_to_add: DirectoryItem = item.clone();
+    let item_to_add: DirectoryItem = item.clone();
 
     // Need to hold this out here or the borrow will be dropped.
     let mut next_directory: DirectoryBlock;
@@ -260,20 +238,6 @@ fn go_add_item(
         }
         // There was not enough room in that block, we need to find the next one.
         new_block_origin = go_find_next_or_extend_block(current_directory)?;
-
-        // If we moved to a new disk, we need to update the item if it was local.
-        if original_location.disk != new_block_origin.disk {
-            // New disk
-            // We only change if it was local to begin with.
-            if item_to_add.location.disk.is_none() {
-                item_to_add.location.disk = Some(new_block_origin.disk);
-                // Remove the flag for being on this disk
-                // We still need to preserve the other bits, so we use remove.
-                item_to_add.flags.remove(DirectoryFlags::OnThisDisk);
-            }
-            // Otherwise we would be removing information about where that inode points to, so
-            // we wont touch it unless it hasn't been set.
-        }
 
         // Load the new directory
         let read_block: RawBlock = CachedBlockIO::read_block(new_block_origin)?;

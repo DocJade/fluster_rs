@@ -13,7 +13,7 @@ use crate::pool::disk::{
     standard_disk::{
         block::{
             directory::directory_struct::{
-                DirectoryFlags,
+                DirectoryItemFlags,
                 DirectoryItem
             },
             file_extents::{
@@ -67,20 +67,16 @@ impl DirectoryItem {
     /// Optionally returns to a specified disk.
     pub fn read_file(&self, seek_point: u64, size: u32) -> Result<Vec<u8>, FloppyDriveError> {
         // Is this a file?
-        if self.flags.contains(DirectoryFlags::IsDirectory) {
+        if self.flags.contains(DirectoryItemFlags::IsDirectory) {
             // Uh, no it isn't why did you give me a dir?
             panic!("Tried to read a directory as a file!")
         }
 
         // Extract out the file
-        assert!(self.location.disk.is_some());
         let location = &self.location;
 
         // Get the inode block
-        let pointer: DiskPointer = DiskPointer {
-            disk: location.disk.expect("Assumption 2"),
-            block: location.block,
-        };
+        let pointer: DiskPointer = location.pointer;
 
         let raw_block: RawBlock = CachedBlockIO::read_block(pointer)?;
         let inode_block: InodeBlock = InodeBlock::from_block(&raw_block);
@@ -112,8 +108,8 @@ fn go_to_pointers(location: &InodeFile) -> Result<Vec<DiskPointer>, FloppyDriveE
         // each block that the extent references
         for n in 0..e.length {
             blocks.push(DiskPointer {
-                disk: e.disk_number.expect("Read extents should have disk"),
-                block: e.start_block + n as u16
+                disk: e.start_block.disk,
+                block: e.start_block.block + n as u16
             });
         }
     }
@@ -132,27 +128,11 @@ fn go_to_extents(
     // We assume we are handed the first ExtentBlock in the chain.
     let mut extents_found: Vec<FileExtent> = Vec::new();
     let mut current_dir_block: FileExtentBlock = block.clone();
-    // To keep track of what disk an extent is from
-    let mut current_disk: u16 = block.block_origin.disk;
 
     // Big 'ol loop, we will break when we hit the end of the directory chain.
     loop {
-        // Add all of the contents of the current directory to the total
-        // But we will add the disk location data to these structs, it is the responsibility of the caller
-        // to remove these disk locations if they no longer need them.
-        // Otherwise if we didn't add the disk location for every item, it would be impossible
-        // to know where a local pointer goes.
-        let mut new_items = current_dir_block.get_extents();
-        for item in &mut new_items {
-            // If the disk location is already there, we wont do anything.
-            if item.disk_number.is_none() {
-                // There was no disk information, it must be local.
-                item.disk_number = Some(current_disk)
-            }
-            // Otherwise there was already a disk being pointed to.
-            // Overwriting it here would corrupt it.
-        }
-
+        // Add all of the contents of the current directory to the total.
+        let new_items = current_dir_block.get_extents();
         extents_found.extend_from_slice(&new_items);
 
         // I want to get off Mr. Bone's wild ride
@@ -165,9 +145,6 @@ fn go_to_extents(
         trace!("Need to continue on the next block.");
         // Time to load in the next block.
         let next_block = current_dir_block.next_block;
-
-        // Update what disk we're on
-        current_disk = next_block.disk;
         let raw_block: RawBlock = CachedBlockIO::read_block(next_block)?;
         current_dir_block = FileExtentBlock::from_block(&raw_block);
 

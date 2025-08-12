@@ -1,5 +1,7 @@
 // We need to go to seek points and such.
 
+use log::debug;
+
 use crate::pool::disk::{
     drive_struct::FloppyDriveError,
     generic::{
@@ -46,15 +48,17 @@ impl InodeFile {
 impl DirectoryItem {
     /// Retrieve the inode that refers to this block.
     pub fn get_inode(&self) -> Result<Inode, FloppyDriveError> {
+        debug!("Extracting inode from DirectoryItem...");
         // read in that inode block
-        let pointer: DiskPointer = DiskPointer {
-            disk: self.location.disk.expect("Read directory items should have an origin."),
-            block: self.location.block,
-        };
+        let pointer: DiskPointer = self.location.pointer;
+        
+        debug!("Reading in InodeBlock at (disk {} block {})...", pointer.disk, pointer.block);
         let raw_block: RawBlock = CachedBlockIO::read_block(pointer)?;
         let block: InodeBlock = InodeBlock::from_block(&raw_block);
-
+        
         // return the inode
-        Ok(block.try_read_inode(self.location.offset).expect("Don't feed this invalid offsets! hehehe"))
+        let inode_good = block.try_read_inode(self.location.offset).expect("Don't feed this invalid offsets! hehehe");
+        debug!("Inode found.");
+        Ok(inode_good)
     }
 }

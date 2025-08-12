@@ -220,11 +220,11 @@ fn directories_switch_disks() -> Result<(), ()> {
     // Now make sure we actually have directories that claim to live on another disk
     let root_dir_done = Pool::get_root_directory().unwrap();
     for dir in root_dir_done.list().unwrap() {
-        if dir.location.disk.unwrap() != 1 {
+        if dir.location.pointer.disk != 1 {
             // Made it to another disk.
             debug!(
                 "Made it onto another disk! Disk: {}",
-                dir.location.disk.unwrap()
+                dir.location.pointer.disk
             );
             return Ok(());
         }

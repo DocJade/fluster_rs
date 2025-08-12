@@ -9,7 +9,7 @@ use rand::{self, Rng};
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryBlock;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryBlockError;
-use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryFlags;
+use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryItemFlags;
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryItem;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
 
@@ -33,9 +33,11 @@ fn blank_directory_block_serialization() {
 #[test]
 fn directory_item_serialization() {
     for _ in 0..1000 {
+        // Needs a fake disk where this block was read from.
+        let fake_disk: u16 = 21; // you stupid
         let test_item = DirectoryItem::get_random();
-        let serialized = test_item.to_bytes();
-        let deserialized = DirectoryItem::from_bytes(&serialized);
+        let serialized = test_item.to_bytes(fake_disk);
+        let (_, deserialized) = DirectoryItem::from_bytes(&serialized, fake_disk);
         assert_eq!(test_item, deserialized)
     }
 }
@@ -120,10 +122,10 @@ fn adding_and_removing_updates_size() {
 // Impl for going gorilla mode, absolutely ape shit, etc
 
 #[cfg(test)]
-impl DirectoryFlags {
+impl DirectoryItemFlags {
     fn new() -> Self {
         // We always need the marker bit set
-        DirectoryFlags::MarkerBit
+        DirectoryItemFlags::MarkerBit
     }
 }
 
@@ -134,11 +136,7 @@ impl DirectoryItem {
         let name_length: u8 = name.len().try_into().unwrap();
         assert_eq!(name_length as usize, name.len());
         let location = InodeLocation::get_random();
-        let mut flags = DirectoryFlags::new();
-        // Flags need to be changed if its not on this disk
-        if location.disk.is_none() {
-            flags.insert(DirectoryFlags::OnThisDisk);
-        }
+        let flags = DirectoryItemFlags::new();
         DirectoryItem {
             flags,
             name_length,

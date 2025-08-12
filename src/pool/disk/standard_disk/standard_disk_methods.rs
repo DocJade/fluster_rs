@@ -116,8 +116,7 @@ impl DiskBootstrap for StandardDisk {
 
         let inode_result = Pool::add_inode(the_actual_inode).expect("We should have room.");
         // Make sure that actually ended up at the right spot.
-        assert_eq!(inode_result.disk, Some(1));
-        assert_eq!(inode_result.block, 1);
+        assert_eq!(inode_result.pointer, inode_block_origin);
         assert_eq!(inode_result.offset, 0);
 
         // All done!

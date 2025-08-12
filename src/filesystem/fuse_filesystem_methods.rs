@@ -23,7 +23,7 @@ use crate::{
         standard_disk::block::{
             directory::directory_struct::{
                 DirectoryBlock,
-                DirectoryFlags,
+                DirectoryItemFlags,
                 DirectoryItem
             },
             io::directory::types::NamedItem
@@ -412,7 +412,7 @@ impl FilesystemMT for FlusterFS {
                 // Directory exists.
 
                 // Make sure this is actually a directory
-                if !child_dir.flags.contains(DirectoryFlags::IsDirectory) {
+                if !child_dir.flags.contains(DirectoryItemFlags::IsDirectory) {
                     // Not a dir
                     debug!("Provided item is not a directory.");
                     return Err(NOT_A_DIRECTORY);
@@ -1129,7 +1129,7 @@ impl FilesystemMT for FlusterFS {
         // item agrees.
         if converted_flag.contains(ItemFlag::ASSERT_DIRECTORY) {
             debug!("Caller wants to ensure they are opening a directory.");
-            if !found_item.flags.contains(DirectoryFlags::IsDirectory) {
+            if !found_item.flags.contains(DirectoryItemFlags::IsDirectory) {
                 debug!("This is not a directory.");
                 return Err(NOT_A_DIRECTORY)
             }
@@ -1445,7 +1445,7 @@ impl FilesystemMT for FlusterFS {
         };
         
         // Double check that this is a file.
-        if !dir_item.flags.contains(DirectoryFlags::IsDirectory) {
+        if !dir_item.flags.contains(DirectoryItemFlags::IsDirectory) {
             // No.
             warn!("Tried to call readdir on a file!");
             return Err(NOT_A_DIRECTORY);
@@ -1460,7 +1460,7 @@ impl FilesystemMT for FlusterFS {
         
         // Now pull out the names and types
         let mut listed_items: Vec<DirectoryEntry> = items.iter().map(|item| {
-            let kind = if item.flags.contains(DirectoryFlags::IsDirectory) {
+            let kind = if item.flags.contains(DirectoryItemFlags::IsDirectory) {
                 FileType::Directory
             } else {
                 FileType::RegularFile
@@ -1632,7 +1632,7 @@ impl FilesystemMT for FlusterFS {
 
             // Truncate if needed (open(2) syscall)
             // Must be a file
-            if deduced_flags.contains(ItemFlag::TRUNCATE) && !exists.flags.contains(DirectoryFlags::IsDirectory) {
+            if deduced_flags.contains(ItemFlag::TRUNCATE) && !exists.flags.contains(DirectoryItemFlags::IsDirectory) {
                 self.truncate(req, constructed_path, Some(file_handle), 0)?; // Truncate to 0
             }
             

@@ -49,8 +49,8 @@ impl DirectoryBlock {
         let final_destination = &wanted.location;
         info!(
             "Directory claims to live at: disk {} block {} offset {}",
-            final_destination.disk.expect("Listing sets disk."),
-            final_destination.block,
+            final_destination.pointer.disk,
+            final_destination.pointer.block,
             final_destination.offset
         );
         // Since we got these items from self.list, all of these inode locations MUST have a disk destination
@@ -59,10 +59,7 @@ impl DirectoryBlock {
         // Load!
         // Now this doesn't point to the next directory block, it points to the next _Inode_ block
         // that points to it.
-        let pointer: DiskPointer = DiskPointer {
-            disk: final_destination.disk.expect("Listing sets disk."),
-            block: final_destination.block,
-        };
+        let pointer: DiskPointer = final_destination.pointer;
 
         let inode_block = InodeBlock::from_block(&CachedBlockIO::read_block(pointer)?);
 

@@ -14,7 +14,7 @@ use crate::pool::disk::{
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct DirectoryItem {
-    pub flags: DirectoryFlags,
+    pub flags: DirectoryItemFlags,
     pub name_length: u8,
     pub name: String,
     pub location: InodeLocation,
@@ -38,8 +38,7 @@ pub(crate) struct DirectoryBlock {
 
 bitflags! {
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-    pub struct DirectoryFlags: u8 {
-        const OnThisDisk = 0b00000001;
+    pub struct DirectoryItemFlags: u8 {
         const IsDirectory = 0b00000010; // Set if directory
         const MarkerBit = 0b10000000;
     }
@@ -48,7 +47,7 @@ bitflags! {
 bitflags! {
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct DirectoryBlockFlags: u8 {
-        const FinalDirectoryBlockOnThisDisk = 0b00000001;
+        // Currently unused.
     }
 }
 

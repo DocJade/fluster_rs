@@ -22,13 +22,12 @@ use crate::pool::{
         standard_disk::block::{
                 directory::directory_struct::{
                     DirectoryBlock,
-                    DirectoryFlags,
+                    DirectoryItemFlags,
                     DirectoryItem
                 },
                 file_extents::{
                     file_extents_methods::DATA_BLOCK_OVERHEAD,
                     file_extents_struct::{
-                        ExtentFlags,
                         FileExtent,
                         FileExtentBlock
                     }
@@ -121,20 +120,16 @@ impl DirectoryItem {
     /// Optionally returns to a specified disk.
     pub fn write_file(&self, bytes: &[u8], seek_point: u64) -> Result<u32, FloppyDriveError> {
         // Is this a file?
-        if self.flags.contains(DirectoryFlags::IsDirectory) {
+        if self.flags.contains(DirectoryItemFlags::IsDirectory) {
             // Uh, no it isn't why did you give me a dir?
             panic!("Tried to read a directory as a file!")
         }
 
         // Extract out the file
-        assert!(self.location.disk.is_some());
         let location = &self.location;
 
         // Get the inode block
-        let the_pointer_in_question: DiskPointer = DiskPointer {
-            disk: location.disk.expect("Guarded"),
-            block: location.block,
-        };
+        let the_pointer_in_question: DiskPointer = location.pointer;
 
         let read: RawBlock = CachedBlockIO::read_block(the_pointer_in_question)?;
         let mut inode_block: InodeBlock = InodeBlock::from_block(&read);
@@ -172,7 +167,7 @@ impl DirectoryItem {
     /// Panics if fed a directory.
     pub fn truncate(&self, new_size: u64) -> Result<(), FloppyDriveError> {
         // Make sure this is a file
-        assert!(!self.flags.contains(DirectoryFlags::IsDirectory));
+        assert!(!self.flags.contains(DirectoryItemFlags::IsDirectory));
         truncate_or_delete_file(self, false, Some(new_size))
     }
 }
@@ -369,7 +364,6 @@ fn expanding_add_extents(file: InodeFile, extents: &[FileExtent]) -> Result<(), 
     // Go get the extent block to add to.
     // We need the final one in the chain.
     let mut current_extent_block: FileExtentBlock;
-    let mut current_disk: u16 = u16::MAX;
     
     // Read in the initial block
     let raw_read: RawBlock = CachedBlockIO::read_block(file.pointer)?;
@@ -382,7 +376,6 @@ fn expanding_add_extents(file: InodeFile, extents: &[FileExtent]) -> Result<(), 
             // Get the block.
             let reader_mc_deeder: RawBlock = CachedBlockIO::read_block(current_extent_block.next_block)?;
             current_extent_block = FileExtentBlock::from_block(&reader_mc_deeder);
-            current_disk = current_extent_block.next_block.disk;
             // Try again.
             continue;
         }
@@ -397,18 +390,8 @@ fn expanding_add_extents(file: InodeFile, extents: &[FileExtent]) -> Result<(), 
             }
 
             // Try adding a new extent.
+            let added_result = current_extent_block.add_extent(*new_extents.last().expect("Guarded."));
 
-            // But we need to make sure its properly set to local first if need be.
-            let mut updated_extent = *new_extents.last().expect("Guarded.");
-            // We dont pop it off, since if the write fails, we need to put it in the next block instead.
-
-            if updated_extent.disk_number.expect("Should be set above.") == current_disk {
-                // This is a local block, update it to match
-                updated_extent.disk_number = None;
-                updated_extent.flags.insert(ExtentFlags::OnThisDisk);
-            }
-
-            let added_result = current_extent_block.add_extent(updated_extent);
             // if that worked, that means we added the extent successfully.
             if added_result.is_ok() {
                 // Good! Keep going
@@ -453,63 +436,38 @@ fn expanding_add_extents(file: InodeFile, extents: &[FileExtent]) -> Result<(), 
 fn pointers_into_extents(pointers: &[DiskPointer]) -> Vec<FileExtent> {
     // I feel like there is 100% a better way to do this, but i dont know it. so too bad!
     let mut new_extents: Vec<FileExtent> = Vec::new();
-    let mut current_extent: FileExtent = FileExtent::new();
-
+    
+    // Loop over the pointers and create extents.
     for pointer in pointers {
-        if current_extent.disk_number.is_none() {
-            // brand new, add disk and start block.
-            current_extent.disk_number = Some(pointer.disk);
-            current_extent.start_block = pointer.block;
-        }
-        // Check if we're still on the correct disk
-        if current_extent.disk_number == Some(pointer.disk) {
-            // Same disk, but in theory this could have skipped blocks.
-            if pointer.block == current_extent.start_block + current_extent.length as u16 {
-                // This is the next block, we didn't skip anything.
-                // I know this nesting is ugly, but its better than one massive if clause
-                // Also make sure we can keep extending
-                if current_extent.length != u8::MAX {
-                    current_extent.length += 1;
-                    continue;
-                }
+        // Check if we need to make a new extent.
+        let new: FileExtent = FileExtent::new(*pointer, 1);
+        let created_count = new_extents.len();
+        // We need a new one if:
+        // - There are no extents
+        // - The disk number is different
+        // - The length is maxed out
+        // - The next block is not contiguous. (ie last block was 1, new block != 2)
+
+        // yes this is ugly, at least it doesnt have to check for local disks anymore
+        if let Some(extent) = new_extents.last() {
+            if extent.start_block.disk != pointer.disk || // Is the disk number different?
+            extent.length == u8::MAX || // Is this extent out of room?
+            extent.start_block.block + extent.length as u16 != pointer.block // Non contiguous?
+            {
+                // Need a new one.
+                new_extents.push(new);
             }
+            // All checks pass, fall out.
+        } else {
+            // There isn't any extents yet, make the first one
+            new_extents.push(new);
         }
         
-        // If we are here, either the disk, or the next block is not correct, or we hit the max size.
-        // Time for a new extent.
-
-        // push the current extent
-        new_extents.push(current_extent);
-        // clear the current extent so we can start over.
-        current_extent = FileExtent::new();
-        // brand new, add disk and start block.
-        // use the current pointer to start the new extent
-        current_extent.disk_number = Some(pointer.disk);
-        current_extent.start_block = pointer.block;
-        // New extent will have a new block, so len==1
-        current_extent.length += 1;
+        // This pointer extends the previous extent block, add one to the length.
+        new_extents[created_count].length += 1;
     }
 
-    // After the loop there might be one final extent, check for that
-    if current_extent.disk_number.is_some() {
-        // There is an extent, make sure we didn't already add it.
-        let final_extent = new_extents.last();
-
-        if let Some(had_extent) = final_extent{
-            // There is at least one other extent.
-            // Make sure this isn't a duplicate.
-            if *had_extent == current_extent {
-                // we already added it.
-                // do nothing.
-            } else {
-                // This is a new one!
-                new_extents.push(current_extent);
-            }
-        } else {
-            // If there is no final extent, we only made one and never got to add it.
-            new_extents.push(current_extent);
-        };
-    }
+    // All done!
     new_extents
 }
 
@@ -557,26 +515,17 @@ fn go_make_new_file(directory_block: &mut DirectoryBlock, name: String) -> Resul
         modified: right_now,
     };
 
-    let mut new_inode_location = Pool::fast_add_inode(new_inode)?;
+    let new_inode_location = Pool::fast_add_inode(new_inode)?;
 
     // Wrap it all up in a little bow to put into the directory
 
     // Now we need to set up the flags for the new directory item
     // Flag
-    let mut flags: DirectoryFlags = DirectoryFlags::MarkerBit;
+    let flags: DirectoryItemFlags = DirectoryItemFlags::MarkerBit;
+    // Thats it. Lol.
 
-    // If the new inode location is on this disk we must set the location, otherwise clear it.
-    let directory_block_origin_disk = directory_block.block_origin.disk;
-    if new_inode_location.disk.expect("Should be there") == directory_block_origin_disk {
-        // We need to remove the disk info.
-        flags.insert(DirectoryFlags::OnThisDisk);
-        new_inode_location.disk = None;
-    } else {
-        // Otherwise, this is on another disk, and we do not need to do anything.
-    }
-
-
-    let mut new_file: DirectoryItem = DirectoryItem {
+    // Construct the new file
+    let new_file: DirectoryItem = DirectoryItem {
         flags,
         name_length: name.len().try_into().expect("Already checked name length."),
         name,
@@ -586,13 +535,6 @@ fn go_make_new_file(directory_block: &mut DirectoryBlock, name: String) -> Resul
     directory_block.add_item(&new_file)?;
     // If we're here, that worked. We are all done adding the item to the directory.
 
-    // This function always returns a directory item with the disk set, regardless if it was local to the
-    // DirectoryBlock that was passed in.
-
-    if new_file.location.disk.is_none() {
-        // It's not set already, so it was local to the DirectoryBlock, so we grab the disk from that
-        new_file.location.disk = Some(directory_block_origin_disk)
-    }
     // All done.
     // Dont need to swap disks, already did that on the item add.
     Ok(new_file)
@@ -602,7 +544,7 @@ fn go_make_new_file(directory_block: &mut DirectoryBlock, name: String) -> Resul
 /// Will only truncate if delete is false.
 fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<u64>) -> Result<(), FloppyDriveError> {
     // Is this a file?
-    if item.flags.contains(DirectoryFlags::IsDirectory) {
+    if item.flags.contains(DirectoryItemFlags::IsDirectory) {
         // Uh, no it isn't why did you give me a dir?
         panic!("Tried to read a directory as a file!");
     }
@@ -624,14 +566,10 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
     }
 
     // Extract out the file
-    assert!(item.location.disk.is_some());
     let file_inode_location = &item.location;
 
     // Get the inode block
-    let the_pointer_in_question: DiskPointer = DiskPointer {
-        disk: file_inode_location.disk.expect("Guarded"),
-        block: file_inode_location.block,
-    };
+    let the_pointer_in_question: DiskPointer = file_inode_location.pointer;
 
     let read: RawBlock = CachedBlockIO::read_block(the_pointer_in_question)?;
     let mut inode_block: InodeBlock = InodeBlock::from_block(&read);
@@ -784,13 +722,12 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
     loop {
         // Get the extents from the ExtentBlock
         let extents = new_final_extent_block.get_extents();
-        let origin_disk: u16 = new_final_extent_block.block_origin.disk;
 
         // Now search through those extents, incrementing how many
         // blocks we've seen and keeping track of what extent this is
         for (index, extent) in extents.iter().enumerate() {
             // How many blocks are in here?
-            let pointers: Vec<DiskPointer> = extent.get_pointers(origin_disk);
+            let pointers: Vec<DiskPointer> = extent.get_pointers();
             // Add all of those pointers to the count
             blocks_seen += pointers.len();
 
@@ -883,7 +820,7 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
         // is this the final extent
         if index == final_extent_index {
             // Now we need to remove the extra disk pointers if there are any.
-            let pointers = extent.get_pointers(new_final_extent_block.block_origin.disk);
+            let pointers = extent.get_pointers();
             // Split the vec to remove anything after the final data block pointer.
             // Splitting keeps `start..split`, but we need `start..=split` so we will need to
             // increment the index.
@@ -910,7 +847,7 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
             continue;
         }
         // This is after the last extent we care about, trash everything.
-        let pointers = extent.get_pointers(new_final_extent_block.block_origin.disk);
+        let pointers = extent.get_pointers();
         blocks_to_free.extend(pointers);
     }
 
@@ -942,7 +879,7 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
 
     // Add the extents
     // This does not flush to disk.
-    new_final_extent_block.force_replace_extents(updated_extents);
+    new_final_extent_block.force_replace_all_extents(updated_extents);
 
     // Now for the scary part.
     // This write must complete, followed by the update to the data block, otherwise data
@@ -1111,8 +1048,8 @@ fn truncate_cleanup(pre_collected: Vec<DiskPointer>, next_extent_block: DiskPoin
     // == - DiskPointers from all of the contained Extents ==
 
     // To save reads i grabbed the extents as i read the blocks, we just need the pointers
-    for (disk, tent) in extents { // I used to be a tent, but I got too old and cant pitch them anymore.
-        let pointers = tent.get_pointers(disk);
+    for (_, tent) in extents { // I used to be a tent, but I got too old and cant pitch them anymore.
+        let pointers = tent.get_pointers();
         to_free.extend(pointers);
     }
 
@@ -1146,16 +1083,4 @@ fn flush_to_disk(block: &FileExtentBlock) -> Result<(), FloppyDriveError> {
     // Write it.
     CachedBlockIO::update_block(&raw)?;
     Ok(())
-}
-
-// local helper for new extents
-impl FileExtent {
-    fn new() -> Self {
-        Self {
-            flags: ExtentFlags::MarkerBit, // Marker bit must be set.
-            disk_number: None,
-            start_block: u16::MAX,
-            length: 0,
-        }
-    }
 }

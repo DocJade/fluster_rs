@@ -13,7 +13,7 @@ use crate::pool::{
         standard_disk::block::{
             directory::directory_struct::{
                 DirectoryBlock,
-                DirectoryFlags,
+                DirectoryItemFlags,
                 DirectoryItem
             },
             io::directory::types::NamedItem,
@@ -80,13 +80,18 @@ impl DirectoryBlock {
     /// 
     /// Returns the size in bytes.
     pub fn get_size(&self) -> Result<u64, FloppyDriveError> {
+        debug!("Getting size of a directory...");
         // get all the items
+        debug!("Listing items...");
         let items = self.list()?;
-
+        
+        debug!("Totaling up item sizes...");
         let mut total_size: u64 = 0;
         for item in items {
-            // Ignore if this is a directory
-            if item.flags.contains(DirectoryFlags::IsDirectory) {
+            // Ignore if this is a directory.
+            // We don't recurse into the next directory, we only get the size of the items
+            // directly contained within this directory.
+            if item.flags.contains(DirectoryItemFlags::IsDirectory) {
                 continue;
             }
             // Get the size of this file
@@ -96,6 +101,7 @@ impl DirectoryBlock {
         }
 
         // All done
+        debug!("Size obtained. `{total_size}` bytes.");
         Ok(total_size)
     }
 
@@ -136,13 +142,8 @@ impl DirectoryBlock {
         let mut find: Option<(usize, DirectoryItem, Option<DiskPointer>)> = None;
         for (index, block) in blocks.iter_mut().enumerate() {
             // Is it in here?
-            if let Some(mut found) = block.block_extract_item(item_to_find)? {
+            if let Some(found) = block.block_extract_item(item_to_find)? {
                 // Cool!
-                // We may need to add disk information to this item.
-                if found.0.location.disk.is_none() {
-                    // Need to add the disk.
-                    found.0.location.disk = Some(block.block_origin.disk);
-                }
                 find = Some((index, found.0, found.1));
                 break
             }
@@ -257,6 +258,9 @@ impl DirectoryBlock {
         // Since the size of the item might change (name length change) we cant just update the name directly, we have to
         // extract the item and re-add it.
 
+        // This may move the item across disks, thus if its set to local, we must add the disk number.
+        // If the disk number is no longer required after its written down, `add_item` will make it local again,
+
         // We also take in the directory item instead of the named item, since you shouldn't be holding onto it after this.
 
         // Make sure the name is valid.
@@ -312,27 +316,25 @@ fn go_list_directory(
     debug!("Listing a directory...");
     // We need to iterate over the entire directory and get every single item.
     // We assume we are handed the first directory in the chain.
-
+    
     // Get the blocks
+    debug!("Getting blocks...");
     let blocks = get_blocks(block.block_origin)?;
-
+    debug!("This directory is made of {} blocks.", blocks.len());
+    
     // Get the items out of them
+    debug!("Getting items...");
     let mut items_found: Vec<DirectoryItem> = blocks.into_iter().flat_map(move |block| {
-        block.get_items().into_iter().map(move |mut item| {
-            if item.location.disk.is_none() {
-                // Add disk numbers if they do not exist, since callers
-                // expect to have disk pointers no matter what.
-                item.location.disk = Some(block.block_origin.disk);
-            }
-            item
-        }).collect::<Vec<DirectoryItem>>()
+        block.get_items()
     }).collect();
-
-
+    
+    
     // Sort all of the items by name, not sure what internal order it is, but it will be
     // sorted by whatever comparison function String uses.
+    debug!("Sorting...");
     items_found.sort_by_key(|item| item.name.to_lowercase());
-
+    
+    debug!("Directory listing finished.");
     Ok(items_found)
 }
 
