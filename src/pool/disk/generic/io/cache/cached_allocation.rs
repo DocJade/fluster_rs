@@ -29,6 +29,9 @@ pub(crate) struct CachedAllocationDisk {
 
 impl CachedAllocationDisk {
     /// Attempt to create a new cached disk for allocation.
+    /// 
+    /// To flush the new allocation table to the cache, this needs to be dropped.
+    /// Thus, if you allocate then immediately write, you need to drop this before the write.
     pub(crate) fn open(disk_number: u16) -> Result<Self, FloppyDriveError> {
         // Go get the header for this disk. Usually this is cached, but
         // will fall through if needed.

@@ -317,6 +317,7 @@ fn go_find_next_or_extend_block(
     // Now we must update the previous block to point to this new one.
     directory.next_block = block_to_load;
 
+    // Write back the updated destination
     let raw_block: RawBlock = directory.to_block();
     CachedBlockIO::update_block(&raw_block)?;
 

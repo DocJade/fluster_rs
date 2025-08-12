@@ -1,6 +1,7 @@
 // Files, direct to thee.
 // Unwrapping is okay here, since we want unexpected outcomes to fail tests.
 #![allow(clippy::unwrap_used)]
+use log::info;
 use rand::{rngs::ThreadRng, Rng, RngCore};
 use test_log::test;
 
@@ -237,8 +238,11 @@ fn read_and_write_random_files() {
     }
     let stats = fs.pool.lock().unwrap();
     let cache_hit_rate = CachedBlockIO::get_hit_rate();
-    drop(stats);
+    let write_hit: String = format!("Write hit rate: {cache_hit_rate}");
+    let write_swap_count: u64 = stats.statistics.swaps;
+    let write_swaps: String = format!("Write disk swaps: {write_swap_count}");
     let _ = cache_hit_rate;
+    drop(stats);
 
     // Now we need to read all of the files back out
     let mut current_file: usize = 0;
@@ -259,4 +263,20 @@ fn read_and_write_random_files() {
     }
     let stats = fs.pool.lock().unwrap();
     let cache_hit_rate = CachedBlockIO::get_hit_rate();
+    let read_hit: String = format!("Read hit rate: {cache_hit_rate}");
+    let read_swap_count: u64 = stats.statistics.swaps;
+    let read_swaps: String = format!("Read disk swaps: {}", read_swap_count - write_swap_count);
+    let _ = cache_hit_rate;
+    drop(stats);
+    info!("Test stats:");
+    let mut byte_total: u128 = 0;
+    random_files.iter().for_each(|f|{
+        byte_total += f.len() as u128;
+    });
+    info!("Total bytes written, then read: {byte_total} Bytes, or {} MB.", byte_total/1024/1024);
+    info!("{write_hit}");
+    info!("{write_swaps}");
+    info!("{read_hit}");
+    info!("{read_swaps}");
+    info!("===============");
 }

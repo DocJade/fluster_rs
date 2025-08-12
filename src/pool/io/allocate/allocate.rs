@@ -121,12 +121,17 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
         // we will grab all we can.
         match disk.find_free_blocks(blocks - free_blocks.len() as u16) {
             Ok(ok) => {
+                debug!("Found the last {} blocks we needed on disk {}!", ok.len(), disk_to_check);
                 // We were able to allocate all of the blocks we asked for!
                 // We're done!
                 free_blocks.append(&mut block_indexes_to_pointers(&ok, disk_to_check));
 
                 // Allocate those blocks.
                 let _ = disk.allocate_blocks(&ok)?;
+
+                // Now we drop the disk to make it flush the new allocation table.
+                drop(disk);
+
                 // We also need to update the global pool to say these were marked as used, otherwise we would never know.
                 // Trust me I found out the hard way.
                 debug!("Updating the pool's free block count...");
@@ -141,6 +146,7 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
 
                 // Add crc to blocks if requested.
                 if add_crc {
+                    debug!("CRC requested, adding...");
                     write_empty_crc(&ok, disk_to_check)?;
                 }
 
@@ -148,6 +154,7 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
             }
             Err(amount) => {
                 // There wasn't enough blocks free on this disk, but we can allocate at least `amount`
+                debug!("Still need more blocks, disk {disk_to_check} only had {amount} blocks free.");
                 // Bail early if there's zero blocks
                 if amount == 0 {
                     disk_to_check += 1;
@@ -162,6 +169,9 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
                 // Allocate those blocks if needed.
                 
                 let _ = disk.allocate_blocks(&blockie_doos)?;
+                // Now we drop the disk to make it flush the new allocation table.
+                drop(disk);
+
                 // We also need to update the global pool to say these were marked as used, otherwise we would never know.
                 // Trust me I found out the hard way.
                 debug!("Updating the pool's free block count...");
@@ -176,6 +186,7 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
                 
                 // Add crc to blocks if requested
                 if add_crc {
+                    debug!("CRC requested, adding...");
                     write_empty_crc(&blockie_doos, disk_to_check)?;
                 }
 
@@ -217,8 +228,6 @@ fn block_indexes_to_pointers(blocks: &Vec<u16>, disk: u16) -> Vec<DiskPointer> {
 
 /// Sometimes we need a new block that is empty, but we still need to have the crc set.
 /// Assumes block are already marked.
-/// Will not swap disks.
-/// Assumes blocks are for the disk currently in the drive.
 /// 
 /// This method only works on standard disks
 fn write_empty_crc(blocks: &[u16], disk: u16) -> Result<(), FloppyDriveError> {
@@ -265,23 +274,22 @@ fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, FloppyDriveEr
 
     // Go zero out the blocks on the disk, just to be safe.
     // We will bypass the cache.
-    #[allow(deprecated)] // Freeing blocks should be immediately done. Why? Idk i feel like it.
-    let mut disk: StandardDisk = match FloppyDrive::open(starter.disk)? {
-        DiskType::Standard(standard_disk) => standard_disk,
-        _ => unreachable!("Block allocations must be on standard disks!"),
-    };
-
+    
     for block in blocks {
         let empty: RawBlock = RawBlock {
             block_origin: *block,
             data: [0_u8; 512],
         };
-        disk.unchecked_write_block(&empty)?;
+        // Zero em out with the cache.
+        CachedBlockIO::forcibly_write_a_block(&empty)?;
     }
-
+    
     // Now go to and free the blocks from the allocation table.
-    // This updates the header of the disk, and puts it in the cache.
+    let mut disk: CachedAllocationDisk = CachedAllocationDisk::open(starter.disk)?;
     let blocks_freed = disk.free_blocks(&extracted_blocks)?;
+
+    // Drop it to flush the updated header to cache.
+    drop(disk);
 
     // If the current disk in the pool marked with free blocks is higher than the blocks we just freed,
     // we need to move back the search start for finding new free blocks.
@@ -294,7 +302,7 @@ fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, FloppyDriveEr
         .header
         .disk_with_next_free_block;
 
-    if probable_disk > disk.number {
+    if probable_disk > starter.disk {
         // It's higher, we need to move the pool back.
         GLOBAL_POOL
             .get()
@@ -302,7 +310,7 @@ fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, FloppyDriveEr
             .try_lock()
             .expect("Single threaded")
             .header
-            .disk_with_next_free_block = disk.number;
+            .disk_with_next_free_block = starter.disk;
     }
 
     // Update the free count, since new blocks are available.
@@ -312,8 +320,7 @@ fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, FloppyDriveEr
     .try_lock()
     .expect("single threaded")
     .header
-    .pool_standard_blocks_free += blocks_freed as u16;
-
+    .pool_standard_blocks_free += blocks_freed;
 
     // Return the number of blocks freed.
     Ok(blocks_freed)

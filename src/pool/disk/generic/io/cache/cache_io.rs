@@ -2,13 +2,13 @@
 
 use crate::pool::disk::{
     drive_struct::FloppyDriveError,
-     generic::{block::block_structs::RawBlock,
+     generic::{block::{allocate::block_allocation::BlockAllocation, block_structs::RawBlock},
         disk_trait::GenericDiskMethods,
         generic_structs::pointer_struct::DiskPointer,
         io::{
-            cache::cache_implementation::{
+            cache::{cache_implementation::{
                 BlockCache, CachedBlock
-            },
+            }, cached_allocation::CachedAllocationDisk},
             checked_io::CheckedIO
         }
     },
@@ -64,30 +64,43 @@ impl CachedBlockIO {
 
     /// Reads in a block from disk, attempts to read it from the cache first.
     /// 
+    /// Block must already be allocated on origin disk.
+    /// 
     /// Only works on standard disks.
     pub fn read_block(block_origin: DiskPointer) -> Result<RawBlock, FloppyDriveError> {
         go_read_cached_block(block_origin)
     }
+
     /// Writes a block to disk. Adds newly written block to cache.
+    /// 
+    /// Block must not be allocated on destination disk, will allocate on write.
     /// 
     /// Only works on standard disks.
     pub fn write_block(raw_block: &RawBlock) -> Result<(), FloppyDriveError> {
         go_write_cached_block(raw_block)
     }
+
     /// Updates pre-existing block on disk, updates cache.
+    /// 
+    /// Block must be already allocated on the destination disk.
     /// 
     /// Only works on standard disks.
     pub fn update_block(raw_block: &RawBlock) -> Result<(), FloppyDriveError> {
         go_update_cached_block(raw_block)
     }
+
     /// Get the hit-rate of the underlying cache
     pub fn get_hit_rate() -> f32 {
         BlockCache::get_hit_rate()
     }
+
     /// Sometimes you just need to remove a block from the cache, not even set it to zeros.
+    /// 
+    /// You MUST flush the block you are passing in before calling this function (if needed), or you WILL lose data!
     pub fn remove_block(block_origin: &DiskPointer) {
         BlockCache::remove_item(block_origin)
     }
+
     /// Flush the entire cache to disk.
     pub fn flush() -> Result<(), FloppyDriveError> {
         // There are currently 3 tiers of cache.
@@ -109,6 +122,17 @@ impl CachedBlockIO {
 // This function also updates the block order after the read.
 fn go_read_cached_block(block_location: DiskPointer) -> Result<RawBlock, FloppyDriveError> {
     // Grab the block from the cache if it exists.
+
+    // Block must be allocated.
+    // Unless it is a header, which are always allocated.
+    // If we check for header allocation, we would try to open the header for the allocation check, to check if the header is allocated,
+    // which would recurse and overflow the stack.
+    if block_location.block != 0 {
+        // This isn't a header.
+        let is_allocated = CachedAllocationDisk::open(block_location.disk)?.is_block_allocated(block_location.block);
+        assert!(is_allocated);
+    }
+    
     
     if let Some(found_block) = BlockCache::try_find(block_location) {
         // It was in the cache! Return the block...
@@ -118,8 +142,9 @@ fn go_read_cached_block(block_location: DiskPointer) -> Result<RawBlock, FloppyD
     // The block was not in the cache, we need to go get it old-school style.
     let disk: StandardDisk = super::cache_implementation::disk_load_header_invalidation(block_location.disk)?;
 
-    // Now read that block
-    let read_block = disk.checked_read(block_location.block)?;
+    // Now read that block.
+    // Already checked if it was allocated.
+    let read_block = disk.unchecked_read_block(block_location.block)?;
     
     // Add it to the cache
     BlockCache::add_or_update_item(CachedBlock::from_raw(&read_block))?;
@@ -145,7 +170,15 @@ fn go_write_cached_block(raw_block: &RawBlock) -> Result<(), FloppyDriveError> {
 fn go_update_cached_block(raw_block: &RawBlock) -> Result<(), FloppyDriveError> {
     // Update like windows, but better idk this joke sucks lmao
 
-    // No block allocations, since this is an update.
+    // We have to skip the allocation check if we are attempting to update the header, otherwise
+    // this will recuse and overflow the stack
+
+    if raw_block.block_origin.block != 0 {
+        // This is not a header.
+        // Make sure block is currently allocated.
+        let is_allocated = CachedAllocationDisk::open(raw_block.block_origin.disk)?.is_block_allocated(raw_block.block_origin.block);
+        assert!(is_allocated);
+    }
 
     // Update the cache with the updated block.
     BlockCache::add_or_update_item(CachedBlock::from_raw(raw_block))?;

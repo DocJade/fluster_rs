@@ -52,7 +52,7 @@ impl DiskBootstrap for StandardDisk {
 
         // Make the disk
         debug!("Running create...");
-        let disk = create(file, disk_number)?;
+        let mut disk = create(file, disk_number)?;
         // Now that we have a disk, we can use the safe IO.
 
         // if this is disk 1 then we need to add:
@@ -66,6 +66,12 @@ impl DiskBootstrap for StandardDisk {
         }
         debug!("This is the origin standard disk, doing a bit more...");
 
+        // the new origin disk needs to have blocks 1 and 2 allocated as well for the first inode/directory blocks.
+        let _ = disk.allocate_blocks(&vec![1,2])?;
+        // Ignoring resulting value, since it will always be 2.
+        // Which means we also need to update the pool block count again.
+
+
         // Write the inode block
         debug!("Writing inode block...");
         let inode_block_origin: DiskPointer = DiskPointer {
@@ -74,7 +80,7 @@ impl DiskBootstrap for StandardDisk {
         };
         let inode_block = InodeBlock::new(inode_block_origin);
         let inode_writer = inode_block.to_block();
-        CachedBlockIO::write_block(&inode_writer)?;
+        disk.unchecked_write_block(&inode_writer)?;
         
         // Create the directory block
         
@@ -86,12 +92,13 @@ impl DiskBootstrap for StandardDisk {
         };
         let directory_block: DirectoryBlock = DirectoryBlock::new(directory_block_origin);
         let the_directory_block: RawBlock = directory_block.to_block();
-        CachedBlockIO::write_block(&the_directory_block)?;
-
+        disk.unchecked_write_block(&the_directory_block)?;
+        
         // Now we need to manually add the inode that points to it. Because the inode at the 0 index
         // of block 1 is the inode that points to the root directory
-
+        
         // Add the root inode
+        debug!("Writing root directory inode...");
         let pointer_to_dat_mf: DiskPointer = DiskPointer {
             disk: 1,
             block: 2, // The root directory is at block 2.
@@ -107,7 +114,6 @@ impl DiskBootstrap for StandardDisk {
             modified: right_now,
         };
 
-        debug!("Writing root directory inode...");
         let inode_result = Pool::add_inode(the_actual_inode).expect("We should have room.");
         // Make sure that actually ended up at the right spot.
         assert_eq!(inode_result.disk, Some(1));
@@ -126,27 +132,17 @@ impl DiskBootstrap for StandardDisk {
     }
 
     fn from_header(block: RawBlock, file: File) -> Self {
-        // load in the header
+        // load in the header.
+        // We assume the caller has passed in the freshest version of the header.
         let header: StandardDiskHeader =
             StandardDiskHeader::from_block(&block);
-        let mut in_progress = StandardDisk {
+        let mut disk = StandardDisk {
             number: header.disk_number,
             disk_file: file,
             header,
         };
 
-        // Need to swoop in here due to cache magic, its possible that this disk had its allocations
-        // updated while it was not in the drive, so we must see if it's in the cache.
-
-        // Yes we already read the block from disk anyways, but we have to do that regardless
-        // to check if the disk number is correct.
-
-        if let Some(cached_header_block) = CachedBlockIO::try_read(block.block_origin) {
-            // There is info about this disk in the cache! Snag that.
-            in_progress.header = StandardDiskHeader::from_block(&cached_header_block);
-        }
-
-        in_progress
+        disk
 
     }
 }
