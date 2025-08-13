@@ -256,7 +256,7 @@ fn read_and_write_random_files() {
         let read = found.read_file(0, file_size.try_into().unwrap()).unwrap();
 
         // Compare
-        assert_eq!(read, random_files[current_file]);
+        check_byte_vec_equality(&read, &random_files[current_file]);
         
         // Next
         current_file += 1;
@@ -279,4 +279,23 @@ fn read_and_write_random_files() {
     info!("{read_hit}");
     info!("{read_swaps}");
     info!("===============");
+}
+
+
+
+/// Test helper for tracking down file corruption.
+/// 
+/// Returns nothing, panics if bytes are not the same.
+fn check_byte_vec_equality(a: &Vec<u8>, b: &Vec<u8>) {
+    // Make sure they are the same length
+    assert_eq!(a.len(), b.len());
+
+    // Check the bytes
+    let mut index: usize = 0;
+
+    for (byte_a, byte_b) in a.iter().zip(b.iter()) {
+        assert_eq!(byte_a, byte_b, "Byte mismatch at index `{}`! a: `{}`, b: `{}`", index, byte_a, byte_b);
+        // We cant use enumerate here (i think?) so manual index tracking.
+        index += 1;
+    }
 }

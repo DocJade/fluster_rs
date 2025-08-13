@@ -440,8 +440,8 @@ fn pointers_into_extents(pointers: &[DiskPointer]) -> Vec<FileExtent> {
     // Loop over the pointers and create extents.
     for pointer in pointers {
         // Check if we need to make a new extent.
-        let new: FileExtent = FileExtent::new(*pointer, 1);
-        let created_count = new_extents.len();
+        // We start at 0 since we increment at the end of the loop.
+        let new: FileExtent = FileExtent::new(*pointer, 0);
         // We need a new one if:
         // - There are no extents
         // - The disk number is different
@@ -463,8 +463,8 @@ fn pointers_into_extents(pointers: &[DiskPointer]) -> Vec<FileExtent> {
             new_extents.push(new);
         }
         
-        // This pointer extends the previous extent block, add one to the length.
-        new_extents[created_count].length += 1;
+        // This pointer extends the previous (or new) extent block, add one to the length.
+        new_extents.last_mut().expect("Guarded.").length += 1;
     }
 
     // All done!
@@ -622,6 +622,18 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
     if delete {
         // We are deleting all of the blocks, so just get all of them.
         let mut used_blocks = file.to_pointers()?;
+
+        // We also need to free the extent blocks themselves, not just where they point.
+        let mut extent_block_pointer = file.pointer;
+
+        while !extent_block_pointer.no_destination() {
+            used_blocks.push(extent_block_pointer);
+            // TODO: This work has already been done on `to_pointers`, maybe there should be another
+            // method that returns the pointers, and the pointers to the extent blocks at the same time.
+            let read = CachedBlockIO::read_block(extent_block_pointer)?;
+            let extent_block: FileExtentBlock = FileExtentBlock::from_block(&read);
+            extent_block_pointer = extent_block.next_block;
+        }
 
         // We dont have to worry about updating the underlying block, since the deletion call
         // will discard the item automagically.
@@ -1010,6 +1022,7 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
 /// Returns how many blocks were freed.
 fn truncate_cleanup(pre_collected: Vec<DiskPointer>, next_extent_block: DiskPointer) -> Result<usize, FloppyDriveError> {
     // The rest of the cleanup happens in this function so we can easily check if any of it fails.
+    debug!("Starting truncation cleanup, started with {} pre-collected blocks...", pre_collected.len());
     
     // Dump those pointers into a new local pile
     let mut to_free: Vec<DiskPointer> = pre_collected;
