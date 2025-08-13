@@ -946,6 +946,12 @@ impl FilesystemMT for FlusterFS {
                     // We will hold onto it just in case, even though it's empty.
                 },
                 Err(err) => {
+
+                    // This should fail tests.
+                    if cfg!(test) {
+                        panic!("{err:#?}");
+                    }
+
                     // Drive level issue.
                     warn!("Failed at a level lower than us. Unknown state.");
                     return Err(err.into())
@@ -975,6 +981,12 @@ impl FilesystemMT for FlusterFS {
                     // Attempt to uphold POSIX standard (like hell the rest of fluster is compliant) by
                     // at least attempting to put the original directory back again.
                     // We dont actually need to though, since it hasn't been extracted yet.
+
+                    // This should fail tests.
+                    if cfg!(test) {
+                        panic!("{err:#?}");
+                    }
+
                     return Err(err.into())
                 },
             }
@@ -996,6 +1008,12 @@ impl FilesystemMT for FlusterFS {
                     // shoulda thought ahead and made fluster more transactional, oh well.
                     // We have to ignore the error, but might as well print it.
                     debug!("{err:#?}");
+
+                    // This should fail tests.
+                    if cfg!(test) {
+                        panic!("{err:#?}");
+                    }
+
                     return Ok(());
                 },
             };

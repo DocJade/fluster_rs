@@ -33,6 +33,7 @@ pub(crate) fn write_block_direct(mut disk_file: &File, block: &RawBlock) -> Resu
     // Write the data.
     disk_file.write_all_at(&block.data, write_offset)?;
     disk_file.flush()?;
+    disk_file.sync_all()?;
 
     trace!("Block written successfully.");
     Ok(())

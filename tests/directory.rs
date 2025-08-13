@@ -419,8 +419,23 @@ fn rename_lots_of_items() {
     assert_eq!(old_list_len, list_names.len());
 
     // Every item should contain the word `new`
-    assert!(!list_names.iter().all(|i| i.contains("new")));
+    assert!(list_names.iter().all(|i| i.contains("new")));
+
+    // Every item should only contain `new` once.
+    assert!(list_names.iter().all(|i| {
+        i.matches("new").count() == 1
+    }));
     
     // Make sure we have the correct number of items.
     assert_eq!(number_made, list_count);
+}
+
+
+// Renaming burn in test
+#[test]
+#[ignore = "Slow."]
+fn rename_burn_in() {
+    for _ in 0..1000 {
+        rename_lots_of_items()
+    }
 }
