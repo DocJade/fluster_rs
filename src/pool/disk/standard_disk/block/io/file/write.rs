@@ -1024,6 +1024,7 @@ fn truncate_cleanup(pre_collected: Vec<DiskPointer>, next_extent_block: DiskPoin
     // Also collect the extents, gotta remember where the're from too
     let mut extents: Vec<(u16, FileExtent)> = Vec::new();
 
+    debug!("Collecting blocks referred to by extents...");
     while !next_extent_block.no_destination() {
         // Open the extent
         let raw: RawBlock = CachedBlockIO::read_block(next_extent_block)?;
@@ -1043,21 +1044,33 @@ fn truncate_cleanup(pre_collected: Vec<DiskPointer>, next_extent_block: DiskPoin
         next_extent_block = read.next_block;
     }
 
+    debug!("Done.");
+    
     // == Collect all of the DiskPointers to the data blocks within the extents in the remaining extent blocks. ==
     // == - Loop over the collected disk pointers in the previous step, open the FileExtentBlock, extract the ==
     // == - DiskPointers from all of the contained Extents ==
-
+    
     // To save reads i grabbed the extents as i read the blocks, we just need the pointers
+    debug!("Extracting pointers...");
     for (_, tent) in extents { // I used to be a tent, but I got too old and cant pitch them anymore.
         let pointers = tent.get_pointers();
         to_free.extend(pointers);
     }
-
+    debug!("Done.");
+    
     // == Free all of the blocks we've collected ==
 
 
     // Sort the blocks to reduce the amount of head seeking. This also groups together the disks.
     to_free.sort_unstable_by_key(|block| (block.disk, block.block));
+
+    // Make sure there are no duplicates.
+    // Yes we shouldn't be getting them in the first place, but if we somehow do, this will
+    // crash due to double free.
+    let pre_dedup = to_free.len();
+    to_free.dedup();
+    let post_dedup = to_free.len();
+    assert_eq!(pre_dedup, post_dedup);
 
     // Hold onto how many blocks we're freeing for returning.
     let amount_freed = to_free.len();
@@ -1067,10 +1080,13 @@ fn truncate_cleanup(pre_collected: Vec<DiskPointer>, next_extent_block: DiskPoin
 
     // Now go free all of those blocks.
     // This will zero out the blocks, and remove them from the cache for us.
+    debug!("Freeing blocks...");
     for chunk in chunked {
         let freed = Pool::free_pool_block_from_disk(chunk)?;
         assert_eq!(freed as usize, chunk.len());
     }
+    debug!("Done.");
+    debug!("All done cleaning up truncation.");
 
     // All done! Return how many blocks we freed.
     Ok(amount_freed)

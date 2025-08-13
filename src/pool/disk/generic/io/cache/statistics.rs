@@ -50,15 +50,31 @@ impl BlockCacheStatistics {
         let hits = stats.hits_and_misses.iter().filter(|&&hit| hit).count();
         hits as f32 / stats.hits_and_misses.len() as f32
     }
-    /// Record a cache hit/miss
-    pub(super) fn record_hit(hit: bool) {
+    /// Record a cache hit.
+    /// 
+    /// Two functions to avoid confusion.
+    pub(super) fn record_hit() {
         // Get ourselves
         let stats = &mut CACHE_STATISTICS.lock().expect("Single threaded");
 
         // Need to pop the oldest hit if we're out of room.
-        if stats.hits_and_misses.len() >= 1000 {
+        if stats.hits_and_misses.len() >= HIT_MEMORY {
             let _ = stats.hits_and_misses.pop_back();
         }
-        stats.hits_and_misses.push_front(hit);
+        stats.hits_and_misses.push_front(true);
+    }
+
+    /// Record a cache hit.
+    /// 
+    /// Two functions to avoid confusion.
+    pub(super) fn record_miss() {
+        // Get ourselves
+        let stats = &mut CACHE_STATISTICS.lock().expect("Single threaded");
+
+        // Need to pop the oldest hit if we're out of room.
+        if stats.hits_and_misses.len() >= HIT_MEMORY {
+            let _ = stats.hits_and_misses.pop_back();
+        }
+        stats.hits_and_misses.push_front(false);
     }
 }

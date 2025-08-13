@@ -305,7 +305,7 @@ fn go_try_find_cache(pointer: DiskPointer) -> Option<CachedBlock> {
     // Tier 2
     if let Some(found) = cache.tier_2.find_item(&pointer) {
         // In the highest rank!
-        BlockCacheStatistics::record_hit(true);
+        BlockCacheStatistics::record_hit();
         // Grab it, which will also update the order.
         return cache.tier_2.get_item(found).cloned()
     }
@@ -313,7 +313,7 @@ fn go_try_find_cache(pointer: DiskPointer) -> Option<CachedBlock> {
     // Tier 1
     if let Some(found) = cache.tier_1.find_item(&pointer) {
         // Somewhat common it seems.
-        BlockCacheStatistics::record_hit(true);
+        BlockCacheStatistics::record_hit();
         // Grab it, which will also update the order.
         return cache.tier_1.get_item(found).cloned()
     }
@@ -321,7 +321,7 @@ fn go_try_find_cache(pointer: DiskPointer) -> Option<CachedBlock> {
     // Tier 0
     if let Some(found) = cache.tier_0.find_item(&pointer) {
         // Scraping the barrel, but at least it was there!
-        BlockCacheStatistics::record_hit(true);
+        BlockCacheStatistics::record_hit();
         // Since this is the lowest tier, we need to immediately promote this
         let item = cache.tier_0.extract_item(found).expect("Just checked.");
         cache.promote_item(item.clone());
@@ -331,7 +331,7 @@ fn go_try_find_cache(pointer: DiskPointer) -> Option<CachedBlock> {
     }
 
     // It wasn't in the cache. Record the miss.
-    BlockCacheStatistics::record_hit(false);
+    BlockCacheStatistics::record_miss();
 
     // All done.
     None
