@@ -1,6 +1,6 @@
 use std::{error::Error, ffi::OsStr, thread, time::Duration};
 
-use log::{error, info};
+use log::{debug, error, info};
 use rand::{rngs::ThreadRng, seq::SliceRandom};
 // We want to see logs while testing.
 use test_log::test;
@@ -351,7 +351,7 @@ fn rename_lots_of_items() {
     }
 
     // Make sure the directory still contains the correct number of items. (ie we didn't duplicate anything.)
-    // Listing also returns `.`, but rust (or linux?) drops it here if the directory is not empty.
+    // Listing also returns `.`, but rust (or linux?) drops it here if the directory is not empty. (in theory)
     
     // We also cant error out before the unmount, so we get a lil goofy here.
     let mut list_count: usize = 0;
@@ -364,8 +364,15 @@ fn rename_lots_of_items() {
                 // Something is amiss about this entry
                 results.push(Err(error));
             } else {
+                // i is good
+                let entry = i.unwrap();
+                // Skip if this is the `.` item
+                if entry.file_name().to_string_lossy().into_owned() == "." {
+                    // skip
+                    continue;
+                }
                 list_count += 1;
-                list_names.push(i.unwrap().file_name().to_string_lossy().into_owned());
+                list_names.push(entry.file_name().to_string_lossy().into_owned());
             }
         };
     } else {
@@ -410,10 +417,10 @@ fn rename_lots_of_items() {
     let old_list_len: usize = list_names.len();
     list_names.dedup();
     assert_eq!(old_list_len, list_names.len());
-    
-    // Make sure we have the correct number of items.
-    assert_eq!(number_made, list_count);
 
     // Every item should contain the word `new`
     assert!(!list_names.iter().all(|i| i.contains("new")));
+    
+    // Make sure we have the correct number of items.
+    assert_eq!(number_made, list_count);
 }

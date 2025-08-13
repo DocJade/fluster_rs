@@ -677,7 +677,7 @@ impl FilesystemMT for FlusterFS {
 
                 // Since the item exists already, we will extract it. To delete the old file we need to have the file in the block. Which
                 // complicates things a bit. So we pull it out, and when we are ready to delete it, we rename it, put it back in, and delete it.
-                let extracted_old = match destination_parent_dir.find_and_extract_item(&NamedItem::Directory(destination_item_name.clone())) {
+                let extracted_old: DirectoryItem = match destination_parent_dir.find_and_extract_item(&NamedItem::File(destination_item_name.clone())) {
                     Ok(ok) => match ok {
                         Some(ok) => ok,
                         None => {
