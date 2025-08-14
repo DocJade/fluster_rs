@@ -95,7 +95,7 @@ fn go_get_metadata(item: DirectoryItem) -> Result<FileAttr, FloppyDriveError> {
         // File permissions, not supported
         perm: 0o777, // All permission bits
         // links not supported
-        nlink: 2, // At least 1 link for each item
+        nlink: 2, // This has to be set to 2 or things get angry, idk.
         // owner id, always root
         uid: 0,
         // owner group, always root

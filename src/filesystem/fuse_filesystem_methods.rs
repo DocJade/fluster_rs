@@ -120,7 +120,7 @@ impl FilesystemMT for FlusterFS {
         };
 
         // Get the item type
-        let item_to_find: NamedItem = temp_handle.get_named_item();
+        let item_to_find: NamedItem = temp_handle.get_named_item()?;
 
         let found_item: DirectoryItem;
 
@@ -207,13 +207,13 @@ impl FilesystemMT for FlusterFS {
         debug!("Handle obtained.");
 
         // You cannot truncate directories.
-        if !handle.is_file() {
+        if !handle.is_file()? {
             warn!("Attempted to truncate a directory. Ignoring.");
             return Err(IS_A_DIRECTORY)
         }
 
         // Go load the file to truncate
-        let item_to_find: NamedItem = handle.get_named_item();
+        let item_to_find: NamedItem = NamedItem::File(handle.name().to_string());
         let found_item: DirectoryItem;
 
         debug!("Searching for item...");
@@ -359,7 +359,7 @@ impl FilesystemMT for FlusterFS {
             flags: ItemFlag::empty(),
         };
 
-        if !temp_handle.is_file() {
+        if !temp_handle.is_file()? {
             // Cannot unlink directories.
             debug!("A directory was provided, not a file.");
             return Err(NOT_A_DIRECTORY);
@@ -535,7 +535,7 @@ impl FilesystemMT for FlusterFS {
         if source_full_temp_handle.is_file() == destination_full_temp_handle.is_file(){
             debug!(
                 "Types are the same, both are {}.",
-                if source_full_temp_handle.is_file() {
+                if source_full_temp_handle.is_file()? {
                     "files"
                 } else {
                     "directories"
@@ -593,7 +593,7 @@ impl FilesystemMT for FlusterFS {
         // We know the kind here so we can abstract this away as well.
         let maybe_source_directory_item: Option<DirectoryItem>;
         let maybe_destination_directory_item: Option<DirectoryItem>;
-        if source_full_temp_handle.is_file() {
+        if source_full_temp_handle.is_file()? {
             // both files.
             maybe_source_directory_item = source_parent_dir.find_item(&NamedItem::File(source_item_name.clone()))?;
             maybe_destination_directory_item = destination_parent_dir.find_item(&NamedItem::File(destination_item_name.clone()))?;
@@ -650,7 +650,7 @@ impl FilesystemMT for FlusterFS {
 
 
         // we branch depending on if it was a file or directory, handling is slightly different
-        if source_full_temp_handle.is_file() {
+        if source_full_temp_handle.is_file()? {
             //
             // File movement.
             //
@@ -852,7 +852,7 @@ impl FilesystemMT for FlusterFS {
                         // The old item may still be there, or it leaked blocks due to failed cleanup.
                         warn!("Failed to delete source item, it may still be there.");
                         warn!("Blocks were probably leaked.");
-                        warn!("Non-critical failure, we will keep going.");
+                        warn!("Non-critical deletion failure: {err:#?}")
                         // Good enough.
                     },
                 }
@@ -1113,7 +1113,7 @@ impl FilesystemMT for FlusterFS {
         // At this point. We need to know if we are looking for a directory or a file.
         debug!("Deducing request item type...");
         let extracted_name = handle.name();
-        let item_to_find: NamedItem = if handle.is_file() {
+        let item_to_find: NamedItem = if handle.is_file()? {
             // File
             debug!("Looking for a file...");
             // Cool beans.
@@ -1193,15 +1193,24 @@ impl FilesystemMT for FlusterFS {
             return callback(Err(GENERIC_FAILURE));
         }
 
+        // Test the file type
+        let is_a_file: bool = match got_handle.is_file() {
+            Ok(ok) => ok,
+            Err(err) => {
+                // File must have not existed, or reading failed.
+                return callback(Err(err))
+            },
+        };
+
         // Make sure this is a file
-        if !got_handle.is_file() {
+        if !is_a_file {
             // Can't read a directory!
             warn!("Tried to read a directory as a file. Ignoring...");
             return callback(Err(IS_A_DIRECTORY));
         }
 
         // Get the item
-        let named = got_handle.get_named_item();
+        let named = NamedItem::File(got_handle.name().to_string());
 
         // Try to find it.
         // Cant use the `?` operator in here due to the callback, annoying!
@@ -1299,14 +1308,14 @@ impl FilesystemMT for FlusterFS {
         }
 
         // Make sure this is a file
-        if !got_handle.is_file() {
+        if !got_handle.is_file()? {
             // Can't read a directory!
             warn!("Tried to read a directory as a file. Ignoring...");
             return Err(INVALID_ARGUMENT); // write() man page
         }
 
         // Get the item
-        let named = got_handle.get_named_item();
+        let named = got_handle.get_named_item()?;
 
         // Try to find it.
 

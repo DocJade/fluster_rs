@@ -107,13 +107,13 @@ use crate::{
         error::error_types::*,
         file_handle::file_handle_struct::FileHandle, item_flag::flag_struct::ItemFlag
     },
-    pool::disk::standard_disk::block::{
+    pool::disk::{drive_struct::FloppyDriveError, standard_disk::block::{
         directory::directory_struct::{
             DirectoryBlock,
             DirectoryItem
         },
         io::directory::types::NamedItem
-    }
+    }}
 };
 
 impl FileHandle {
@@ -159,11 +159,9 @@ impl FileHandle {
         read_handles.release_handle(handle);
     }
 
-    /// Check if this handle is a file or a directory.
-    /// 
-    /// Must provide flags.
-
-    pub fn is_file(&self) -> bool {
+    /// Check if this handle is a file or a directory by attempting to read it from disk, otherwise
+    /// deducing the type from it's path string.
+    pub fn is_file(&self) -> Result<bool, c_int> {
         // Annoyingly, rust's PathBuf type doesn't have a way to test if itself is a directory
         // without reading from disk, which makes it completely useless for deducing if the passed argument
         // is a file or folder. Very very annoying.
@@ -172,36 +170,39 @@ impl FileHandle {
         //
         // The approach i'll take is to see if the path ends with a delimiter. good luck lmao
 
-        // NEW APPOACH! idgaf anymore
-        // if it dont got a dot, it not a file.
+        // But before we fallback to the path based deduction, we can attempt to load the file from disk if it exists.
+        // If it does, we have our sure answer about what type it is, otherwise we will use the crappy string logic.
+
+        // I don't particularly enjoy needing to access the disk here, but chances are if you're trying to find what type
+        // something is, you'll be modifying it soon anyways.
+        
         let name: &str = self.name();
-        if name.contains('.') {
-            // Has a period. its a file.
-            // Unless this is a dot that refers to the current directory.
-            if name == "." {
-                // dir
-                return false;
+        debug!("Attempting to deduce if `{}` is a file or directory...", self.path.display());
+        
+        // Does the parent exist?
+        debug!("Checking if it already exists...");
+        if let Some(parent) = DirectoryBlock::try_find_directory(self.path.parent())? {
+            // Parent does exist, is this item there in either form?
+            let file: NamedItem = NamedItem::File(self.name().to_string());
+            let directory: NamedItem = NamedItem::Directory(self.name().to_string());
+            let maybe_file = parent.find_item(&file)?;
+            if maybe_file.is_some() {
+                // It was a file
+                debug!("Yes, and it's a file.");
+                return Ok(true);
             }
-            true
-        } else {
-            // This is nameless, must be root.
-            // Root is a directory.
-            false
+            let maybe_directory = parent.find_item(&directory)?;
+            if maybe_directory.is_some() {
+                // It was a directory.
+                debug!("Yes, and it's a directory.");
+                return Ok(false);
+            }
         }
+        debug!("Item did not exist!");
 
-        // // The delimiter is platform specific too.
-        // static DELIMITER: char = std::path::MAIN_SEPARATOR;
-
-        // // Check 
-
-        // // If the path is empty, its the root node, which is a directory
-        // if self.path.iter().count() == 0 {
-        //     // This is the root
-        //     return false;
-        // }
-        // 
-        // // Check if it ends with the delimiter, if it does, its a directory, otherwise its a file.
-        // !self.path.as_os_str().to_str().expect("Should be valid utf8").ends_with(DELIMITER)
+        // Rather than guess, we'll just return that the file did not exist, which should not the be the case for
+        // file handles, but maybe the caller just had a stale one?
+        Err(NO_SUCH_ITEM.into())
     }
 
     
@@ -216,7 +217,7 @@ impl FileHandle {
             },
         };
 
-        let named_item = self.get_named_item();
+        let named_item = self.get_named_item()?;
 
         // Find the item
         if let Some(exists) = block.find_item(&named_item)? {
@@ -229,17 +230,17 @@ impl FileHandle {
     }
 
     /// Get a named item from this handle.
-    pub fn get_named_item(&self) -> NamedItem {
+    pub fn get_named_item(&self) -> Result<NamedItem, c_int> {
         // Get a name
         let name: String = self.name().to_string();
 
         // Deduce the type
-        if self.is_file() {
+        if self.is_file()? {
             // yeah its a file
-            NamedItem::File(name)
+            Ok(NamedItem::File(name))
         } else {
             // dir
-            NamedItem::Directory(name)
+            Ok(NamedItem::Directory(name))
         }
     }
 }
