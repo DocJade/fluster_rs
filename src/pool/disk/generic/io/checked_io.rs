@@ -9,7 +9,7 @@ use crate::pool::{
             allocate::block_allocation::BlockAllocation,
             block_structs::{BlockError, RawBlock},
         },
-        disk_trait::GenericDiskMethods,
+        disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer,
     }},
     pool_actions::pool_struct::GLOBAL_POOL,
 };
@@ -75,6 +75,23 @@ pub(super) trait CheckedIO: BlockAllocation + GenericDiskMethods {
         assert!(self.is_block_allocated(block.block_origin.block));
         self.unchecked_write_block(block)?;
         trace!("Block updated successfully.");
+        Ok(())
+    }
+
+    /// Updates several blocks starting at start_block with data. Blocks must already be allocated.
+    /// This overwrites the data in the block. (Obviously)
+    /// Panics if any of the blocks were not previously allocated.
+    fn checked_large_update(&mut self, data: Vec<u8>, start_block: DiskPointer) -> Result<(), BlockError> {
+        trace!(
+            "Performing checked large update starting on block {}...",
+            start_block.block
+        );
+        // Make sure all of the blocks this refers to are already allocated.
+        for block in start_block.block..start_block.block + data.len().div_ceil(512) as u16 {
+            assert!(self.is_block_allocated(block));
+        }
+        self.unchecked_write_large(data, start_block)?;
+        trace!("Blocks updated successfully.");
         Ok(())
     }
 }

@@ -13,9 +13,7 @@ use crate::pool::disk::{
             allocate::block_allocation::BlockAllocation,
             block_structs::{BlockError, RawBlock},
             crc::check_crc,
-        },
-        disk_trait::GenericDiskMethods,
-        io::{read::read_block_direct, write::write_block_direct},
+        }, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::{read::read_block_direct, write::write_block_direct}
     },
     pool_disk::block::header::header_struct::PoolDiskHeader,
 };
@@ -107,5 +105,12 @@ impl GenericDiskMethods for PoolDisk {
         error!("You cannot call flush on a pool disk header.");
         error!("This must be handled manually via a disk unchecked write.");
         panic!("Tried to flush a pool header with .flush() !");
+    }
+    
+    #[doc = " Write chunked data, starting at a block."]
+    fn unchecked_write_large(&mut self, _data:Vec<u8>, _start_block: DiskPointer) -> Result<(), BlockError> {
+        // We do not allow large writes to the pool disk.
+        // Man the pool disk really ended up useless didn't it?
+        panic!("No large writes on pool disks.");
     }
 }

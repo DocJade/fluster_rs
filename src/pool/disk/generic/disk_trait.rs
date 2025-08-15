@@ -7,7 +7,7 @@ use enum_dispatch::enum_dispatch;
 
 use crate::pool::disk::{
     drive_struct::{DiskType, FloppyDriveError},
-    generic::block::block_structs::{BlockError, RawBlock},
+    generic::{block::block_structs::{BlockError, RawBlock}, generic_structs::pointer_struct::DiskPointer},
 };
 
 // Generic disks must also have disk numbers, and be able to retrieve their inner File.
@@ -19,6 +19,9 @@ pub trait GenericDiskMethods {
 
     /// Write a block.
     fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), BlockError>;
+
+    /// Write chunked data, starting at a block.
+    fn unchecked_write_large(&mut self, data: Vec<u8>, start_block: DiskPointer) -> Result<(), BlockError>;
 
     /// Get the inner file.
     fn disk_file(self) -> File;

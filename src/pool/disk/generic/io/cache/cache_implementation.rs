@@ -658,7 +658,7 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
 
     // There are still items in here, we have work to do.
 
-    // Sort the blocks we will actually be writing.
+    // Sort the blocks we will actually be writing to put the same disks in order, then by block order.
     items.sort_unstable_by_key(|item| (item.block_origin.disk, item.block_origin.block));
     
     // Now to reduce head movement even further, we don't want to check the allocation table
@@ -703,19 +703,36 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
     
     // Open the first disk to write to
     
-    let mut current_disk: StandardDisk = disk_load_header_invalidation(items.first().expect("We know we have at least 1 item").block_origin.disk)?;
     
+    // Now we can chunk together the blocks into larger continuous writes for speed.
+    // First chunk by disk
+    let chunked_by_disk = items.chunk_by(|a,b| a.block_origin.disk == b.block_origin.disk);
     
-    for block in items {
-        // Right disk?
-        if current_disk.get_disk_number() != block.block_origin.disk {
-            // Sanity check, invalid disk would be very silly this low down but whatever
-            assert!(!block.block_origin.no_destination());
-            // Load new disk
-            current_disk = disk_load_header_invalidation(block.block_origin.disk)?;
+    // Now we can loop over the disks
+    for disk_chunk in chunked_by_disk {
+        // open the disk
+        let mut current_disk: StandardDisk = disk_load_header_invalidation(disk_chunk[0].block_origin.disk)?;
+
+        // Now chunk together the blocks.
+        // Comparison adds instead of subtracts to prevent overflow.
+        let chunked_by_block = disk_chunk.chunk_by(|a, b| b.block_origin.block == a.block_origin.block + 1);
+
+        // Now loop over those.
+        for block_chunk in chunked_by_block {
+            // If this chunk only has one item in it, do a normal write.
+            if block_chunk.len() == 1 {
+                current_disk.checked_update(&block_chunk[0].clone().into_raw())?;
+                continue;
+            }
+
+            // There are multiple blocks in a row to update, we need to stitch their bytes together.
+            let bytes_to_write: Vec<u8> = block_chunk.iter().flat_map(|block| block.data.clone()).collect();
+
+            // Now do the large write.
+            // Unchecked since the headers for the disk may still be in the cache.
+            current_disk.unchecked_write_large(bytes_to_write, block_chunk[0].block_origin)?;
         }
-        // Write the block
-        current_disk.unchecked_write_block(&block.into_raw())?;
+
     }
     
     // All done, don't need to do any cleanup for previously stated reasons

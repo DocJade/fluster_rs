@@ -13,7 +13,7 @@ use crate::pool::{
             },
             disk_trait::GenericDiskMethods,
             generic_structs::pointer_struct::DiskPointer,
-            io::{cache::cache_io::CachedBlockIO, read::read_block_direct, write::write_block_direct},
+            io::{cache::cache_io::CachedBlockIO, read::read_block_direct, write::{write_block_direct, write_large_direct}},
         },
         standard_disk::{
             block::{
@@ -265,6 +265,11 @@ impl GenericDiskMethods for StandardDisk {
         write_block_direct(&self.disk_file, block)
     }
 
+    #[doc = " Write chunked data, starting at a block."]
+    fn unchecked_write_large(&mut self, data:Vec<u8>, start_block:DiskPointer) -> Result<(), BlockError> {
+        write_large_direct(&self.disk_file, data, start_block)
+    }
+
     #[doc = " Get the inner file used for IO operations"]
     fn disk_file(self) -> File {
         self.disk_file
@@ -291,4 +296,5 @@ impl GenericDiskMethods for StandardDisk {
         // Not really to disk, but if nobody is looking...
         CachedBlockIO::update_block(&self.header.to_block())
     }
+
 }

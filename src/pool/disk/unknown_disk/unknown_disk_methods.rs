@@ -2,9 +2,7 @@ use std::fs::File;
 
 use crate::pool::disk::{
     drive_struct::FloppyDriveError, generic::{
-        block::{allocate::block_allocation::BlockAllocation, block_structs::{BlockError, RawBlock}},
-        disk_trait::GenericDiskMethods,
-        io::write::write_block_direct,
+        block::{allocate::block_allocation::BlockAllocation, block_structs::{BlockError, RawBlock}}, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::write::write_block_direct
     }, unknown_disk::unknown_disk_struct::UnknownDisk
 };
 
@@ -47,6 +45,11 @@ impl GenericDiskMethods for UnknownDisk {
     fn flush(&mut self) -> Result<(), FloppyDriveError> {
         // There is no in-memory information for this disk.
         unreachable!()
+    }
+    
+    #[doc = " Write chunked data, starting at a block."]
+    fn unchecked_write_large(&mut self, _data: Vec<u8>, _start_block: DiskPointer) -> Result<(), BlockError> {
+        panic!("Cannot do large writes to unknown disks!");
     }
 }
 
