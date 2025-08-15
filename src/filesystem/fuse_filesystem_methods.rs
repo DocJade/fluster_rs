@@ -119,28 +119,9 @@ impl FilesystemMT for FlusterFS {
             flags: ItemFlag::empty(),
         };
 
-        // Get the item type
-        let item_to_find: NamedItem = temp_handle.get_named_item()?;
-
-        let found_item: DirectoryItem;
-
-        // Directory
-        debug!("Searching for item...");
-        if let Some(parent) = DirectoryBlock::try_find_directory(path.parent())? {
-            // Item
-            if let Some(item) = parent.find_item(&item_to_find)? {
-                debug!("Item found.");
-                found_item = item;
-            } else {
-                // item did not exist.
-                debug!("Item was not present in parent.");
-                return Err(NO_SUCH_ITEM)
-            }
-        } else {
-            // Parent does not exist. We cannot get attributes.
-            debug!("Parent directory did not exist for this item.");
-            return Err(NO_SUCH_ITEM)
-        }
+        // Go get the item.
+        // This will automatically throw the correct error if the file/folder did not exist.
+        let found_item = temp_handle.get_directory_item()?;
 
         // Get the attributes
         debug!("Getting attributes of item...");
@@ -206,32 +187,9 @@ impl FilesystemMT for FlusterFS {
 
         debug!("Handle obtained.");
 
-        // You cannot truncate directories.
-        if !handle.is_file()? {
-            warn!("Attempted to truncate a directory. Ignoring.");
-            return Err(IS_A_DIRECTORY)
-        }
-
-        // Go load the file to truncate
-        let item_to_find: NamedItem = NamedItem::File(handle.name().to_string());
-        let found_item: DirectoryItem;
-
-        debug!("Searching for item...");
-        if let Some(parent) = DirectoryBlock::try_find_directory(path.parent())? {
-            // Item
-            if let Some(item) = parent.find_item(&item_to_find)? {
-                debug!("Item found.");
-                found_item = item;
-            } else {
-                // item did not exist.
-                debug!("Item was not present in parent.");
-                return Err(NO_SUCH_ITEM)
-            }
-        } else {
-            // Parent does not exist. We cannot get attributes.
-            debug!("Parent directory did not exist for this item.");
-            return Err(NO_SUCH_ITEM)
-        }
+        // Go load the file to truncate.
+        // Will return properly if item does not exist.
+        let found_item = handle.get_directory_item()?;
 
         // Now with the directory item, we can run the truncation.
         debug!("Starting truncation...");
@@ -350,44 +308,40 @@ impl FilesystemMT for FlusterFS {
     ) -> fuse_mt::ResultEmpty {
         debug!("Deleting file `{}` from directory `{}`...", name.display(), parent.display());
 
-
-        let the_name: String = name.to_str().expect("Should be valid utf8").to_string();
-
-        // Ensure this is not a directory
+        // Make a fake handle to lookup the file we are looking for
         let temp_handle: FileHandle = FileHandle {
             path: parent.join(name).into(),
             flags: ItemFlag::empty(),
         };
 
-        if !temp_handle.is_file()? {
+        // This will return properly if the item did not exist.
+        let file = temp_handle.get_directory_item()?;
+
+        // Make sure it's a file
+        if file.flags.contains(DirectoryItemFlags::IsDirectory) {
             // Cannot unlink directories.
             debug!("A directory was provided, not a file.");
             return Err(NOT_A_DIRECTORY);
-        }
+        };
 
-
-        // Open directory
+        // Now we need the parent directory block to perform the removal
         debug!("Looking for file...");
         if let Some(mut parent_dir) = DirectoryBlock::try_find_directory(Some(parent))? {
-            // dir exists, does the file?
-            if let Some(the_file) = parent_dir.find_item(&NamedItem::File(the_name))? {
-                // File exists, delete it.
-                if parent_dir.delete_file(the_file.into())?.is_some() {
-                    // All done.
-                    Ok(())
-                } else {
-                    // Weird, we checked that the directory was there, but when we went to delete it, it wasnt???
-                    warn!("We found the directory to delete, but when we tried to delete it, it was missing.");
-                    // this should not happen lmao, but whatever.
-                    Err(NO_SUCH_ITEM)
-                }
+            // Delete the file
+            if parent_dir.delete_file(file.into())?.is_some() {
+                // All done.
+                debug!("File deleted.");
+                Ok(())
             } else {
-                // No such file.
-                debug!("File does not exist.");
+                // Weird, we checked that the directory was there, but when we went to delete it, it wasnt???
+                warn!("We found the directory to delete, but when we tried to delete it, it was missing.");
+                // this should not happen lmao, but whatever.
                 Err(NO_SUCH_ITEM)
             }
         } else {
-            // bad folder
+            // Should be impossible to get here, since we were already able to get the item from the parent
+            // a few lines ago.
+            // But we'll still gracefully handle it just in case.
             debug!("Parent folder does not exist.");
             Err(NO_SUCH_ITEM)
         }
@@ -531,11 +485,29 @@ impl FilesystemMT for FlusterFS {
         }
 
         // Make sure the two are the same underlying type
+        let source_is_file = match source_full_temp_handle.is_file()? {
+            Some(bool) => bool,
+            None => {
+                // The source item does not exist.
+                return Err(NO_SUCH_ITEM);
+            },
+        };
+
+        let destination_is_file = match destination_full_temp_handle.is_file()? {
+            Some(bool) => bool,
+            None => {
+                // The destination item does not exist, which means we're not going to replace a pre-existing item, thus we
+                // can just copy what the other file type is, since we will be creating this later.
+                source_is_file
+            },
+        };
+
+
         debug!("Making sure the two are of the same type...");
-        if source_full_temp_handle.is_file() == destination_full_temp_handle.is_file(){
+        if source_is_file == destination_is_file {
             debug!(
                 "Types are the same, both are {}.",
-                if source_full_temp_handle.is_file()? {
+                if source_is_file {
                     "files"
                 } else {
                     "directories"
@@ -593,7 +565,7 @@ impl FilesystemMT for FlusterFS {
         // We know the kind here so we can abstract this away as well.
         let maybe_source_directory_item: Option<DirectoryItem>;
         let maybe_destination_directory_item: Option<DirectoryItem>;
-        if source_full_temp_handle.is_file()? {
+        if source_is_file {
             // both files.
             maybe_source_directory_item = source_parent_dir.find_item(&NamedItem::File(source_item_name.clone()))?;
             maybe_destination_directory_item = destination_parent_dir.find_item(&NamedItem::File(destination_item_name.clone()))?;
@@ -650,7 +622,7 @@ impl FilesystemMT for FlusterFS {
 
 
         // we branch depending on if it was a file or directory, handling is slightly different
-        if source_full_temp_handle.is_file()? {
+        if source_is_file {
             //
             // File movement.
             //
@@ -1113,18 +1085,21 @@ impl FilesystemMT for FlusterFS {
         // At this point. We need to know if we are looking for a directory or a file.
         debug!("Deducing request item type...");
         let extracted_name = handle.name();
-        let item_to_find: NamedItem = if handle.is_file()? {
-            // File
-            debug!("Looking for a file...");
-            // Cool beans.
-            debug!("Named `{extracted_name}`.");
-            NamedItem::File(extracted_name.to_string())
-        } else {
-            // Directory
-            debug!("Looking for a directory...");
-            debug!("Named `{extracted_name}`.");
-            NamedItem::Directory(extracted_name.to_string())
+
+        let item_to_find: NamedItem = match handle.get_named_item()? {
+            Some(item) => item,
+            None => {
+                // No such item exists.
+                return Err(NO_SUCH_ITEM);
+            },
         };
+
+        if item_to_find.is_file() {
+            debug!("Looking for a file...");
+        } else {
+            debug!("Looking for a directory...");
+        }
+        debug!("Named `{extracted_name}`.");
 
         // Hold onto the item until we need it
         let found_item: DirectoryItem;
@@ -1193,58 +1168,21 @@ impl FilesystemMT for FlusterFS {
             return callback(Err(GENERIC_FAILURE));
         }
 
-        // Test the file type
-        let is_a_file: bool = match got_handle.is_file() {
+        // Try finding the directory item
+        let file = match got_handle.get_directory_item() {
             Ok(ok) => ok,
             Err(err) => {
-                // File must have not existed, or reading failed.
+                // Getting the item failed, maybe it wasn't there.
                 return callback(Err(err))
             },
         };
 
-        // Make sure this is a file
-        if !is_a_file {
+        // Make sure that it's a file.
+        if file.flags.contains(DirectoryItemFlags::IsDirectory) {
             // Can't read a directory!
             warn!("Tried to read a directory as a file. Ignoring...");
             return callback(Err(IS_A_DIRECTORY));
         }
-
-        // Get the item
-        let named = NamedItem::File(got_handle.name().to_string());
-
-        // Try to find it.
-        // Cant use the `?` operator in here due to the callback, annoying!
-        let parent: DirectoryBlock = match DirectoryBlock::try_find_directory(got_handle.path.parent()) {
-            Ok(ok) => match ok {
-                Some(found) => found,
-                None => {
-                    // No such parent, therefore no such file.
-                    debug!("No parent for file, returning...");
-                    return callback(Err(NO_SUCH_ITEM))
-                },
-            },
-            Err(error) => {
-                // Lower level error
-                return callback(Err(error.into()))
-            },
-        };
-        
-        // Is the file there?
-        let file = match parent.find_item(&named) {
-            Ok(ok) => match ok {
-                Some(exists) => exists,
-                None => {
-                    // No such file.
-                    debug!("No such file, returning...");
-                    return callback(Err(NO_SUCH_ITEM))
-                },
-            },
-            Err(error) => {
-                // Lower level error
-                warn!("Failed while finding item! Giving up...");
-                return callback(Err(error.into()))
-            },
-        };
 
         // Found a file!
         // We need to bound our read by the size of the file, since the read() filesystem call can
@@ -1307,38 +1245,8 @@ impl FilesystemMT for FlusterFS {
             return Err(GENERIC_FAILURE);
         }
 
-        // Make sure this is a file
-        if !got_handle.is_file()? {
-            // Can't read a directory!
-            warn!("Tried to read a directory as a file. Ignoring...");
-            return Err(INVALID_ARGUMENT); // write() man page
-        }
-
-        // Get the item
-        let named = got_handle.get_named_item()?;
-
-        // Try to find it.
-
-        // Parent
-        let parent = if let Some(found) = DirectoryBlock::try_find_directory(got_handle.path.parent())? {
-            // Good
-            found
-        } else {
-            // No such parent.
-            debug!("No parent for file, returning...");
-            return Err(NO_SUCH_ITEM)
-        };
-
-        // File
-        let file = if let Some(found) = parent.find_item(&named)? {
-            // Found it!
-            found
-        } else {
-            // File is not there.
-            debug!("No such file, returning...");
-            return Err(NO_SUCH_ITEM)
-        };
-
+        // Try finding the directory item
+        let file = got_handle.get_directory_item()?;
         
         // man page:
         // If count is zero and fd refers to a regular file, then write() may

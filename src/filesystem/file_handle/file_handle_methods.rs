@@ -161,7 +161,7 @@ impl FileHandle {
 
     /// Check if this handle is a file or a directory by attempting to read it from disk, otherwise
     /// deducing the type from it's path string.
-    pub fn is_file(&self) -> Result<bool, c_int> {
+    pub fn is_file(&self) -> Result<Option<bool>, c_int> {
         // Annoyingly, rust's PathBuf type doesn't have a way to test if itself is a directory
         // without reading from disk, which makes it completely useless for deducing if the passed argument
         // is a file or folder. Very very annoying.
@@ -176,33 +176,33 @@ impl FileHandle {
         // I don't particularly enjoy needing to access the disk here, but chances are if you're trying to find what type
         // something is, you'll be modifying it soon anyways.
         
-        let name: &str = self.name();
+        let name: String = self.name().to_string();
         debug!("Attempting to deduce if `{}` is a file or directory...", self.path.display());
         
         // Does the parent exist?
         debug!("Checking if it already exists...");
         if let Some(parent) = DirectoryBlock::try_find_directory(self.path.parent())? {
             // Parent does exist, is this item there in either form?
-            let file: NamedItem = NamedItem::File(self.name().to_string());
-            let directory: NamedItem = NamedItem::Directory(self.name().to_string());
+            let file: NamedItem = NamedItem::File(name.clone());
+            let directory: NamedItem = NamedItem::Directory(name.clone());
             let maybe_file = parent.find_item(&file)?;
             if maybe_file.is_some() {
                 // It was a file
                 debug!("Yes, and it's a file.");
-                return Ok(true);
+                return Ok(Some(true));
             }
             let maybe_directory = parent.find_item(&directory)?;
             if maybe_directory.is_some() {
                 // It was a directory.
                 debug!("Yes, and it's a directory.");
-                return Ok(false);
+                return Ok(Some(false));
             }
         }
         debug!("Item did not exist!");
 
         // Rather than guess, we'll just return that the file did not exist, which should not the be the case for
-        // file handles, but maybe the caller just had a stale one?
-        Err(NO_SUCH_ITEM.into())
+        // file handles, but maybe the caller just had a stale handle, or is spoofing a new file?
+        Ok(None)
     }
 
     
@@ -217,7 +217,13 @@ impl FileHandle {
             },
         };
 
-        let named_item = self.get_named_item()?;
+        let named_item = if let Some(bool) = self.get_named_item()? {
+            // There was an item with this name.
+            bool
+        } else {
+            // We are trying to deduce the name of an item that does not exist.
+            return Err(NO_SUCH_ITEM);
+        };
 
         // Find the item
         if let Some(exists) = block.find_item(&named_item)? {
@@ -230,17 +236,30 @@ impl FileHandle {
     }
 
     /// Get a named item from this handle.
-    pub fn get_named_item(&self) -> Result<NamedItem, c_int> {
+    pub fn get_named_item(&self) -> Result<Option<NamedItem>, c_int> {
         // Get a name
         let name: String = self.name().to_string();
+        let file_check = self.is_file()?;
+        
+        // If this is none, the caller is trying to extract a named item from
+        // an invalid handle or a spoofed file. We return None, since the item did not
+        // exist in either form.
 
-        // Deduce the type
-        if self.is_file()? {
-            // yeah its a file
-            Ok(NamedItem::File(name))
-        } else {
-            // dir
-            Ok(NamedItem::Directory(name))
+        if let Some(is_file) = file_check {
+            // An item was there.
+            // Deduce the type
+            if is_file {
+                // yeah its a file
+                return Ok(Some(NamedItem::File(name)));
+            } else {
+                // dir
+                return Ok(Some(NamedItem::Directory(name)));
+            }
         }
+
+        // There was no item.
+        Ok(None)
+
+        
     }
 }
