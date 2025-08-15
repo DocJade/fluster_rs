@@ -419,12 +419,21 @@ fn rename_lots_of_items() {
     assert_eq!(old_list_len, list_names.len());
 
     // Every item should contain the word `new`
-    assert!(list_names.iter().all(|i| i.contains("new")));
-
     // Every item should only contain `new` once.
-    assert!(list_names.iter().all(|i| {
-        i.matches("new").count() == 1
-    }));
+    for name in &list_names {
+        // Check if it contains `new`, if it doesnt, we would like more info for testing
+        if !name.contains("new") {
+            // Not great.
+            error!("`{name}` does not contain new.");
+            // See if there is at least a new version of the directory.
+            if list_names.contains(&format!("new_{name}")) {
+                // It did! So the move did not remove the old directory, but did make the new one.
+                error!("`new_{name}` does exist though.")
+            }
+            panic!("New issue")
+        }
+        assert!(name.matches("new").count() == 1, "`{name}` has new in it more than once.");
+    }
     
     // Make sure we have the correct number of items.
     assert_eq!(number_made, list_count);
