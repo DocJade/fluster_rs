@@ -122,6 +122,10 @@ pub(super) struct CachedBlock {
     block_origin: DiskPointer,
     /// The content of the block.
     data: Vec<u8>,
+    /// Wether or not this block needs to be flushed.
+    /// 
+    /// Blocks that are read but never written do not need to be flushed.
+    requires_flush: bool
 }
 
 //
@@ -198,6 +202,18 @@ impl BlockCache {
     /// Caller must drop all references to cache before calling this.
     pub(super) fn flush(tier_number: usize) -> Result<(), FloppyDriveError> {
         go_flush_tier(tier_number)
+    }
+
+    /// Drops items from this cache tier that have not been updated, and thus don't need to be written to disk.
+    /// 
+    /// You should really only call this on tier 0, since items in the higher tiers are usually very read heavy, thus
+    /// are usually not updated. Cleaning up those higher tiers would almost certainly discard valuable blocks.
+    /// 
+    /// Caller must drop all references to cache before calling this.
+    /// 
+    /// Returns how many blocks were discarded, or None if the tier was already empty.
+    pub(super) fn cleanup_tier(tier_number: usize) -> Option<u64> {
+        go_cleanup_tier(tier_number)
     }
 }
 
@@ -278,10 +294,11 @@ impl CachedBlock {
     /// Turn a RawBlock into a CachedBlock
     /// 
     /// Expects the raw block to already have a disk set.
-    pub(super) fn from_raw(block: &RawBlock) -> Self {
+    pub(super) fn from_raw(block: &RawBlock, requires_flush: bool) -> Self {
         Self {
             block_origin: block.block_origin,
             data: block.data.to_vec(),
+            requires_flush
         }
     }
 }
@@ -417,9 +434,16 @@ fn go_add_or_update_item_cache(block: CachedBlock) -> Result<(), FloppyDriveErro
     
     // Make sure we have room first
     if cache.tier_0.is_full() {
-        // We don't have room, so we need to wipe the cache.
+        // We don't have room, so we need to flush out tier 0 of the cache.
+        // But first we can try dropping items that do not require flushing
         drop(cache);
-        BlockCache::flush(0)?;
+        if BlockCache::cleanup_tier(0).is_none() {
+            // Nothing was removed from the tier, so we have to flush normally, since tier
+            // zero is full of items we must write.
+            BlockCache::flush(0)?;
+        }
+
+
         let cache: &mut std::sync::MutexGuard<'_, BlockCache> = &mut CASHEW.try_lock().expect("Single threaded.");
         cache.tier_0.add_item(block);
         return Ok(());
@@ -530,13 +554,18 @@ fn go_add_tier_item(tier: &mut TieredCache, item: CachedBlock) {
     assert!(already_existed.is_none());
 }
 
-fn go_update_tier_item(tier: &mut TieredCache, index: usize, new_item: CachedBlock) {
-    // Replace the item
+fn go_update_tier_item(tier: &mut TieredCache, index: usize, mut new_item: CachedBlock) {
+    // Replace the item, IE the contents of the block have changed.
+
     // Updating is an access after all... so we will promote it.
 
     // Update the order
     let to_move = tier.order.remove(index).expect("Should exist.");
     tier.order.push_front(to_move);
+
+    // Set the flush boolean, since this block has been updated with new content, it is
+    // out of sync with the disk
+    new_item.requires_flush = true;
 
     // Now replace the item in the hashmap at the index.
     let replaced = tier.items_map.insert(to_move, new_item);
@@ -615,7 +644,21 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
     
     // Get the items from the hashmap
     let mut items: Vec<CachedBlock> = items_map_to_flush.into_values().collect();
-    // Sort
+
+    // Before sorting, we can toss any blocks that do not have flush set, since
+    // they were never updated and thus don't need to be written back to disk.
+    items.retain(|block| block.requires_flush);
+
+    // If we ended up with no items, that means the tier was completely filled with items
+    // that did not need to be flushed, and we can exit early.
+    if items.is_empty() {
+        // Cool
+        return Ok(());
+    }
+
+    // There are still items in here, we have work to do.
+
+    // Sort the blocks we will actually be writing.
     items.sort_unstable_by_key(|item| (item.block_origin.disk, item.block_origin.block));
     
     // Now to reduce head movement even further, we don't want to check the allocation table
@@ -679,6 +722,67 @@ fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
     debug!("Done flushing tier {tier_number} of the cache.");
     
     Ok(())
+}
+
+// Returns an option on if any blocks were freed, and how many.
+fn go_cleanup_tier(tier_number: usize) -> Option<u64> {
+    // Discard all items in this tier that don't need to be written back to disk.
+    debug!("Cleaning up tier {tier_number} of the cache...");
+
+    // Usually I would scope the cache, but we'll be doing these operations without touching the disk.
+
+    // Get the block cache
+    let mut cache = CASHEW.try_lock().expect("Single threaded.");
+    
+    // find the tier we need to flush
+    let tier_to_flush: &mut TieredCache = match tier_number {
+        0 => &mut cache.tier_0,
+        1 => &mut cache.tier_1,
+        2 => &mut cache.tier_2,
+        _ => panic!("Bro there are only 3 cache tiers"),
+    };
+    
+    // If the tier is empty, there's nothing to do.
+    if tier_to_flush.order.is_empty() {
+        return None;
+    }
+
+    // Now go through all the tier items and check if we can discard them.
+
+    let mut blocks_discarded: u64 = 0;
+    
+    let blocks_to_cleanup_map = &mut tier_to_flush.items_map;
+    let blocks_to_cleanup_order = &mut tier_to_flush.order;
+
+    // To be clever, we can use retain, and only retain the items that do need to be written, otherwise discarding
+    // the blocks we dont need as we come across them.
+    blocks_to_cleanup_order.retain(|pointer| {
+        // Get the block from the hashmap
+        let block = blocks_to_cleanup_map.get(pointer).expect("If there's a key, there's a block.");
+        if block.requires_flush {
+            // This needs to be flushed, so we return true to hold onto this block.
+            return true; // Weird that return works in here, never seen that before.
+        }
+        // Block does not need to be flushed! Discard it.
+        let _ = blocks_to_cleanup_map.remove(pointer);
+
+        // Increment the discard count
+        blocks_discarded += 1;
+
+        // Return false to discard this pointer from the order vec
+        false
+    });
+
+    // Unneeded blocks have now been discarded.
+    
+    // If we weren't able to free anything, we still need to return None here.
+    if blocks_discarded == 0 {
+        debug!("All blocks in tier require flushing to disk.");
+        return None;
+    }
+    
+    debug!("Dropped {blocks_discarded} un-needed blocks from the tier.");
+    Some(blocks_discarded)
 }
 
 fn go_check_tier_full(tier: &TieredCache) -> bool {

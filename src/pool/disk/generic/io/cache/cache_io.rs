@@ -146,8 +146,9 @@ fn go_read_cached_block(block_location: DiskPointer) -> Result<RawBlock, FloppyD
     // Already checked if it was allocated.
     let read_block = disk.unchecked_read_block(block_location.block)?;
     
-    // Add it to the cache
-    BlockCache::add_or_update_item(CachedBlock::from_raw(&read_block))?;
+    // Add it to the cache.
+    // This is a block read from disk, so we do not set the flush flag.
+    BlockCache::add_or_update_item(CachedBlock::from_raw(&read_block, false))?;
 
     // Return the block.
     Ok(read_block)
@@ -161,7 +162,8 @@ fn go_write_cached_block(raw_block: &RawBlock) -> Result<(), FloppyDriveError> {
     BlockCache::cached_block_allocation(raw_block)?;
 
     // Update the cache with the updated block.
-    BlockCache::add_or_update_item(CachedBlock::from_raw(raw_block))?;
+    // This is a write, so this will need to be flushed.
+    BlockCache::add_or_update_item(CachedBlock::from_raw(raw_block, true))?;
 
     // We don't need to write, since the cache will do it for us.
     Ok(())
@@ -181,7 +183,8 @@ fn go_update_cached_block(raw_block: &RawBlock) -> Result<(), FloppyDriveError> 
     }
 
     // Update the cache with the updated block.
-    BlockCache::add_or_update_item(CachedBlock::from_raw(raw_block))?;
+    // This is an update, so it must be flushed, since the block has changed.
+    BlockCache::add_or_update_item(CachedBlock::from_raw(raw_block, true))?;
 
     // We don't need to write, since the cache will do it for us on flush.
     Ok(())
