@@ -10,7 +10,6 @@ use log::trace;
 
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 
-use super::super::block::block_structs::BlockError;
 use super::super::block::block_structs::RawBlock;
 use std::ops::Rem;
 use std::{fs::File, io::Write, os::unix::fs::FileExt};

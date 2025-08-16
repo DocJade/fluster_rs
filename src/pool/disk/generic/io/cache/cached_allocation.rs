@@ -5,9 +5,6 @@ use std::process::exit;
 use log::error;
 
 use crate::pool::disk::{
-    drive_struct::{
-        FloppyDriveError,
-    },
     generic::{
         block::{
             allocate::block_allocation::BlockAllocation,

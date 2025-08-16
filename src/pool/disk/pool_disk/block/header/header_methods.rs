@@ -13,7 +13,6 @@ use crate::pool::disk::drive_methods::check_for_magic;
 use crate::pool::disk::drive_methods::display_info_and_ask_wipe;
 use crate::pool::disk::drive_struct::DiskType;
 use crate::pool::disk::drive_struct::FloppyDrive;
-use crate::pool::disk::drive_struct::FloppyDriveError;
 use crate::pool::disk::generic::block::block_structs::RawBlock;
 use crate::pool::disk::generic::block::crc::add_crc_to_block;
 use crate::pool::disk::generic::disk_trait::GenericDiskMethods;
@@ -21,9 +20,7 @@ use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 use crate::pool::disk::generic::io::wipe::destroy_disk;
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolHeaderFlags;
 use crate::pool::disk::pool_disk::pool_disk_struct::PoolDisk;
-
 use super::header_struct::PoolDiskHeader;
-use super::header_struct::PoolHeaderError;
 
 // Implementations
 

@@ -6,12 +6,16 @@
 
 // Imports
 
-use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+use log::{
+    error,
+    warn
+};
 
-use super::super::block::block_structs::BlockError;
+use crate::{error_types::{conversions::CannotConvertError, critical::CriticalError, drive::DriveIOError}, pool::disk::generic::generic_structs::pointer_struct::DiskPointer};
+
 use super::super::block::block_structs::RawBlock;
 use super::super::block::crc::check_crc;
-use std::{fs::File, os::unix::fs::FileExt};
+use std::{fs::File, io::ErrorKind, os::unix::fs::FileExt};
 
 // Implementations
 
@@ -28,11 +32,11 @@ pub(crate) fn read_block_direct(
     originating_disk: u16,
     block_index: u16,
     ignore_crc: bool,
-) -> Result<RawBlock, BlockError> {
+) -> Result<RawBlock, DriveIOError> {
     // Bounds checking
     if block_index >= 2880 {
         // This block is impossible to access.
-        return Err(BlockError::InvalidOffset);
+        return Err(DriveIOError::Impossible);
     }
 
     // allocate space for the block
@@ -41,26 +45,62 @@ pub(crate) fn read_block_direct(
     // Calculate the offset into the disk
     let read_offset: u64 = block_index as u64 * 512;
 
-    // Seek to the requested block and read 512 bytes from it
-    disk_file.read_exact_at(&mut read_buffer, read_offset)?;
+    // Enter a loop to retry reading the block 10 times at most.
+    // If we try 10 times without success, we are cooked.
+    let mut most_recent_error: Option<(ErrorKind, Option<i32>)> = None;
 
+    for _ in 0..10 {
 
-    // Check the CRC, unless the user disabled it on this call.
-    // CRC checks should only be disabled when absolutely needed, such as
-    // when reading in unknown blocks from unknown disks to check headers.
-    if !ignore_crc && !check_crc(read_buffer) {
-        // CRC check failed,
-        return Err(BlockError::InvalidCRC);
+        // Seek to the requested block and read 512 bytes from it
+        if let Err(error) = disk_file.read_exact_at(&mut read_buffer, read_offset) {
+            // That read failed, we need to do something about it.
+
+            // Update the most recent error
+            most_recent_error = Some((error.kind(), error.raw_os_error()));
+            
+            // Try converting it into a DriveIOError
+            let converted: Result<DriveIOError, CannotConvertError> = error.try_into();
+            if let Ok(bail) = converted {
+                // We don't need to / can't handle this error, up we go.
+                return Err(bail)
+            }
+
+            // We must handle error. Down here that just means trying the read again.
+            continue;
+        };
+
+        // Read worked.
+
+        // Check the CRC, unless the user disabled it on this call.
+        // CRC checks should only be disabled when absolutely needed, such as
+        // when reading in unknown blocks from unknown disks to check headers.
+        if !ignore_crc && !check_crc(read_buffer) {
+            // CRC check failed, we have to try again.
+            warn!("CRC check failed, retrying...");
+            continue;
+        }
+
+        // Read successful.
+        // send it.
+        let block_origin: DiskPointer = DiskPointer {
+            disk: originating_disk,
+            block: block_index,
+        };
+
+        return Ok(RawBlock {
+            block_origin,
+            data: read_buffer,
+        });
     }
 
-    // send it.
-    let block_origin: DiskPointer = DiskPointer {
-        disk: originating_disk,
-        block: block_index,
-    };
+    // We've made it out of the loop without a good read. We are doomed.
+    error!("Read failure, requires assistance.");
     
-    Ok(RawBlock {
-        block_origin,
-        data: read_buffer,
-    })
+    // Since we made it out of the loop, the error variable MUST be set.
+    let error = most_recent_error.expect("Shouldn't be able to exit the loop without an error.");
+
+    return Err(DriveIOError::Critical(
+        CriticalError::FloppyReadFailure(error.0, error.1)
+    ))
+    
 }

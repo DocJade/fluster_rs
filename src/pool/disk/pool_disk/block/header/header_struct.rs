@@ -33,11 +33,3 @@ bitflags! {
         const RequiredHeaderBit = 0b10000000;
     }
 }
-
-#[derive(Debug, Error, PartialEq, Eq)]
-pub enum PoolHeaderError {
-    #[error("Magic was missing, or something else is wrong with the header.")]
-    Invalid,
-    #[error("Block 0 on this disk is completely blank")]
-    Blank,
-}

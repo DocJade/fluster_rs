@@ -6,12 +6,13 @@ use log::{debug, info};
 
 use crate::pool::{
     disk::{
-        drive_struct::FloppyDriveError,
         generic::{
-            generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO
+            generic_structs::pointer_struct::DiskPointer,
+            io::cache::cache_io::CachedBlockIO
         },
         standard_disk::block::{
-            directory::directory_struct::DirectoryBlock, inode::inode_struct::InodeBlock,
+            directory::directory_struct::DirectoryBlock,
+            inode::inode_struct::InodeBlock,
             io::directory::types::NamedItem,
         },
     },

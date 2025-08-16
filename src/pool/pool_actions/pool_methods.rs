@@ -7,7 +7,6 @@ use super::pool_struct::Pool;
 use super::pool_struct::PoolStatistics;
 use crate::pool::disk::drive_struct::DiskBootstrap;
 use crate::pool::disk::drive_struct::FloppyDrive;
-use crate::pool::disk::drive_struct::FloppyDriveError;
 use crate::pool::disk::generic::block::block_structs::RawBlock;
 use crate::pool::disk::generic::disk_trait::GenericDiskMethods;
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;

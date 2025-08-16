@@ -4,13 +4,16 @@
 use log::trace;
 
 use crate::pool::{
-    disk::{drive_struct::FloppyDriveError, generic::{
-        block::{
-            allocate::block_allocation::BlockAllocation,
-            block_structs::{BlockError, RawBlock},
-        },
-        disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer,
-    }},
+    disk::{
+        generic::{
+            block::{
+                allocate::block_allocation::BlockAllocation,
+                block_structs::RawBlock,
+            },
+            disk_trait::GenericDiskMethods,
+            generic_structs::pointer_struct::DiskPointer,
+        }
+    },
     pool_actions::pool_struct::GLOBAL_POOL,
 };
 

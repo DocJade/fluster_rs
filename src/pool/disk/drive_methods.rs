@@ -12,7 +12,6 @@ use log::warn;
 use crate::helpers::hex_view::hex_view;
 use crate::pool::disk::blank_disk::blank_disk_struct::BlankDisk;
 use crate::pool::disk::drive_struct::DiskBootstrap;
-use crate::pool::disk::generic::block::block_structs::BlockError;
 use crate::pool::disk::generic::disk_trait::GenericDiskMethods;
 // The cache is NOT allowed in here at all, since any writes happen through the cache regardless.
 // Thus if we are loading in a disk, this is a real swap.
@@ -31,7 +30,6 @@ use crate::pool::pool_actions::pool_struct::GLOBAL_POOL;
 
 use super::drive_struct::DiskType;
 use super::drive_struct::FloppyDrive;
-use super::drive_struct::FloppyDriveError;
 
 use std::fs::File;
 use std::fs::OpenOptions;

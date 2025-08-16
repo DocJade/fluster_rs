@@ -1,9 +1,16 @@
 use std::fs::File;
 
 use crate::pool::disk::{
-    drive_struct::FloppyDriveError, generic::{
-        block::{allocate::block_allocation::BlockAllocation, block_structs::{BlockError, RawBlock}}, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::write::write_block_direct
-    }, unknown_disk::unknown_disk_struct::UnknownDisk
+    generic::{
+        block::{
+            allocate::block_allocation::BlockAllocation,
+            block_structs::RawBlock
+        },
+        disk_trait::GenericDiskMethods,
+        generic_structs::pointer_struct::DiskPointer,
+        io::write::write_block_direct
+    },
+    unknown_disk::unknown_disk_struct::UnknownDisk
 };
 
 impl GenericDiskMethods for UnknownDisk {

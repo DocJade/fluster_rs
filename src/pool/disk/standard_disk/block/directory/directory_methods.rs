@@ -7,14 +7,27 @@
 use log::debug;
 
 use crate::pool::disk::{
-    drive_struct::FloppyDriveError, generic::{
-        block::{block_structs::RawBlock, crc::add_crc_to_block},
-        generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO,
-    }, standard_disk::block::{
-        directory::directory_struct::{
-            DirectoryBlock, DirectoryBlockError, DirectoryBlockFlags, DirectoryItemFlags, DirectoryItem,
+    generic::{
+        block::{
+            block_structs::RawBlock,
+            crc::add_crc_to_block
         },
-        inode::inode_struct::{Inode, InodeDirectory, InodeLocation, InodeTimestamp},
+        generic_structs::pointer_struct::DiskPointer,
+        io::cache::cache_io::CachedBlockIO,
+    },
+    standard_disk::block::{
+        directory::directory_struct::{
+            DirectoryBlock,
+            DirectoryBlockFlags,
+            DirectoryItemFlags,
+            DirectoryItem,
+        },
+        inode::inode_struct::{
+            Inode,
+            InodeDirectory,
+            InodeLocation,
+            InodeTimestamp
+        },
     }
 };
 

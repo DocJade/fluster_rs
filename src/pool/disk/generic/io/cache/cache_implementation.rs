@@ -45,7 +45,6 @@ use crate::pool::disk::{
     drive_struct::{
         DiskType,
         FloppyDrive,
-        FloppyDriveError
     },
     generic::{
         block::{allocate::block_allocation::BlockAllocation,

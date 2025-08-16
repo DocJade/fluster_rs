@@ -4,7 +4,7 @@ use std::{collections::HashMap, sync::{Arc, Mutex}};
 
 use lazy_static::lazy_static;
 use libc::c_int;
-use log::{debug, error, warn};
+use log::{debug, error};
 
 //
 // Global info about open files
@@ -104,16 +104,18 @@ lazy_static! {
 
 use crate::{
     filesystem::{
-        error::error_types::*,
-        file_handle::file_handle_struct::FileHandle, item_flag::flag_struct::ItemFlag
+        error::filesystem_error_types::*,
+        file_handle::file_handle_struct::FileHandle
     },
-    pool::disk::{drive_struct::FloppyDriveError, standard_disk::block::{
-        directory::directory_struct::{
-            DirectoryBlock,
-            DirectoryItem
-        },
-        io::directory::types::NamedItem
-    }}
+    pool::disk::{
+        standard_disk::block::{
+            directory::directory_struct::{
+                DirectoryBlock,
+                DirectoryItem
+            },
+            io::directory::types::NamedItem
+        }
+    }
 };
 
 impl FileHandle {

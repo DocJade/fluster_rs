@@ -8,9 +8,18 @@ pub(crate) const DATA_BLOCK_OVERHEAD: u64 = 5; // 1 flag, 4 checksum.
 
 
 use crate::pool::disk::{
-    generic::{block::{block_structs::RawBlock, crc::add_crc_to_block}, generic_structs::pointer_struct::DiskPointer},
+    generic::{
+        block::{
+            block_structs::RawBlock,
+            crc::add_crc_to_block
+        },
+        generic_structs::pointer_struct::DiskPointer
+    },
     standard_disk::block::file_extents::file_extents_struct::{
-        ExtentFlags, FileExtent, FileExtentBlock, FileExtentBlockError, FileExtentBlockFlags,
+        ExtentFlags,
+        FileExtent,
+        FileExtentBlock,
+        FileExtentBlockFlags,
     },
 };
 

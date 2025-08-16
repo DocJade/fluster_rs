@@ -1,7 +1,6 @@
 // External interaction with the block cache
 
 use crate::pool::disk::{
-    drive_struct::FloppyDriveError,
      generic::{block::{allocate::block_allocation::BlockAllocation, block_structs::RawBlock},
         disk_trait::GenericDiskMethods,
         generic_structs::pointer_struct::DiskPointer,

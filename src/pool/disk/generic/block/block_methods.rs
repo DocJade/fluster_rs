@@ -3,7 +3,6 @@
 use log::warn;
 
 // Imports
-use super::block_structs::BlockError;
 
 // Implementations
 

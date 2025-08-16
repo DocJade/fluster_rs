@@ -6,8 +6,11 @@ use std::fs::File;
 use enum_dispatch::enum_dispatch;
 
 use crate::pool::disk::{
-    drive_struct::{DiskType, FloppyDriveError},
-    generic::{block::block_structs::{BlockError, RawBlock}, generic_structs::pointer_struct::DiskPointer},
+    drive_struct::DiskType,
+    generic::{
+        block::block_structs::RawBlock,
+        generic_structs::pointer_struct::DiskPointer
+    },
 };
 
 // Generic disks must also have disk numbers, and be able to retrieve their inner File.

@@ -11,7 +11,7 @@ use enum_dispatch::enum_dispatch;
 use thiserror::Error;
 
 use crate::pool::disk::{
-    generic::block::block_structs::{BlockError, RawBlock},
+    generic::block::block_structs::RawBlock,
     pool_disk::pool_disk_struct::PoolDisk,
     standard_disk::standard_disk_struct::StandardDisk,
 };
@@ -55,35 +55,6 @@ impl PartialEq<JustDiskType> for DiskType {
             DiskType::Blank(_) => matches!(other, JustDiskType::Blank),
         }
     }
-}
-
-#[derive(Debug, Error, PartialEq)]
-/// Types of errors that can happen when converting headers
-pub enum HeaderConversionError {
-    #[error("This block is not a header.")]
-    NotAHeaderBlock,
-    #[error("This is a different type of header than the one requested.")]
-    WrongHeader,
-}
-
-#[derive(Debug, Error, PartialEq)]
-/// Generic disk error
-pub enum FloppyDriveError {
-    #[error("Disk is uninitialized")]
-    Uninitialized,
-    #[error("Disk is not blank")]
-    NotBlank,
-    #[error("Wipe failed, disk is in an unknown state.")]
-    WipeFailure,
-    // we'll put this back in later if we need it.
-    // #[error("There isn't a disk inserted")]
-    // NoDiskInserted,
-    #[error("This is not the disk we want")]
-    WrongDisk,
-    #[error(transparent)]
-    BadHeader(#[from] HeaderConversionError),
-    #[error(transparent)]
-    BlockError(#[from] BlockError),
 }
 
 /// All disk types need to be able to create themselves from a raw block.

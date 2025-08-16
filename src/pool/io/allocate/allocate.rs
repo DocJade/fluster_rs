@@ -4,18 +4,12 @@ use log::debug;
 
 use crate::pool::{
     disk::{
-        drive_struct::{
-            DiskType,
-            FloppyDrive,
-            FloppyDriveError
-        },
         generic::{
             block::{
                 allocate::block_allocation::BlockAllocation,
                 block_structs::RawBlock,
                 crc::add_crc_to_block
             },
-            disk_trait::GenericDiskMethods,
             generic_structs::pointer_struct::DiskPointer,
             io::cache::{
                 cache_io::CachedBlockIO,
@@ -24,7 +18,10 @@ use crate::pool::{
         },
         standard_disk::standard_disk_struct::StandardDisk,
     },
-    pool_actions::pool_struct::{Pool, GLOBAL_POOL},
+    pool_actions::pool_struct::{
+        Pool,
+        GLOBAL_POOL
+    },
 };
 
 impl Pool {

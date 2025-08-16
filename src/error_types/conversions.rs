@@ -1,54 +1,161 @@
-use std::process::exit;
+// Conversions between all of the lower types.
 
-use libc::c_int;
+//
+// Imports
+//
+
+use std::io::ErrorKind;
+use std::process::exit;
 use log::error;
 
-use crate::pool::disk::drive_struct::FloppyDriveError;
+use thiserror::Error;
+use crate::error_types::critical::CriticalError;
+use crate::error_types::drive::DriveError;
+use crate::error_types::drive::DriveIOError;
+
+
+
+// Not error type can just be converted upwards willy-nilly, that led to the old
+// and horrible FloppyDiskError type which everything ended up returning. Not good.
+
+// We do not allow string errors. This is RUST damn it, not python!
+
+// No direct From<> implementations are allowed, everything must be try.
+
+
+// We also have a custom conversion error type, so lower level callers can get more info
+// about what they need to do to be able to perform the cast to a higher error type.
+
+#[derive(Debug, Error, PartialEq)]
+/// Errors related to IO on the inserted floppy disk.
+pub enum CannotConvertError {
+    #[error("You must handle this at a lower level. This error cannot be propagated upwards.")]
+    MustHandle
+}
 
 //
-//
-// ======
-// C Error values
-// ======
-//
+// Drive errors
 //
 
-// Errors gleamed from
-// https://man7.org/linux/man-pages/man3/errno.3.html
-// https://man7.org/linux/man-pages/man2/openat.2.html
 
-/// Bro thinks he's Shakespeare.
-pub(in super::super) const FILE_NAME_TOO_LONG: c_int = libc::ENAMETOOLONG;
-/// Tried to modify a non-empty directory in a way that required it to be empty.
-pub(in super::super) const DIRECTORY_NOT_EMPTY: c_int = libc::ENOTEMPTY;
-/// This seat's taken.
-pub(in super::super) const ITEM_ALREADY_EXISTS: c_int = libc::EEXIST;
-/// Tried to do directory stuff to a file.
-pub(in super::super) const NOT_A_DIRECTORY: c_int = libc::ENOTDIR;
-/// Ad hominem
-pub(in super::super) const INVALID_ARGUMENT: c_int = libc::EINVAL;
-/// Tried to do things to a directory that it does not support.
-pub(in super::super) const IS_A_DIRECTORY: c_int = libc::EISDIR;
-/// Function not implemented.
-pub(in super::super) const UNIMPLEMENTED: c_int = libc::ENOSYS;
-/// This operation is not supported in this filesystem.
-pub(in super::super) const UNSUPPORTED: c_int = libc::ENOTSUP; 
-/// Access denied / files does not exist.
-pub(in super::super) const NO_SUCH_ITEM: c_int = libc::ENOENT;
-/// Tried to seek to an invalid file position.
-pub(in super::super) const INVALID_SEEK: c_int = libc::ESPIPE;
-/// Tried to use a filehandle that is stale. New one is required.
-pub(in super::super) const STALE_HANDLE: c_int = libc::ESTALE;
-// Generic IO error. The dreaded OS(5) Input/Output error.
-pub(in super::super) const GENERIC_FAILURE: c_int = libc::EIO;
-/// You are insane.
-pub(in super::super) const FILE_TOO_BIG: c_int = libc::EFBIG;
-/// Operation was interrupted for some reason, but can be retried.
-pub(in super::super) const TRY_AGAIN: c_int = libc::ERESTART;
-/// Device / filesystem is busy, try again later.
-/// 
-/// Should never happen in fluster due to being single threaded.
-pub(in super::super) const BUSY: c_int = libc::EBUSY;
+impl TryFrom<DriveIOError> for DriveError {
+    type Error = CannotConvertError;
+
+    fn try_from(value: DriveIOError) -> Result<Self, Self::Error> {
+        match value {
+            DriveIOError::DriveEmpty => {
+                // This can be cast upwards.
+                // Lower level callers can't do anything
+                // about an empty drive.
+                Ok(DriveError::DriveEmpty)
+            },
+            DriveIOError::Impossible => {
+                // Throwing impossible operations upwards is not allowed, since we would
+                // end up with another chain of e? -> e? -> e?.
+                // Additionally, impossible operations should be guarded in the first place,
+                // Impossible operations aren't a "whoopsie", they're a logic failure.
+                Err(CannotConvertError::MustHandle)
+            },
+        }
+    }
+}
+
+//
+// std::io::Error to DriveIOError
+//
+
+impl TryFrom<std::io::Error> for DriveIOError {
+    type Error = CannotConvertError;
+
+    fn try_from(value: std::io::Error) -> Result<Self, Self::Error> {
+        match value.kind() {
+            ErrorKind::NotFound => {
+                // The floppy drive path is not there.
+                // We cannot recover from that.
+
+                Ok(
+                    DriveIOError::Critical(
+                        CriticalError::FloppyReadFailure(ErrorKind::NotFound, value.raw_os_error())
+                    )
+                )
+            },
+            ErrorKind::PermissionDenied => {
+                // Dont have permission to perform IO on the drive.
+                // Nothing we can do.
+                Ok(
+                    DriveIOError::Critical(
+                        CriticalError::DriveInaccessible(ErrorKind::PermissionDenied, value.raw_os_error())
+                    )
+                )
+            },
+            ErrorKind::ConnectionRefused |
+            ErrorKind::ConnectionReset |
+            ErrorKind::HostUnreachable |
+            ErrorKind::NetworkUnreachable |
+            ErrorKind::ConnectionAborted |
+            ErrorKind::NotConnected |
+            ErrorKind::AddrInUse |
+            ErrorKind::AddrNotAvailable  |
+            ErrorKind::NetworkDown => {
+                // Okay you should not be using fluster over the network dawg.
+                // 100% your fault
+                error!("Dawg, why is the floppy disk over the network? Not happening.");
+                exit(-1)
+            },
+            ErrorKind::BrokenPipe => {
+                // What
+                error!("Broken pipe with fluster, why are you using pipes in the first place???");
+                // I doubt you could even make that work.
+                unreachable!()
+            },
+            ErrorKind::AlreadyExists => {
+                // Fluster does not create files, it only opens them.
+                unreachable!();
+            },
+            ErrorKind::WouldBlock => {
+                // Fluster does not ask for blocking IO.
+                unreachable!();
+            },
+            ErrorKind::NotADirectory => {
+                // Invalid path for the floppy drive.
+                
+            },
+            ErrorKind::IsADirectory => todo!(),
+            ErrorKind::DirectoryNotEmpty => todo!(),
+            ErrorKind::ReadOnlyFilesystem => todo!(),
+            ErrorKind::StaleNetworkFileHandle => todo!(),
+            ErrorKind::InvalidInput => todo!(),
+            ErrorKind::InvalidData => todo!(),
+            ErrorKind::TimedOut => todo!(),
+            ErrorKind::WriteZero => todo!(),
+            ErrorKind::StorageFull => todo!(),
+            ErrorKind::NotSeekable => todo!(),
+            ErrorKind::QuotaExceeded => todo!(),
+            ErrorKind::FileTooLarge => todo!(),
+            ErrorKind::ResourceBusy => todo!(),
+            ErrorKind::ExecutableFileBusy => todo!(),
+            ErrorKind::Deadlock => todo!(),
+            ErrorKind::CrossesDevices => todo!(),
+            ErrorKind::TooManyLinks => todo!(),
+            ErrorKind::InvalidFilename => todo!(),
+            ErrorKind::ArgumentListTooLong => todo!(),
+            ErrorKind::Interrupted => todo!(),
+            ErrorKind::Unsupported => todo!(),
+            ErrorKind::UnexpectedEof => todo!(),
+            ErrorKind::OutOfMemory => {
+                error!("Please visit https://downloadmoreram.com/ then re-run Fluster.");
+                exit(-1);
+            },
+            ErrorKind::Other => todo!(),
+            _ => todo!(),
+        }
+    }
+}
+
+
+//
+// Filesystem errors
+//
 
 // Mapping between FloppyDriveErrors and these other error types
 impl From<FloppyDriveError> for c_int {

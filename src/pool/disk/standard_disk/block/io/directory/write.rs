@@ -4,7 +4,6 @@ use log::{debug, error};
 
 use crate::pool::{
     disk::{
-        drive_struct::FloppyDriveError,
         generic::{
             block::block_structs::RawBlock,
             generic_structs::pointer_struct::DiskPointer,

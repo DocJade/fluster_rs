@@ -32,7 +32,7 @@ use crate::{
 };
 
 use super::file_handle::file_handle_struct::FileHandle;
-use super::error::error_types::*;
+use crate::error_types::filesystem::*;
 
 use fuse_mt::CreatedEntry;
 

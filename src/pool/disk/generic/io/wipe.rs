@@ -3,10 +3,7 @@
 use std::{fs::File, ops::Rem};
 
 use crate::pool::disk::generic::{
-    block::block_structs::{
-        BlockError,
-        RawBlock
-    },
+    block::block_structs::RawBlock,
     generic_structs::pointer_struct::DiskPointer
 };
 

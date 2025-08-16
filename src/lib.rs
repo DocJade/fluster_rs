@@ -12,4 +12,5 @@ pub mod filesystem;
 
 // Within the crate, we can use:
 mod helpers;
+mod error_types;
 mod pool;

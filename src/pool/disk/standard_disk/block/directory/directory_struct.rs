@@ -50,12 +50,3 @@ bitflags! {
         // Currently unused.
     }
 }
-
-// Error types
-#[derive(Debug, Error, PartialEq, Eq)]
-pub(crate) enum DirectoryBlockError {
-    #[error("There aren't enough free bytes in the block.")]
-    NotEnoughSpace,
-    #[error("Item requested for removal is not present.")]
-    NoSuchItem,
-}

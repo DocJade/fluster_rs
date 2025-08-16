@@ -10,7 +10,6 @@ use log::trace;
 
 use crate::pool::{
     disk::{
-        drive_struct::FloppyDriveError,
         generic::{
             block::block_structs::RawBlock,
             generic_structs::pointer_struct::DiskPointer,
@@ -20,7 +19,6 @@ use crate::pool::{
             block::inode::inode_struct::{
                 Inode,
                 InodeBlock,
-                InodeBlockError,
                 InodeLocation
             }
         },

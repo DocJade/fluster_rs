@@ -5,28 +5,49 @@ use log::debug;
 
 use crate::pool::{
     disk::{
-        drive_struct::{DiskBootstrap, DiskType, FloppyDrive, FloppyDriveError},
+        drive_struct::{
+            DiskBootstrap,
+            DiskType,
+            FloppyDrive
+        },
         generic::{
             block::{
                 allocate::block_allocation::BlockAllocation,
-                block_structs::{BlockError, RawBlock},
+                block_structs::RawBlock,
             },
             disk_trait::GenericDiskMethods,
             generic_structs::pointer_struct::DiskPointer,
-            io::{cache::cache_io::CachedBlockIO, read::read_block_direct, write::{write_block_direct, write_large_direct}},
+            io::{
+                cache::cache_io::CachedBlockIO,
+                read::read_block_direct,
+                write::{
+                    write_block_direct,
+                    write_large_direct
+                }
+            },
         },
         standard_disk::{
             block::{
                 directory::directory_struct::DirectoryBlock,
-                header::header_struct::{StandardDiskHeader, StandardHeaderFlags},
+                header::header_struct::{
+                    StandardDiskHeader,
+                    StandardHeaderFlags
+                },
                 inode::inode_struct::{
-                    Inode, InodeBlock, InodeDirectory, InodeFlags, InodeTimestamp,
+                    Inode,
+                    InodeBlock,
+                    InodeDirectory,
+                    InodeFlags,
+                    InodeTimestamp,
                 },
             },
             standard_disk_struct::StandardDisk,
         },
     },
-    pool_actions::pool_struct::{Pool, GLOBAL_POOL},
+    pool_actions::pool_struct::{
+        Pool,
+        GLOBAL_POOL
+    },
 };
 
 // Implementations

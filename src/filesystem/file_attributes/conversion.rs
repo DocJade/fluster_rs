@@ -6,7 +6,6 @@ use std::time::SystemTime;
 use crate::{
     filesystem::file_handle::file_handle_struct::FileHandle,
     pool::disk::{
-        drive_struct::FloppyDriveError,
         standard_disk::block::{
             directory::directory_struct::{
                 DirectoryItemFlags,

@@ -7,7 +7,7 @@
 // allocate past the end of the table
 
 use enum_dispatch::enum_dispatch;
-use crate::pool::disk::drive_struct::{DiskType, FloppyDriveError};
+use crate::pool::disk::drive_struct::DiskType;
 use crate::pool::disk::pool_disk::pool_disk_struct::PoolDisk;
 use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
 use crate::pool::disk::unknown_disk::unknown_disk_struct::UnknownDisk;

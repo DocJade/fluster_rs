@@ -10,10 +10,9 @@ use log::error;
 
 use crate::pool::{
     disk::{
-        drive_struct::FloppyDriveError,
         generic::{
             block::{
-                block_structs::{BlockError, RawBlock},
+                block_structs::RawBlock,
                 crc::add_crc_to_block
             },
             generic_structs::pointer_struct::DiskPointer,
@@ -33,7 +32,11 @@ use crate::pool::{
                     }
                 },
                 inode::inode_struct::{
-                    Inode, InodeBlock, InodeFile, InodeFlags, InodeTimestamp
+                    Inode,
+                    InodeBlock,
+                    InodeFile,
+                    InodeFlags,
+                    InodeTimestamp
                 },
                 io::directory::types::NamedItem
             }

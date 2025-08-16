@@ -5,8 +5,6 @@ use test_log::test; // We want to see logs while testing.
 
 use rand::{Rng, rngs::ThreadRng};
 
-use crate::pool::disk::drive_struct::FloppyDriveError;
-
 use super::block_allocation::BlockAllocation;
 
 #[test]
