@@ -2,16 +2,13 @@
 
 use std::{fs::File, ops::Rem};
 
-use crate::pool::disk::generic::{
-    block::block_structs::{
-        BlockError,
-        RawBlock
-    },
+use crate::{error_types::drive::DriveError, pool::disk::generic::{
+    block::block_structs::RawBlock,
     generic_structs::pointer_struct::DiskPointer
-};
+}};
 
 /// Wipes ALL data on ALL blocks on the disk.
-pub(crate) fn destroy_disk(disk: &mut File) -> Result<(), BlockError> {
+pub(crate) fn destroy_disk(disk: &mut File) -> Result<(), DriveError> {
     // Bye bye!
     for block_number in 0..2880_u16 {
         wipe_block(disk, block_number)?;
@@ -20,7 +17,7 @@ pub(crate) fn destroy_disk(disk: &mut File) -> Result<(), BlockError> {
 }
 
 /// Wipes a single block from a disk
-pub(crate) fn wipe_block(disk: &mut File, block_number: u16) -> Result<(), BlockError> {
+pub(crate) fn wipe_block(disk: &mut File, block_number: u16) -> Result<(), DriveError> {
     // New blank block.
     // We can use a fake disk number, since we are directly writing.
     let block_origin = DiskPointer {

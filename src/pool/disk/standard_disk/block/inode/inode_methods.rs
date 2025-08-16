@@ -10,11 +10,10 @@ use std::time::UNIX_EPOCH;
 
 use super::inode_struct::Inode;
 use super::inode_struct::InodeBlock;
-use super::inode_struct::InodeBlockError;
 use super::inode_struct::InodeBlockFlags;
 use super::inode_struct::InodeFlags;
-use super::inode_struct::InodeReadError;
-use crate::pool::disk::drive_struct::FloppyDriveError;
+use crate::error_types::block::BlockManipulationError;
+use crate::error_types::drive::DriveError;
 use crate::pool::disk::generic::block::crc::add_crc_to_block;
 use crate::pool::disk::generic::generic_structs::find_space::find_free_space;
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
@@ -67,7 +66,7 @@ impl InodeBlock {
     /// This does NOT automatically flush information to the disk.
     ///
     /// Returns the offset of the added inode
-    pub fn try_add_inode(&mut self, inode: Inode) -> Result<u16, InodeBlockError> {
+    pub fn try_add_inode(&mut self, inode: Inode) -> Result<u16, BlockManipulationError> {
         inode_block_try_add_inode(self, inode)
     }
     /// Removes inodes based off of the offset into the block.
@@ -77,13 +76,13 @@ impl InodeBlock {
     /// Does not flush to disk.
     ///
     /// Returns nothing.
-    pub fn try_remove_inode(&mut self, inode_offset: u16) -> Result<(), InodeBlockError> {
+    pub fn try_remove_inode(&mut self, inode_offset: u16) -> Result<(), BlockManipulationError> {
         inode_block_try_remove_inode(self, inode_offset)
     }
     /// Try and read an inode from the block.
     ///
     /// Returns Inode.
-    pub fn try_read_inode(&self, inode_offset: u16) -> Result<Inode, InodeReadError> {
+    pub fn try_read_inode(&self, inode_offset: u16) -> Result<Inode, BlockManipulationError> {
         inode_block_try_read_inode(self, inode_offset)
     }
     /// Set a new destination on a block.
@@ -107,7 +106,7 @@ impl InodeBlock {
     /// May swap disks, does not return to caller disk. Ends up wherever the inode block originally came from.
     /// 
     /// Returns nothing,
-    pub fn update_inode(&mut self, inode_offset: u16, updated_inode: Inode,) -> Result<(), FloppyDriveError> {
+    pub fn update_inode(&mut self, inode_offset: u16, updated_inode: Inode,) -> Result<(), DriveError> {
         // get the item at the current offset
         let old = self.try_read_inode(inode_offset).expect("Caller should provide valid offset");
 
@@ -135,14 +134,14 @@ impl InodeBlock {
 // Functions
 //
 
-fn inode_block_try_read_inode(block: &InodeBlock, offset: u16) -> Result<Inode, InodeReadError> {
+fn inode_block_try_read_inode(block: &InodeBlock, offset: u16) -> Result<Inode, BlockManipulationError> {
     // Attempt to read in the inode at this location
     // extract function at bottom of file
 
     // Bounds checking
     if offset as usize > block.inodes_data.len() {
         // We cannot read past the end of the end of the data!
-        return Err(InodeReadError::ImpossibleOffset);
+        return Err(BlockManipulationError::Impossible);
     }
     // get a slice with that inode and deserialize it
     Ok(Inode::from_bytes(&block.inodes_data[offset as usize..]))
@@ -151,7 +150,7 @@ fn inode_block_try_read_inode(block: &InodeBlock, offset: u16) -> Result<Inode, 
 fn inode_block_try_remove_inode(
     block: &mut InodeBlock,
     inode_offset: u16,
-) -> Result<(), InodeBlockError> {
+) -> Result<(), BlockManipulationError> {
     // Attempt to remove an inode from the block
 
     // Assumption:
@@ -163,14 +162,14 @@ fn inode_block_try_remove_inode(
         Some(ok) => ok,
         None => {
             // Unused bits are set. This cannot be the start of an inode.
-            return Err(InodeBlockError::InvalidOffset);
+            return Err(BlockManipulationError::Impossible);
         }
     };
 
     if !flags.contains(InodeFlags::MarkerBit) {
         // Missing flag.
         // This cannot be the beginning of an inode.
-        return Err(InodeBlockError::InvalidOffset);
+        return Err(BlockManipulationError::Impossible);
     };
 
     // Assumption: There is a valid inode at the provided offset
@@ -204,7 +203,7 @@ fn inode_block_try_remove_inode(
 fn inode_block_try_add_inode(
     inode_block: &mut InodeBlock,
     new_inode: Inode,
-) -> Result<u16, InodeBlockError> {
+) -> Result<u16, BlockManipulationError> {
     // Attempt to add an inode to the block.
 
     // Check if we have room for the new inode.
@@ -213,7 +212,7 @@ fn inode_block_try_add_inode(
 
     if new_inode_length > inode_block.bytes_free.into() {
         // We don't have room for this inode. The caller will have to use another block.
-        return Err(InodeBlockError::NotEnoughSpace);
+        return Err(BlockManipulationError::OutOfRoom);
     }
 
     // find a spot to put our new Inode
@@ -221,7 +220,8 @@ fn inode_block_try_add_inode(
         Some(ok) => ok,
         None => {
             // couldn't find enough space, block must be fragmented.
-            return Err(InodeBlockError::BlockIsFragmented);
+            // Defrag is hard. TODO: maybe some day
+            return Err(BlockManipulationError::OutOfRoom);
         }
     };
 

@@ -1,21 +1,31 @@
 use std::fs::File;
 
-use crate::pool::disk::{
-    drive_struct::FloppyDriveError, generic::{
-        block::{allocate::block_allocation::BlockAllocation, block_structs::{BlockError, RawBlock}}, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::write::write_block_direct
-    }, unknown_disk::unknown_disk_struct::UnknownDisk
+use crate::{
+    error_types::drive::DriveError,
+    pool::disk::{
+        generic::{
+            block::{
+                allocate::block_allocation::BlockAllocation,
+                block_structs::RawBlock
+            },
+            disk_trait::GenericDiskMethods,
+            generic_structs::pointer_struct::DiskPointer,
+            io::write::write_block_direct
+        },
+        unknown_disk::unknown_disk_struct::UnknownDisk
+    }
 };
 
 impl GenericDiskMethods for UnknownDisk {
     #[doc = " Read a block"]
     #[doc = " Cannot bypass CRC."]
-    fn unchecked_read_block(&self, _block_number: u16) -> Result<RawBlock, BlockError> {
+    fn unchecked_read_block(&self, _block_number: u16) -> Result<RawBlock, DriveError> {
         // We cant read from generic disks.
         unreachable!()
     }
 
     #[doc = " Write a block"]
-    fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), BlockError> {
+    fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), DriveError> {
         write_block_direct(&self.disk_file, block)
     }
 
@@ -42,13 +52,13 @@ impl GenericDiskMethods for UnknownDisk {
     }
 
     #[doc = " Sync all in-memory information to disk"]
-    fn flush(&mut self) -> Result<(), FloppyDriveError> {
+    fn flush(&mut self) -> Result<(), DriveError> {
         // There is no in-memory information for this disk.
         unreachable!()
     }
     
     #[doc = " Write chunked data, starting at a block."]
-    fn unchecked_write_large(&mut self, _data: Vec<u8>, _start_block: DiskPointer) -> Result<(), BlockError> {
+    fn unchecked_write_large(&mut self, _data: Vec<u8>, _start_block: DiskPointer) -> Result<(), DriveError> {
         panic!("Cannot do large writes to unknown disks!");
     }
 }
@@ -66,7 +76,7 @@ impl BlockAllocation for UnknownDisk {
     }
     
     #[doc = " Update and flush the allocation table to disk."]
-    fn set_allocation_table(&mut self, _new_table: &[u8]) -> Result<(), FloppyDriveError> {
+    fn set_allocation_table(&mut self, _new_table: &[u8]) -> Result<(), DriveError> {
         panic!("Why are we getting the allocation table for an unknown disk?");
     }
 }

@@ -4,19 +4,20 @@ use std::path::{Component, Path};
 
 use log::{debug, info};
 
-use crate::pool::{
+use crate::{error_types::drive::DriveError, pool::{
     disk::{
-        drive_struct::FloppyDriveError,
         generic::{
-            generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO
+            generic_structs::pointer_struct::DiskPointer,
+            io::cache::cache_io::CachedBlockIO
         },
         standard_disk::block::{
-            directory::directory_struct::DirectoryBlock, inode::inode_struct::InodeBlock,
+            directory::directory_struct::DirectoryBlock,
+            inode::inode_struct::InodeBlock,
             io::directory::types::NamedItem,
         },
     },
     pool_actions::pool_struct::Pool
-};
+}};
 
 impl DirectoryBlock {
     /// Attempts to open a directory in the current directory block.
@@ -31,7 +32,7 @@ impl DirectoryBlock {
     pub fn change_directory(
         self,
         directory_name: String,
-    ) -> Result<Option<DirectoryBlock>, FloppyDriveError> {
+    ) -> Result<Option<DirectoryBlock>, DriveError> {
         info!("Attempting to CD to `{directory_name}`");
         // Get all items in this directory
 
@@ -86,7 +87,7 @@ impl DirectoryBlock {
     /// Attempts to open any directory in the pool.
     /// 
     /// Will automatically grab the root directory.
-    pub(crate) fn try_find_directory(maybe_path: Option<&Path>) -> Result<Option<DirectoryBlock>, FloppyDriveError> {
+    pub(crate) fn try_find_directory(maybe_path: Option<&Path>) -> Result<Option<DirectoryBlock>, DriveError> {
         debug!("Attempting to find and open a directory...");
         // Pretty simple loop, bail if the directory does not exist at any level.
         let mut current_directory: DirectoryBlock;

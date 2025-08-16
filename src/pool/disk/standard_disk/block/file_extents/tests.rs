@@ -2,6 +2,7 @@
 
 // Imports
 
+use crate::error_types::block::BlockManipulationError;
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 
 use super::file_extents_struct::ExtentFlags;
@@ -59,7 +60,7 @@ fn full_extent_block() {
                 // keep going
             }
             Err(err) => match err {
-                super::file_extents_struct::FileExtentBlockError::NotEnoughSpace => break, // full
+                BlockManipulationError::OutOfRoom => break, // full
                 _ => panic!("This only happens on one block, how is this not the final block?")
             },
         }
@@ -101,7 +102,7 @@ impl FileExtentBlock {
             match test_block.add_extent(new_extent) {
                 Ok(_) => {}
                 Err(err) => match err {
-                    super::file_extents_struct::FileExtentBlockError::NotEnoughSpace => break, // full
+                    BlockManipulationError::OutOfRoom => break, // full
                     _ => panic!("This only happens on one block, how is this not the final block?")
                 },
             }

@@ -8,12 +8,11 @@ use std::{cmp::max, ops::{Div, Rem}};
 use log::{debug, warn};
 use log::error;
 
-use crate::pool::{
+use crate::{error_types::drive::DriveError, pool::{
     disk::{
-        drive_struct::FloppyDriveError,
         generic::{
             block::{
-                block_structs::{BlockError, RawBlock},
+                block_structs::RawBlock,
                 crc::add_crc_to_block
             },
             generic_structs::pointer_struct::DiskPointer,
@@ -21,9 +20,7 @@ use crate::pool::{
         },
         standard_disk::block::{
                 directory::directory_struct::{
-                    DirectoryBlock,
-                    DirectoryItemFlags,
-                    DirectoryItem
+                    DirectoryBlock, DirectoryItem, DirectoryItemFlags
                 },
                 file_extents::{
                     file_extents_methods::DATA_BLOCK_OVERHEAD,
@@ -33,13 +30,17 @@ use crate::pool::{
                     }
                 },
                 inode::inode_struct::{
-                    Inode, InodeBlock, InodeFile, InodeFlags, InodeTimestamp
+                    Inode,
+                    InodeBlock,
+                    InodeFile,
+                    InodeFlags,
+                    InodeTimestamp
                 },
                 io::directory::types::NamedItem
             }
     },
     pool_actions::pool_struct::Pool
-};
+}};
 
 impl InodeFile {
     /// Update the contents of a file starting at the provided seek point.
@@ -51,7 +52,7 @@ impl InodeFile {
     /// Optionally returns to a provided disk when done.
     /// 
     /// Returns number of bytes written, but also updates the incoming file's size automatically
-    fn write(&mut self, bytes: &[u8], seek_point: u64) -> Result<u32, FloppyDriveError> {
+    fn write(&mut self, bytes: &[u8], seek_point: u64) -> Result<u32, DriveError> {
        go_write(self, bytes, seek_point)
     }
 }
@@ -66,7 +67,7 @@ impl DirectoryBlock {
     /// Returns the created file's directory item. Will contain disk info.
     /// 
     /// Should include extension iirc?
-    pub fn new_file(&mut self, name: String) -> Result<DirectoryItem, FloppyDriveError> {
+    pub fn new_file(&mut self, name: String) -> Result<DirectoryItem, DriveError> {
         go_make_new_file(self, name)
     }
 
@@ -78,7 +79,7 @@ impl DirectoryBlock {
     /// Returns `None` if the file did not exist.
     ///
     /// Panics if fed a directory. Use remove_directory() !
-    pub fn delete_file(&mut self, file: NamedItem) -> Result<Option<()>, FloppyDriveError> {
+    pub fn delete_file(&mut self, file: NamedItem) -> Result<Option<()>, DriveError> {
         // We only handle files here
         assert!(file.is_file());
         
@@ -118,7 +119,7 @@ impl DirectoryItem {
     /// Returns how many bytes were written.
     /// 
     /// Optionally returns to a specified disk.
-    pub fn write_file(&self, bytes: &[u8], seek_point: u64) -> Result<u32, FloppyDriveError> {
+    pub fn write_file(&self, bytes: &[u8], seek_point: u64) -> Result<u32, DriveError> {
         // Is this a file?
         if self.flags.contains(DirectoryItemFlags::IsDirectory) {
             // Uh, no it isn't why did you give me a dir?
@@ -165,14 +166,14 @@ impl DirectoryItem {
     /// No action needs to be taken after this method.
     /// 
     /// Panics if fed a directory.
-    pub fn truncate(&self, new_size: u64) -> Result<(), FloppyDriveError> {
+    pub fn truncate(&self, new_size: u64) -> Result<(), DriveError> {
         // Make sure this is a file
         assert!(!self.flags.contains(DirectoryItemFlags::IsDirectory));
         truncate_or_delete_file(self, false, Some(new_size))
     }
 }
 
-fn go_write(inode_file: &mut InodeFile, bytes: &[u8], seek_point: u64) -> Result<u32, FloppyDriveError> {
+fn go_write(inode_file: &mut InodeFile, bytes: &[u8], seek_point: u64) -> Result<u32, DriveError> {
     // Decompose the file into its pointers
     // No return location, we don't care where this puts us.
     let mut blocks = inode_file.to_pointers()?;
@@ -263,7 +264,7 @@ fn go_write(inode_file: &mut InodeFile, bytes: &[u8], seek_point: u64) -> Result
 /// Offset is the first data byte, not the first byte of the block!
 /// 
 /// Returns number of bytes written.
-fn update_block(block: DiskPointer, bytes: &[u8], offset: u16) -> Result<usize, FloppyDriveError> {
+fn update_block(block: DiskPointer, bytes: &[u8], offset: u16) -> Result<usize, DriveError> {
 
     // How much data a block can hold
     let data_capacity = 512 - DATA_BLOCK_OVERHEAD as usize;
@@ -308,7 +309,7 @@ fn update_block(block: DiskPointer, bytes: &[u8], offset: u16) -> Result<usize, 
 /// Updates underlying ExtentBlock(s) for this file.
 /// 
 /// May swap disks, does not return to any start disk.
-fn expand_file(inode_file: InodeFile, blocks: u16) -> Result<Vec<DiskPointer>, FloppyDriveError> {
+fn expand_file(inode_file: InodeFile, blocks: u16) -> Result<Vec<DiskPointer>, DriveError> {
     // Go grabby some new blocks.
     // These will be already reserved for us.
     // We also need to write the CRC for later.
@@ -330,7 +331,7 @@ fn expand_file(inode_file: InodeFile, blocks: u16) -> Result<Vec<DiskPointer>, F
 /// Will swap disks to the location of the new block. Will not return to the disk the caller started on.
 /// 
 /// Sets the new destination in incoming block.
-fn expand_extent_block(block: &mut FileExtentBlock) -> Result<(), FloppyDriveError> {
+fn expand_extent_block(block: &mut FileExtentBlock) -> Result<(), DriveError> {
     // Get a new block from the pool.
     // No need for crc, we will immediately write over it.
     let the_finder = Pool::find_and_allocate_pool_blocks(1, false)?;
@@ -355,7 +356,7 @@ fn expand_extent_block(block: &mut FileExtentBlock) -> Result<(), FloppyDriveErr
 /// We assume the incoming pointers are already sorted by disk, block. (1, 1), (1, 2), (2, 1) etc.
 /// 
 /// Does not check if blocks are already allocated, caller _MUST_ provide marked blocks.
-fn expanding_add_extents(file: InodeFile, extents: &[FileExtent]) -> Result<(), FloppyDriveError> {
+fn expanding_add_extents(file: InodeFile, extents: &[FileExtent]) -> Result<(), DriveError> {
     // We will reverse the extents vec so we can pop them off the back
     // for easier adding, avoiding an index.
     let mut new_extents: Vec<FileExtent> = extents.to_vec();
@@ -472,7 +473,7 @@ fn pointers_into_extents(pointers: &[DiskPointer]) -> Vec<FileExtent> {
 }
 
 /// Create a new file.
-fn go_make_new_file(directory_block: &mut DirectoryBlock, name: String) -> Result<DirectoryItem, FloppyDriveError> {
+fn go_make_new_file(directory_block: &mut DirectoryBlock, name: String) -> Result<DirectoryItem, DriveError> {
     // Directory blocks already have a method to add a new item to them, so we just need
     // to create that item to add.
 
@@ -542,7 +543,7 @@ fn go_make_new_file(directory_block: &mut DirectoryBlock, name: String) -> Resul
 
 // One hell of a function.
 /// Will only truncate if delete is false.
-fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<u64>) -> Result<(), FloppyDriveError> {
+fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<u64>) -> Result<(), DriveError> {
     // Is this a file?
     if item.flags.contains(DirectoryItemFlags::IsDirectory) {
         // Uh, no it isn't why did you give me a dir?
@@ -963,8 +964,8 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
             panic!("Truncation fail.");
         }
 
-        // Return an error,
-        return Err(FloppyDriveError::BlockError(BlockError::WriteFailure));
+        // No error, since we need to just ignore the error if we dont wanna completely give up
+        return Ok(());
         
         // Too late to turn back, unless all 3 failed? but what are the odds?
     } else if all_failed {
@@ -980,9 +981,8 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
             panic!("Truncation fail: No update.");
         }    
 
-        // Wish i had a better error type here, lol.
         // If the disk is busy, we retry, so...
-        return Err(FloppyDriveError::BlockError(BlockError::DeviceBusy));
+        return Err(DriveError::Retry);
     } else {
         // Everything worked!
         debug!("Content update finished successfully. Phew.")
@@ -1020,7 +1020,7 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
 }
 
 /// Returns how many blocks were freed.
-fn truncate_cleanup(pre_collected: Vec<DiskPointer>, next_extent_block: DiskPointer) -> Result<usize, FloppyDriveError> {
+fn truncate_cleanup(pre_collected: Vec<DiskPointer>, next_extent_block: DiskPointer) -> Result<usize, DriveError> {
     // The rest of the cleanup happens in this function so we can easily check if any of it fails.
     debug!("Starting truncation cleanup, started with {} pre-collected blocks...", pre_collected.len());
     
@@ -1106,7 +1106,7 @@ fn truncate_cleanup(pre_collected: Vec<DiskPointer>, next_extent_block: DiskPoin
 }
 
 /// Just flushes the current FileExtentBlock to disk, nice helper function
-fn flush_to_disk(block: &FileExtentBlock) -> Result<(), FloppyDriveError> {
+fn flush_to_disk(block: &FileExtentBlock) -> Result<(), DriveError> {
     // Raw it
     let raw = block.to_block();
     // Write it.

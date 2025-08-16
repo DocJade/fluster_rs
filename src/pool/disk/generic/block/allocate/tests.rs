@@ -3,9 +3,12 @@
 #![allow(clippy::unwrap_used)]
 use test_log::test; // We want to see logs while testing.
 
-use rand::{Rng, rngs::ThreadRng};
+use rand::{
+    Rng,
+    rngs::ThreadRng
+};
 
-use crate::pool::disk::drive_struct::FloppyDriveError;
+use crate::error_types::drive::DriveError;
 
 use super::block_allocation::BlockAllocation;
 
@@ -122,7 +125,7 @@ impl BlockAllocation for TestTable {
         &self.block_usage_map
     }
 
-    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), FloppyDriveError> {
+    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), DriveError> {
         self.block_usage_map = new_table
             .try_into()
             .expect("New table should be the same size as old table.");

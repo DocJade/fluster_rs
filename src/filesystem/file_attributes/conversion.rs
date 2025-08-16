@@ -4,16 +4,9 @@ use log::debug;
 use std::time::SystemTime;
 
 use crate::{
-    filesystem::file_handle::file_handle_struct::FileHandle,
-    pool::disk::{
-        drive_struct::FloppyDriveError,
-        standard_disk::block::{
-            directory::directory_struct::{
-                DirectoryItemFlags,
-                DirectoryItem
+    error_types::drive::DriveError, filesystem::file_handle::file_handle_struct::FileHandle, pool::disk::standard_disk::block::directory::directory_struct::{
+                DirectoryItem, DirectoryItemFlags
             }
-        }
-    }
 };
 
 
@@ -32,14 +25,14 @@ impl TryFrom<FileHandle> for FileAttr {
 
 // You can also call this on DirectoryItem
 impl TryFrom<DirectoryItem> for FileAttr {
-    type Error = FloppyDriveError;
+    type Error = DriveError;
 
     fn try_from(value: DirectoryItem) -> Result<Self, Self::Error> {
         go_get_metadata(value)
     }
 }
 
-fn go_get_metadata(item: DirectoryItem) -> Result<FileAttr, FloppyDriveError> {
+fn go_get_metadata(item: DirectoryItem) -> Result<FileAttr, DriveError> {
     debug!("Extracting metadata from item `{}`...", item.name);
     // Now for ease of implementation, we (very stupidly) ignore all file access permissions,
     // owner information, and group owner information.

@@ -2,7 +2,6 @@
 
 // Imports
 use bitflags::bitflags;
-use thiserror::Error;
 
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 
@@ -32,12 +31,4 @@ bitflags! {
         // All Pool headers MUST have this bit set.
         const RequiredHeaderBit = 0b10000000;
     }
-}
-
-#[derive(Debug, Error, PartialEq, Eq)]
-pub enum PoolHeaderError {
-    #[error("Magic was missing, or something else is wrong with the header.")]
-    Invalid,
-    #[error("Block 0 on this disk is completely blank")]
-    Blank,
 }

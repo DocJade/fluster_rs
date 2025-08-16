@@ -7,12 +7,21 @@ pub(crate) const DATA_BLOCK_OVERHEAD: u64 = 5; // 1 flag, 4 checksum.
 // Imports
 
 
-use crate::pool::disk::{
-    generic::{block::{block_structs::RawBlock, crc::add_crc_to_block}, generic_structs::pointer_struct::DiskPointer},
-    standard_disk::block::file_extents::file_extents_struct::{
-        ExtentFlags, FileExtent, FileExtentBlock, FileExtentBlockError, FileExtentBlockFlags,
+use crate::{error_types::block::BlockManipulationError, pool::disk::{
+    generic::{
+        block::{
+            block_structs::RawBlock,
+            crc::add_crc_to_block
+        },
+        generic_structs::pointer_struct::DiskPointer
     },
-};
+    standard_disk::block::file_extents::file_extents_struct::{
+        ExtentFlags,
+        FileExtent,
+        FileExtentBlock,
+        FileExtentBlockFlags,
+    },
+}};
 
 // Implementations
 
@@ -46,7 +55,7 @@ impl FileExtentBlock {
     /// Does not write new block to disk. Caller must write it.
     ///
     /// Returns nothing
-    pub(crate) fn add_extent(&mut self, extent: FileExtent) -> Result<(), FileExtentBlockError> {
+    pub(crate) fn add_extent(&mut self, extent: FileExtent) -> Result<(), BlockManipulationError> {
         extent_block_add_extent(self, extent)
     }
 
@@ -157,7 +166,7 @@ impl FileExtentBlock {
 fn extent_block_add_extent(
     block: &mut FileExtentBlock,
     extent: FileExtent,
-) -> Result<(), FileExtentBlockError> {
+) -> Result<(), BlockManipulationError> {
     // Try and add an extent to the block
 
     // Yes this causes a lot of extent.to_bytes() calls, but
@@ -172,7 +181,7 @@ fn extent_block_add_extent(
     // is a block after this, the block needs to immediately fail.
     if !block.next_block.no_destination() {
         // Keep goin dawg, not this block.
-        return Err(FileExtentBlockError::NotFinalBlock)
+        return Err(BlockManipulationError::NotFinalBlockInChain)
     }
 
     // figure out how big the extent is.
@@ -182,7 +191,7 @@ fn extent_block_add_extent(
     // will it fit?
     if extent_size > block.bytes_free {
         // Nope!
-        return Err(FileExtentBlockError::NotEnoughSpace);
+        return Err(BlockManipulationError::OutOfRoom);
     }
 
     // It'll fit! Add it to the Vec.

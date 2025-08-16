@@ -40,8 +40,3 @@ pub struct PoolStatistics {
     /// Bytes we've read from the disk, including file overhead and such
     pub(crate) total_bytes_written: u64,
 }
-
-/// Somebody peed in the pool.
-pub enum PoolError {
-    SyncFailed,
-}

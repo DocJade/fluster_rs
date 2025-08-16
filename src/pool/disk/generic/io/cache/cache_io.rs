@@ -1,19 +1,29 @@
 // External interaction with the block cache
 
-use crate::pool::disk::{
-    drive_struct::FloppyDriveError,
-     generic::{block::{allocate::block_allocation::BlockAllocation, block_structs::RawBlock},
-        disk_trait::GenericDiskMethods,
-        generic_structs::pointer_struct::DiskPointer,
-        io::{
-            cache::{cache_implementation::{
-                BlockCache, CachedBlock
-            }, cached_allocation::CachedAllocationDisk},
-            checked_io::CheckedIO
+use crate::{
+    error_types::{
+        drive::{
+            DriveError
+        }
+    },
+    pool::disk::{
+        generic::{
+            block::{
+                allocate::block_allocation::BlockAllocation,
+                block_structs::RawBlock
+            },
+            disk_trait::GenericDiskMethods,
+            generic_structs::pointer_struct::DiskPointer,
+            io::cache::{
+                cache_implementation::{
+                    BlockCache,
+                    CachedBlock
+                },
+            cached_allocation::CachedAllocationDisk
         }
     },
     standard_disk::standard_disk_struct::StandardDisk
-};
+}};
 
 //
 // =========
@@ -46,7 +56,7 @@ impl CachedBlockIO {
     /// You better know what you're doing.
     /// 
     /// !! == DANGER == !!
-    pub fn forcibly_write_a_block(raw_block: &RawBlock) -> Result<(), FloppyDriveError> {
+    pub fn forcibly_write_a_block(raw_block: &RawBlock) -> Result<(), DriveError> {
         go_force_write_block(raw_block)
     }
 
@@ -67,7 +77,7 @@ impl CachedBlockIO {
     /// Block must already be allocated on origin disk.
     /// 
     /// Only works on standard disks.
-    pub fn read_block(block_origin: DiskPointer) -> Result<RawBlock, FloppyDriveError> {
+    pub fn read_block(block_origin: DiskPointer) -> Result<RawBlock, DriveError> {
         go_read_cached_block(block_origin)
     }
 
@@ -76,7 +86,7 @@ impl CachedBlockIO {
     /// Block must not be allocated on destination disk, will allocate on write.
     /// 
     /// Only works on standard disks.
-    pub fn write_block(raw_block: &RawBlock) -> Result<(), FloppyDriveError> {
+    pub fn write_block(raw_block: &RawBlock) -> Result<(), DriveError> {
         go_write_cached_block(raw_block)
     }
 
@@ -85,7 +95,7 @@ impl CachedBlockIO {
     /// Block must be already allocated on the destination disk.
     /// 
     /// Only works on standard disks.
-    pub fn update_block(raw_block: &RawBlock) -> Result<(), FloppyDriveError> {
+    pub fn update_block(raw_block: &RawBlock) -> Result<(), DriveError> {
         go_update_cached_block(raw_block)
     }
 
@@ -102,7 +112,7 @@ impl CachedBlockIO {
     }
 
     /// Flush the entire cache to disk.
-    pub fn flush() -> Result<(), FloppyDriveError> {
+    pub fn flush() -> Result<(), DriveError> {
         // There are currently 3 tiers of cache.
         // ! If that changes, this must be updated !
         // ! or there will be unflushed data still !
@@ -120,7 +130,7 @@ impl CachedBlockIO {
 
 
 // This function also updates the block order after the read.
-fn go_read_cached_block(block_location: DiskPointer) -> Result<RawBlock, FloppyDriveError> {
+fn go_read_cached_block(block_location: DiskPointer) -> Result<RawBlock, DriveError> {
     // Grab the block from the cache if it exists.
 
     // Block must be allocated.
@@ -154,7 +164,7 @@ fn go_read_cached_block(block_location: DiskPointer) -> Result<RawBlock, FloppyD
     Ok(read_block)
 }
 
-fn go_write_cached_block(raw_block: &RawBlock) -> Result<(), FloppyDriveError> {
+fn go_write_cached_block(raw_block: &RawBlock) -> Result<(), DriveError> {
     // Write a block to the disk, also updating the cache with the block (or adding it if it does not yet exist.)
 
     // The cache expects the block's destination to be allocated already, so we will allocate it here.
@@ -169,7 +179,7 @@ fn go_write_cached_block(raw_block: &RawBlock) -> Result<(), FloppyDriveError> {
     Ok(())
 }
 
-fn go_update_cached_block(raw_block: &RawBlock) -> Result<(), FloppyDriveError> {
+fn go_update_cached_block(raw_block: &RawBlock) -> Result<(), DriveError> {
     // Update like windows, but better idk this joke sucks lmao
 
     // We have to skip the allocation check if we are attempting to update the header, otherwise
@@ -191,11 +201,8 @@ fn go_update_cached_block(raw_block: &RawBlock) -> Result<(), FloppyDriveError> 
 }
 
 /// Forcibly writes a block to disk immediately, bypasses the cache.
-fn go_force_write_block(raw_block: &RawBlock) -> Result<(), FloppyDriveError> {
+fn go_force_write_block(raw_block: &RawBlock) -> Result<(), DriveError> {
     // Load in the disk to write to, ensuring that the header is up to date.
-
     let mut disk: StandardDisk = super::cache_implementation::disk_load_header_invalidation(raw_block.block_origin.disk)?;
-
-    disk.unchecked_write_block(raw_block)?;
-    Ok(())
+    disk.unchecked_write_block(raw_block)
 }

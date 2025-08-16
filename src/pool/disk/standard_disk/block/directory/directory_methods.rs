@@ -6,17 +6,27 @@
 
 use log::debug;
 
-use crate::pool::disk::{
-    drive_struct::FloppyDriveError, generic::{
-        block::{block_structs::RawBlock, crc::add_crc_to_block},
-        generic_structs::pointer_struct::DiskPointer, io::cache::cache_io::CachedBlockIO,
-    }, standard_disk::block::{
-        directory::directory_struct::{
-            DirectoryBlock, DirectoryBlockError, DirectoryBlockFlags, DirectoryItemFlags, DirectoryItem,
+use crate::{error_types::{block::BlockManipulationError, drive::DriveError}, pool::disk::{
+    generic::{
+        block::{
+            block_structs::RawBlock,
+            crc::add_crc_to_block
         },
-        inode::inode_struct::{Inode, InodeDirectory, InodeLocation, InodeTimestamp},
+        generic_structs::pointer_struct::DiskPointer,
+        io::cache::cache_io::CachedBlockIO,
+    },
+    standard_disk::block::{
+        directory::directory_struct::{
+            DirectoryBlock, DirectoryBlockFlags, DirectoryItem, DirectoryItemFlags
+        },
+        inode::inode_struct::{
+            Inode,
+            InodeDirectory,
+            InodeLocation,
+            InodeTimestamp
+        },
     }
-};
+}};
 
 // We can convert from a raw block to a directory bock, but not the other way around.
 impl From<RawBlock> for DirectoryBlock {
@@ -39,7 +49,7 @@ impl DirectoryBlock {
     /// Try to add an DirectoryItem to this block.
     ///
     /// Returns nothing.
-    pub fn try_add_item(&mut self, item: &DirectoryItem) -> Result<(), DirectoryBlockError> {
+    pub fn try_add_item(&mut self, item: &DirectoryItem) -> Result<(), BlockManipulationError> {
         directory_block_try_add_item(self, item)
     }
 
@@ -50,7 +60,7 @@ impl DirectoryBlock {
     pub(in super::super) fn try_remove_item(
         &mut self,
         item: &DirectoryItem,
-    ) -> Result<(), DirectoryBlockError> {
+    ) -> Result<(), BlockManipulationError> {
         directory_block_try_remove_item(self, item)
     }
 
@@ -73,7 +83,7 @@ impl DirectoryBlock {
     }
 
     /// Check if this block is empty
-    pub fn is_empty(&self) -> Result<bool, FloppyDriveError> {
+    pub fn is_empty(&self) -> Result<bool, DriveError> {
         Ok(self.list()?.len() == 0)
     }
 }
@@ -83,7 +93,7 @@ impl DirectoryBlock {
 fn directory_block_try_remove_item(
     block: &mut DirectoryBlock,
     incoming_item: &DirectoryItem,
-) -> Result<(), DirectoryBlockError> {
+) -> Result<(), BlockManipulationError> {
     // Attempt to remove an item
 
     // attempt the removal
@@ -100,14 +110,14 @@ fn directory_block_try_remove_item(
         let _ = block.directory_items.swap_remove(index);
         Ok(())
     } else {
-        Err(DirectoryBlockError::NoSuchItem)
+        Err(BlockManipulationError::NotPresent)
     }
 }
 
 fn directory_block_try_add_item(
     block: &mut DirectoryBlock,
     item: &DirectoryItem,
-) -> Result<(), DirectoryBlockError> {
+) -> Result<(), BlockManipulationError> {
     // Attempt to add a new item to the directory.
 
     // check if we have room
@@ -116,7 +126,7 @@ fn directory_block_try_add_item(
 
     if new_item_length > block.bytes_free.into() {
         // We don't have room for this inode. The caller will have to use another block.
-        return Err(DirectoryBlockError::NotEnoughSpace);
+        return Err(BlockManipulationError::OutOfRoom);
     }
 
     // luckily since directory blocks dont require any ordering, we can just append it to the vec and update
@@ -334,7 +344,7 @@ impl DirectoryItem {
     }
 
     /// Get the size of the item. Regardless of type.
-    pub(crate) fn get_size(&self) -> Result<u64, FloppyDriveError> {
+    pub(crate) fn get_size(&self) -> Result<u64, DriveError> {
         debug!("Getting size of `{}`...", self.name);
         // Grab the inode to work with
         let inode: Inode = self.get_inode()?;
@@ -361,14 +371,14 @@ impl DirectoryItem {
     }
 
     /// Get when the inode / item was created.
-    pub(crate) fn get_created_time(&self) -> Result<InodeTimestamp, FloppyDriveError> {
+    pub(crate) fn get_created_time(&self) -> Result<InodeTimestamp, DriveError> {
         // get the inode
         let inode = self.get_inode()?;
         Ok(inode.created)
     }
 
     /// Get when the inode / item was modified.
-    pub(crate) fn get_modified_time(&self) -> Result<InodeTimestamp, FloppyDriveError> {
+    pub(crate) fn get_modified_time(&self) -> Result<InodeTimestamp, DriveError> {
         // get the inode
         let inode = self.get_inode()?;
         Ok(inode.modified)
@@ -376,14 +386,14 @@ impl DirectoryItem {
 
     /// All item types point to a block that holds their information.
     /// You can see what block they point to, but you REALLY should not be doing reads like this.
-    fn get_items_pointer(&self) -> Result<DiskPointer, FloppyDriveError> {
+    fn get_items_pointer(&self) -> Result<DiskPointer, DriveError> {
         Ok(self.get_inode()?.get_pointer())
     }
 
     /// Turn a directory type DirectoryItem into a DirectoryBlock.
     /// 
     /// Panics if fed a file.
-    pub(crate) fn get_directory_block(&self) -> Result<DirectoryBlock, FloppyDriveError> {
+    pub(crate) fn get_directory_block(&self) -> Result<DirectoryBlock, DriveError> {
         // Grab the inode to work with
         let inode: Inode = self.get_inode()?;
 

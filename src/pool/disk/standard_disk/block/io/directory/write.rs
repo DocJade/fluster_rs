@@ -2,9 +2,8 @@
 
 use log::{debug, error};
 
-use crate::pool::{
+use crate::{error_types::drive::DriveError, pool::{
     disk::{
-        drive_struct::FloppyDriveError,
         generic::{
             block::block_structs::RawBlock,
             generic_structs::pointer_struct::DiskPointer,
@@ -12,9 +11,7 @@ use crate::pool::{
         },
         standard_disk::block::{
                 directory::directory_struct::{
-                    DirectoryBlock,
-                    DirectoryItemFlags,
-                    DirectoryItem
+                    DirectoryBlock, DirectoryItem, DirectoryItemFlags
                 },
                 inode::inode_struct::{
                     Inode,
@@ -27,7 +24,7 @@ use crate::pool::{
             },
     },
     pool_actions::pool_struct::Pool,
-};
+}};
 
 impl DirectoryBlock {
     /// Add a new item to this block, extending this block if needed.
@@ -39,7 +36,7 @@ impl DirectoryBlock {
     pub fn add_item(
         &mut self,
         item: &DirectoryItem,
-    ) -> Result<(), FloppyDriveError> {
+    ) -> Result<(), DriveError> {
         go_add_item(self, item)
     }
     /// Creates a new directory block, and adds its location to the input block.
@@ -54,7 +51,7 @@ impl DirectoryBlock {
     pub fn make_directory(
         &mut self,
         name: String,
-    ) -> Result<DirectoryItem, FloppyDriveError> {
+    ) -> Result<DirectoryItem, DriveError> {
         go_make_directory(self, name)
     }
 
@@ -71,7 +68,7 @@ impl DirectoryBlock {
     /// May swap disks.
     /// 
     /// Returns nothing on success.
-    pub fn delete_self(self, self_item: DirectoryItem) -> Result<(), FloppyDriveError> {
+    pub fn delete_self(self, self_item: DirectoryItem) -> Result<(), DriveError> {
         // In theory, as long as the caller used an extracted directory item to call
         // this method, even if this call fails, all references to it will now be gone on
         // a directory level. So even if the inode or the block wasn't freed, its still
@@ -120,7 +117,7 @@ impl DirectoryBlock {
 fn go_make_directory(
     directory: &mut DirectoryBlock,
     name: String,
-) -> Result<DirectoryItem, FloppyDriveError> {
+) -> Result<DirectoryItem, DriveError> {
     debug!("Attempting to create a new directory with name `{name}`...");
     // Check to make sure this block does not already contain the directory we are trying to add.
     // We dont care if listing the directory puts us somewhere else, because we're immediately going to
@@ -190,7 +187,7 @@ fn go_make_directory(
 /// Returns where the new block is.
 ///
 /// May swap disks, does not return to original disk.
-fn go_make_new_directory_block() -> Result<DiskPointer, FloppyDriveError> {
+fn go_make_new_directory_block() -> Result<DiskPointer, DriveError> {
     // Ask the pool for a new block
     // No crc, will overwrite.
     let get_block = Pool::find_and_allocate_pool_blocks(1, false)?;
@@ -209,7 +206,7 @@ fn go_make_new_directory_block() -> Result<DiskPointer, FloppyDriveError> {
 fn go_add_item(
     directory: &mut DirectoryBlock,
     item: &DirectoryItem,
-) -> Result<(), FloppyDriveError> {
+) -> Result<(), DriveError> {
     debug!("Adding new item to directory...");
 
     // Added items must have their flag set.
@@ -265,7 +262,7 @@ fn go_add_item(
 /// May swap disks, will return to original disk.
 fn go_find_next_or_extend_block(
     directory: &mut DirectoryBlock,
-) -> Result<DiskPointer, FloppyDriveError> {
+) -> Result<DiskPointer, DriveError> {
     let mut block_to_load: DiskPointer = directory.next_block;
 
     // Make sure we actually have somewhere to go.

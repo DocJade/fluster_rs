@@ -5,5 +5,4 @@ pub mod filesystem_struct;
 pub mod io;
 mod file_handle;
 mod item_flag;
-mod error;
 mod file_attributes;

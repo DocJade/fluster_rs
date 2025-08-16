@@ -3,7 +3,6 @@
 // Imports
 
 use bitflags::bitflags;
-use thiserror::Error;
 
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 
@@ -50,13 +49,4 @@ bitflags! {
     pub struct FileExtentBlockFlags: u8 {
         // Currently unused.
     }
-}
-
-// Error types
-#[derive(Debug, Error, PartialEq, Eq)]
-pub(crate) enum FileExtentBlockError {
-    #[error("There aren't enough free bytes in the block.")]
-    NotEnoughSpace,
-    #[error("New extents must go in the final block in the chain.")]
-    NotFinalBlock,
 }
