@@ -29,11 +29,22 @@ pub enum DriveIOError {
     Critical(CriticalError)
 }
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, PartialEq)]
 /// Reasons why we cannot use the provided floppy disk path
 pub enum InvalidDriveReason {
     /// Pointed at a folder instead of a file.
     NotAFile,
     /// We dont have permission to access the path provided
     PermissionDenied,
+    /// We do not support using fluster over the network.
+    Networking,
+    /// Disk must be read and write.
+    ReadOnly,
+    /// File that refers to the floppy drive is not seekable.
+    NotSeekable,
+    /// The path is invalid in some way.
+    InvalidPath,
+    /// The filesystem (or operating system) that you're running fluster on
+    /// does not support basic disk IO.
+    UnsupportedOS
 }

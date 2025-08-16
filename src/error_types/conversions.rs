@@ -12,6 +12,7 @@ use thiserror::Error;
 use crate::error_types::critical::CriticalError;
 use crate::error_types::drive::DriveError;
 use crate::error_types::drive::DriveIOError;
+use crate::error_types::drive::InvalidDriveReason;
 
 
 
@@ -56,6 +57,17 @@ impl TryFrom<DriveIOError> for DriveError {
                 // Impossible operations aren't a "whoopsie", they're a logic failure.
                 Err(CannotConvertError::MustHandle)
             },
+            DriveIOError::Retry => {
+                // Operation must be retried, cant cast that up.
+                Err(CannotConvertError::MustHandle)
+            },
+            DriveIOError::Critical(critical_error) => {
+                // Critical error must be handled.
+                // We are the handler.
+                critical_error.attempt_recovery();
+                // If that worked, now the calling operation needs to be retried.
+                Ok(DriveError::Retry)
+            },
         }
     }
 }
@@ -84,7 +96,7 @@ impl TryFrom<std::io::Error> for DriveIOError {
                 // Nothing we can do.
                 Ok(
                     DriveIOError::Critical(
-                        CriticalError::DriveInaccessible(ErrorKind::PermissionDenied, value.raw_os_error())
+                        CriticalError::DriveInaccessible(InvalidDriveReason::PermissionDenied)
                     )
                 )
             },
@@ -96,16 +108,20 @@ impl TryFrom<std::io::Error> for DriveIOError {
             ErrorKind::NotConnected |
             ErrorKind::AddrInUse |
             ErrorKind::AddrNotAvailable  |
-            ErrorKind::NetworkDown => {
+            ErrorKind::NetworkDown |
+            ErrorKind::StaleNetworkFileHandle => {
                 // Okay you should not be using fluster over the network dawg.
                 // 100% your fault
-                error!("Dawg, why is the floppy disk over the network? Not happening.");
-                exit(-1)
+                Ok(
+                    DriveIOError::Critical(
+                        CriticalError::DriveInaccessible(InvalidDriveReason::Networking)
+                    )
+                )
             },
             ErrorKind::BrokenPipe => {
                 // What
                 error!("Broken pipe with fluster, why are you using pipes in the first place???");
-                // I doubt you could even make that work.
+                // I doubt you could even make fluster start with pipes.
                 unreachable!()
             },
             ErrorKind::AlreadyExists => {
@@ -117,37 +133,140 @@ impl TryFrom<std::io::Error> for DriveIOError {
                 unreachable!();
             },
             ErrorKind::NotADirectory => {
-                // Invalid path for the floppy drive.
-                
+                // This should never happen, since we always try to write to a file, not a directory.
+                unreachable!()
             },
-            ErrorKind::IsADirectory => todo!(),
-            ErrorKind::DirectoryNotEmpty => todo!(),
-            ErrorKind::ReadOnlyFilesystem => todo!(),
-            ErrorKind::StaleNetworkFileHandle => todo!(),
+            ErrorKind::IsADirectory => {
+                // User has passed in a directory for the floppy disk drive instead of a file for it.
+                Ok(
+                    DriveIOError::Critical(
+                        CriticalError::DriveInaccessible(InvalidDriveReason::NotAFile)
+                    )
+                )
+            },
+            ErrorKind::DirectoryNotEmpty => {
+                // Fluster does not try to delete directories.
+                unreachable!()
+            },
+            ErrorKind::ReadOnlyFilesystem => {
+                // Cant use fluster on read-only floppy for obvious reasons.
+                Ok(
+                    DriveIOError::Critical(
+                        CriticalError::DriveInaccessible(InvalidDriveReason::ReadOnly)
+                    )
+                )
+            },
             ErrorKind::InvalidInput => todo!(),
             ErrorKind::InvalidData => todo!(),
             ErrorKind::TimedOut => todo!(),
-            ErrorKind::WriteZero => todo!(),
-            ErrorKind::StorageFull => todo!(),
-            ErrorKind::NotSeekable => todo!(),
-            ErrorKind::QuotaExceeded => todo!(),
-            ErrorKind::FileTooLarge => todo!(),
-            ErrorKind::ResourceBusy => todo!(),
-            ErrorKind::ExecutableFileBusy => todo!(),
-            ErrorKind::Deadlock => todo!(),
-            ErrorKind::CrossesDevices => todo!(),
-            ErrorKind::TooManyLinks => todo!(),
-            ErrorKind::InvalidFilename => todo!(),
-            ErrorKind::ArgumentListTooLong => todo!(),
-            ErrorKind::Interrupted => todo!(),
-            ErrorKind::Unsupported => todo!(),
-            ErrorKind::UnexpectedEof => todo!(),
+            ErrorKind::WriteZero => {
+                // Writing a complete bytestream failed.
+                // Maybe the operation was canceled and needs to be retried?
+                // Not sure if the floppy drive requires minimum write sizes, but 512 aught to be enough.
+                Ok(
+                    DriveIOError::Retry
+                )
+            },
+            ErrorKind::StorageFull => {
+                // Fluster does not use a filesystem when doing writes to the disk.
+                // Maybe this could happen when attempting to write past the end of the disk?
+                // But we have bounds checking for that.
+                unreachable!();
+            },
+            ErrorKind::NotSeekable => {
+                // We must be able to seek files to read and write from them, this is a
+                // configuration issue.
+                Ok(
+                    DriveIOError::Critical(
+                        CriticalError::DriveInaccessible(InvalidDriveReason::NotSeekable)
+                    )
+                )
+            },
+            ErrorKind::QuotaExceeded => {
+                // Not sure what other quotas other than size are possible, the man page
+                // quota(1) doesn't specify any other quota types.
+                // Plus, this shouldn't happen for raw IO, right?
+                unreachable!()
+            },
+            ErrorKind::FileTooLarge => {
+                // Fluster does not use an underlying filesystem.
+                unreachable!()
+            },
+            ErrorKind::ResourceBusy => {
+                // Disk is busy, we can retry though.
+                Ok(
+                    DriveIOError::Retry
+                )
+            },
+            ErrorKind::ExecutableFileBusy => {
+                // If you're somehow running the floppy drive as an executable,
+                // you have bigger issues.
+                unreachable!()
+            },
+            ErrorKind::Deadlock => {
+                // File locking deadlock, not much we can do here except try again.
+                Ok(
+                    DriveIOError::Retry
+                )
+            },
+            ErrorKind::CrossesDevices => {
+                // Fluster does not do renames on the floppy disk path.
+                unreachable!()
+            },
+            ErrorKind::TooManyLinks => {
+                // We do not create links.
+                unreachable!()
+            },
+            ErrorKind::InvalidFilename => {
+                // The path to the disk is invalid somehow.
+                Ok(
+                    DriveIOError::Critical(
+                        CriticalError::DriveInaccessible(InvalidDriveReason::InvalidPath)
+                    )
+                )
+            },
+            ErrorKind::ArgumentListTooLong => {
+                // Fluster does not call programs
+                unreachable!()
+            },
+            ErrorKind::Interrupted => {
+                // "Interrupted operations can typically be retried."
+                Ok(
+                    DriveIOError::Retry
+                )
+            },
+            ErrorKind::Unsupported => {
+                // Whatever operation we're trying to do, its not possible.
+                // Not really much we can do here either.
+                Ok(
+                    DriveIOError::Critical(
+                        CriticalError::DriveInaccessible(InvalidDriveReason::UnsupportedOS)
+                    )
+                )
+            },
+            ErrorKind::UnexpectedEof => {
+                // This would happen if we read past the end of the floppy disk,
+                // which should be protected by guard conditions.
+                // Maybe someone's trying to run fluster with 8" disks?
+                // We'll just retry the operation, since this should be guarded anyways.
+                Ok(
+                    DriveIOError::Retry
+                )
+            },
             ErrorKind::OutOfMemory => {
+                // Bro what
                 error!("Please visit https://downloadmoreram.com/ then re-run Fluster.");
                 exit(-1);
             },
-            ErrorKind::Other => todo!(),
-            _ => todo!(),
+            ErrorKind::Other => {
+                // "This ErrorKind is not used by the standard library."
+                unreachable!()
+            },
+            _ => {
+                // This error is newer than the rust version fluster was originally written for.
+                // GLHF!
+                unreachable!("{value:#?}")
+            },
         }
     }
 }
