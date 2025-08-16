@@ -99,8 +99,7 @@ pub(crate) fn read_block_direct(
     // Since we made it out of the loop, the error variable MUST be set.
     let error = most_recent_error.expect("Shouldn't be able to exit the loop without an error.");
 
-    return Err(DriveIOError::Critical(
-        CriticalError::FloppyReadFailure(error.0, error.1)
-    ))
-    
+    // Do the error cleanup, if that works, we'll tell the caller to retry.
+    CriticalError::FloppyReadFailure(error.0, error.1).handle();
+    Err(DriveIOError::Retry)
 }

@@ -42,13 +42,13 @@ impl CriticalError {
     /// If this function completes successfully, you can re-attempt the operation that resulted in the critical error.
     /// This should only be called once per operation, if you are consistently calling attempt_recovery, there is a deeper
     /// issue that you must address.
-    pub(crate) fn attempt_recovery(self) {
-        go_attempt_recovery(self)
+    pub(crate) fn handle(self) {
+        go_handle_critical(self)
     }
 }
 
 
-fn go_attempt_recovery(error: CriticalError) {
+fn go_handle_critical(error: CriticalError) {
 
     // Critical recovery is not allowed in tests.
     if cfg!(test) {

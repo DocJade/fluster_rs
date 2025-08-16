@@ -133,11 +133,9 @@ fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, Dr
         header
     } else {
         // We must've ran out of retries. Bummer!
-        return Err(
-            DriveError::Critical(
-                CriticalError::OutOfRetries(Location::caller())
-            )
-        );
+        CriticalError::OutOfRetries(Location::caller()).handle();
+        // This will not recover, fluster is found dead in the bronx
+        unreachable!()
     };
     
 
@@ -301,11 +299,9 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Drive
     };
 
     // We've failed 10 times. Nothing we can do.
-    return Err(
-        DriveError::Critical(
-            CriticalError::OutOfRetries(Location::caller())
-        )
-    )
+    CriticalError::OutOfRetries(Location::caller()).handle();
+    // unrecoverable.
+    unreachable!()
 }
 
 /// Look for the magic "Fluster!" string.

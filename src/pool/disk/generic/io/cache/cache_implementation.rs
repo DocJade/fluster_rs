@@ -42,7 +42,7 @@ use lazy_static::lazy_static;
 use log::debug;
 
 use crate::{
-    error_types::drive::DriveIOError,
+    error_types::drive::{DriveError, DriveIOError},
     pool::disk::{
         drive_struct::{
             DiskType,
@@ -810,7 +810,7 @@ fn go_check_tier_full(tier: &TieredCache) -> bool {
 /// This can only be used in the cache.
 /// 
 /// This should be used in place of direct disk opening to ensure headers are up to date.
-pub(in super::super::cache) fn disk_load_header_invalidation(disk_number: u16) -> Result<StandardDisk, DriveIOError> {
+pub(in super::super::cache) fn disk_load_header_invalidation(disk_number: u16) -> Result<StandardDisk, DriveError> {
     // Try to find the header for this disk in the cache
 
     let header_pointer: DiskPointer = DiskPointer {
@@ -848,7 +848,7 @@ pub(in super::super::cache) fn disk_load_header_invalidation(disk_number: u16) -
     // Update the header on the disk if needed.
     if let Some(cached_block) = possibly_cached {
         // There was a header in the cache, so we now need to update the disk again
-        disk.checked_update(&cached_block)?;
+        let update_result = disk.checked_update(&cached_block);
 
         // Now the disk is out of sync, we need to load it in _again_
         #[allow(deprecated)] // This is being used for the cache.

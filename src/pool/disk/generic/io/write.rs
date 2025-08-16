@@ -81,9 +81,9 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
     // Since we made it out of the loop, the error variable MUST be set.
     let error = most_recent_error.expect("Shouldn't be able to exit the loop without an error.");
 
-    return Err(DriveIOError::Critical(
-        CriticalError::FloppyReadFailure(error.0, error.1)
-    ))
+    // Do the error cleanup, if that works, we'll tell the caller to retry.
+    CriticalError::FloppyWriteFailure(error.0, error.1).handle();
+    Err(DriveIOError::Retry)
 }
 
 /// Write a vec of bytes starting at offset to the currently inserted disk in the floppy drive.
@@ -148,7 +148,7 @@ pub(crate) fn write_large_direct(disk_file: &File, data: Vec<u8>, start_block: D
     // Since we made it out of the loop, the error variable MUST be set.
     let error = most_recent_error.expect("Shouldn't be able to exit the loop without an error.");
 
-    return Err(DriveIOError::Critical(
-        CriticalError::FloppyReadFailure(error.0, error.1)
-    ))
+    // Do the error cleanup, if that works, we'll tell the caller to retry.
+    CriticalError::FloppyWriteFailure(error.0, error.1).handle();
+    Err(DriveIOError::Retry)
 }

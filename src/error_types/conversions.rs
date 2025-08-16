@@ -21,10 +21,6 @@ use crate::error_types::drive::InvalidDriveReason;
 
 // We do not allow string errors. This is RUST damn it, not python!
 
-// Not all errors allow From due to expectations that the operations that return this
-// type either return a value or fail in a critical way.
-
-
 // We also have a custom conversion error type, so lower level callers can get more info
 // about what they need to do to be able to perform the cast to a higher error type.
 
@@ -52,15 +48,8 @@ impl TryFrom<DriveIOError> for DriveError {
                 Ok(DriveError::DriveEmpty)
             },
             DriveIOError::Retry => {
-                // Operation must be retried, cant cast that up.
+                // Operation must be retried, cant cast that upwards.
                 Err(CannotConvertError::MustRetry)
-            },
-            DriveIOError::Critical(critical_error) => {
-                // Critical error must be handled.
-                // We are the handler.
-                critical_error.attempt_recovery();
-                // If that worked, now the calling operation needs to be retried.
-                Ok(DriveError::Retry)
             },
         }
     }
@@ -77,22 +66,16 @@ impl TryFrom<std::io::Error> for DriveIOError {
         match value.kind() {
             ErrorKind::NotFound => {
                 // The floppy drive path is not there.
-                // We cannot recover from that.
-
-                Ok(
-                    DriveIOError::Critical(
-                        CriticalError::FloppyReadFailure(ErrorKind::NotFound, value.raw_os_error())
-                    )
-                )
+                CriticalError::FloppyReadFailure(ErrorKind::NotFound, value.raw_os_error()).handle();
+                // We cant recover from that
+                unreachable!()
             },
             ErrorKind::PermissionDenied => {
                 // Dont have permission to perform IO on the drive.
                 // Nothing we can do.
-                Ok(
-                    DriveIOError::Critical(
-                        CriticalError::DriveInaccessible(InvalidDriveReason::PermissionDenied)
-                    )
-                )
+                CriticalError::DriveInaccessible(InvalidDriveReason::PermissionDenied).handle();
+                // We cant recover from that
+                unreachable!()
             },
             ErrorKind::ConnectionRefused |
             ErrorKind::ConnectionReset |
@@ -106,11 +89,9 @@ impl TryFrom<std::io::Error> for DriveIOError {
             ErrorKind::StaleNetworkFileHandle => {
                 // Okay you should not be using fluster over the network dawg.
                 // 100% your fault
-                Ok(
-                    DriveIOError::Critical(
-                        CriticalError::DriveInaccessible(InvalidDriveReason::Networking)
-                    )
-                )
+                CriticalError::DriveInaccessible(InvalidDriveReason::Networking).handle();
+                // We cant recover from that
+                unreachable!()
             },
             ErrorKind::BrokenPipe => {
                 // What
@@ -132,11 +113,9 @@ impl TryFrom<std::io::Error> for DriveIOError {
             },
             ErrorKind::IsADirectory => {
                 // User has passed in a directory for the floppy disk drive instead of a file for it.
-                Ok(
-                    DriveIOError::Critical(
-                        CriticalError::DriveInaccessible(InvalidDriveReason::NotAFile)
-                    )
-                )
+                CriticalError::DriveInaccessible(InvalidDriveReason::NotAFile).handle();
+                // We cant recover from that
+                unreachable!()
             },
             ErrorKind::DirectoryNotEmpty => {
                 // Fluster does not try to delete directories.
@@ -144,11 +123,9 @@ impl TryFrom<std::io::Error> for DriveIOError {
             },
             ErrorKind::ReadOnlyFilesystem => {
                 // Cant use fluster on read-only floppy for obvious reasons.
-                Ok(
-                    DriveIOError::Critical(
-                        CriticalError::DriveInaccessible(InvalidDriveReason::ReadOnly)
-                    )
-                )
+                CriticalError::DriveInaccessible(InvalidDriveReason::ReadOnly).handle();
+                // We cant recover from that
+                unreachable!()
             },
             ErrorKind::InvalidInput => todo!(),
             ErrorKind::InvalidData => todo!(),
@@ -157,9 +134,9 @@ impl TryFrom<std::io::Error> for DriveIOError {
                 // Writing a complete bytestream failed.
                 // Maybe the operation was canceled and needs to be retried?
                 // Not sure if the floppy drive requires minimum write sizes, but 512 aught to be enough.
-                Ok(
-                    DriveIOError::Retry
-                )
+
+                // We dont cast this up, we make the caller retry the write.
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::StorageFull => {
                 // Fluster does not use a filesystem when doing writes to the disk.
@@ -170,11 +147,9 @@ impl TryFrom<std::io::Error> for DriveIOError {
             ErrorKind::NotSeekable => {
                 // We must be able to seek files to read and write from them, this is a
                 // configuration issue.
-                Ok(
-                    DriveIOError::Critical(
-                        CriticalError::DriveInaccessible(InvalidDriveReason::NotSeekable)
-                    )
-                )
+                CriticalError::DriveInaccessible(InvalidDriveReason::NotSeekable).handle();
+                // We cant recover from that
+                unreachable!()
             },
             ErrorKind::QuotaExceeded => {
                 // Not sure what other quotas other than size are possible, the man page
@@ -188,9 +163,8 @@ impl TryFrom<std::io::Error> for DriveIOError {
             },
             ErrorKind::ResourceBusy => {
                 // Disk is busy, we can retry though.
-                Ok(
-                    DriveIOError::Retry
-                )
+                // Force caller to retry.
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::ExecutableFileBusy => {
                 // If you're somehow running the floppy drive as an executable,
@@ -199,9 +173,8 @@ impl TryFrom<std::io::Error> for DriveIOError {
             },
             ErrorKind::Deadlock => {
                 // File locking deadlock, not much we can do here except try again.
-                Ok(
-                    DriveIOError::Retry
-                )
+                // Force caller to retry
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::CrossesDevices => {
                 // Fluster does not do renames on the floppy disk path.
@@ -213,11 +186,9 @@ impl TryFrom<std::io::Error> for DriveIOError {
             },
             ErrorKind::InvalidFilename => {
                 // The path to the disk is invalid somehow.
-                Ok(
-                    DriveIOError::Critical(
-                        CriticalError::DriveInaccessible(InvalidDriveReason::InvalidPath)
-                    )
-                )
+                CriticalError::DriveInaccessible(InvalidDriveReason::InvalidPath).handle();
+                // We cant recover from that
+                unreachable!()
             },
             ErrorKind::ArgumentListTooLong => {
                 // Fluster does not call programs
@@ -225,27 +196,23 @@ impl TryFrom<std::io::Error> for DriveIOError {
             },
             ErrorKind::Interrupted => {
                 // "Interrupted operations can typically be retried."
-                Ok(
-                    DriveIOError::Retry
-                )
+                // Force caller to retry
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::Unsupported => {
                 // Whatever operation we're trying to do, its not possible.
                 // Not really much we can do here either.
-                Ok(
-                    DriveIOError::Critical(
-                        CriticalError::DriveInaccessible(InvalidDriveReason::UnsupportedOS)
-                    )
-                )
+                CriticalError::DriveInaccessible(InvalidDriveReason::UnsupportedOS).handle();
+                // We cant recover from that
+                unreachable!()
             },
             ErrorKind::UnexpectedEof => {
                 // This would happen if we read past the end of the floppy disk,
                 // which should be protected by guard conditions.
                 // Maybe someone's trying to run fluster with 8" disks?
                 // We'll just retry the operation, since this should be guarded anyways.
-                Ok(
-                    DriveIOError::Retry
-                )
+                // Force caller to retry
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::OutOfMemory => {
                 // Bro what
@@ -259,6 +226,7 @@ impl TryFrom<std::io::Error> for DriveIOError {
             _ => {
                 // This error is newer than the rust version fluster was originally written for.
                 // GLHF!
+                // TODO: Put empty drive error check in here.
                 unreachable!("{value:#?}")
             },
         }
@@ -270,10 +238,12 @@ impl TryFrom<std::io::Error> for DriveIOError {
 // Filesystem errors
 //
 
+/*
+
 // Mapping between FloppyDriveErrors and these other error types
 impl From<FloppyDriveError> for c_int {
     fn from(value: FloppyDriveError) -> Self {
-        // A lot of these error types SUCK, pastjade stinky.
+        // A lot of these error types SUCK, pastjade stinky. // Dw im working on it now
         // we will just use generic failures for anything we cannot craft a better error for
         error!("Casting a FloppyDriveError into a c_int, low level stuff has failed!");
         error!("Error: \n\n{value:#?}");
@@ -364,3 +334,4 @@ impl From<FloppyDriveError> for c_int {
         }
     }
 }
+*/

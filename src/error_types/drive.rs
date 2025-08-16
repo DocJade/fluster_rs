@@ -14,8 +14,6 @@ pub enum DriveError {
     DriveEmpty,
     #[error("The operation failed for non-critical reasons, but no corruption occurred, and the operation can be retried with the same arguments.")]
     Retry,
-    #[error("A drive operation has failed so hard that we need intervention.")]
-    Critical(CriticalError)
 }
 
 #[derive(Debug, Clone, Copy, Error, PartialEq)]
@@ -25,8 +23,6 @@ pub enum DriveIOError {
     DriveEmpty,
     #[error("The operation failed for non-critical reasons, but no corruption occurred, and the operation can be retried with the same arguments.")]
     Retry,
-    #[error("An IO operation has failed so hard that we need intervention.")]
-    Critical(CriticalError)
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
