@@ -6,16 +6,19 @@ use std::fs::File;
 
 use log::error;
 
-use crate::pool::disk::{
-    drive_struct::DiskBootstrap,
-    generic::{
-        block::{
-            allocate::block_allocation::BlockAllocation,
-            block_structs::RawBlock,
-            crc::check_crc,
-        }, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::{read::read_block_direct, write::write_block_direct}
-    },
-    pool_disk::block::header::header_struct::PoolDiskHeader,
+use crate::{
+    error_types::drive::DriveError,
+    pool::disk::{
+        drive_struct::DiskBootstrap,
+        generic::{
+            block::{
+                allocate::block_allocation::BlockAllocation,
+                block_structs::RawBlock,
+                crc::check_crc,
+            }, disk_trait::GenericDiskMethods, generic_structs::pointer_struct::DiskPointer, io::{read::read_block_direct, write::write_block_direct}
+        },
+        pool_disk::block::header::header_struct::PoolDiskHeader,
+    }
 };
 
 use super::pool_disk_struct::PoolDisk;
@@ -28,7 +31,7 @@ impl PoolDisk {
 
 // Bootstrapping
 impl DiskBootstrap for PoolDisk {
-    fn bootstrap(_file: File, _disk_number: u16) -> Result<Self, FloppyDriveError> {
+    fn bootstrap(_file: File, _disk_number: u16) -> Result<Self, DriveError> {
         // Annoyingly, we do bootstrapping of the pool disk from elsewhere, so this has to be here just
         // to fill criteria for DiskBootstrap
         todo!()
@@ -59,7 +62,7 @@ impl BlockAllocation for PoolDisk {
         &self.header.block_usage_map
     }
 
-    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), FloppyDriveError> {
+    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), DriveError> {
         self.header.block_usage_map = new_table
             .try_into()
             .expect("Incoming table should be the same as outgoing.");
@@ -71,12 +74,12 @@ impl BlockAllocation for PoolDisk {
 impl GenericDiskMethods for PoolDisk {
     #[doc = " Read a block"]
     #[doc = " Cannot bypass CRC."]
-    fn unchecked_read_block(&self, block_number: u16) -> Result<RawBlock, BlockError> {
+    fn unchecked_read_block(&self, block_number: u16) -> Result<RawBlock, DriveError> {
         read_block_direct(&self.disk_file, self.number, block_number, false)
     }
 
     #[doc = " Write a block"]
-    fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), BlockError> {
+    fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), DriveError> {
         write_block_direct(&self.disk_file, block)
     }
 
@@ -101,14 +104,14 @@ impl GenericDiskMethods for PoolDisk {
     }
 
     #[doc = " Sync all in-memory information to disk"]
-    fn flush(&mut self) -> Result<(), FloppyDriveError> {
+    fn flush(&mut self) -> Result<(), DriveError> {
         error!("You cannot call flush on a pool disk header.");
         error!("This must be handled manually via a disk unchecked write.");
         panic!("Tried to flush a pool header with .flush() !");
     }
     
     #[doc = " Write chunked data, starting at a block."]
-    fn unchecked_write_large(&mut self, _data:Vec<u8>, _start_block: DiskPointer) -> Result<(), BlockError> {
+    fn unchecked_write_large(&mut self, _data:Vec<u8>, _start_block: DiskPointer) -> Result<(), DriveError> {
         // We do not allow large writes to the pool disk.
         // Man the pool disk really ended up useless didn't it?
         panic!("No large writes on pool disks.");

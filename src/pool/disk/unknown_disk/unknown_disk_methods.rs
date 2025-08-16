@@ -1,7 +1,7 @@
 use std::fs::File;
 
 use crate::{
-    error_types::drive::DriveIOError,
+    error_types::drive::DriveError,
     pool::disk::{
         generic::{
             block::{
@@ -19,13 +19,13 @@ use crate::{
 impl GenericDiskMethods for UnknownDisk {
     #[doc = " Read a block"]
     #[doc = " Cannot bypass CRC."]
-    fn unchecked_read_block(&self, _block_number: u16) -> Result<RawBlock, DriveIOError> {
+    fn unchecked_read_block(&self, _block_number: u16) -> Result<RawBlock, DriveError> {
         // We cant read from generic disks.
         unreachable!()
     }
 
     #[doc = " Write a block"]
-    fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), DriveIOError> {
+    fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), DriveError> {
         write_block_direct(&self.disk_file, block)
     }
 
@@ -52,13 +52,13 @@ impl GenericDiskMethods for UnknownDisk {
     }
 
     #[doc = " Sync all in-memory information to disk"]
-    fn flush(&mut self) -> Result<(), DriveIOError> {
+    fn flush(&mut self) -> Result<(), DriveError> {
         // There is no in-memory information for this disk.
         unreachable!()
     }
     
     #[doc = " Write chunked data, starting at a block."]
-    fn unchecked_write_large(&mut self, _data: Vec<u8>, _start_block: DiskPointer) -> Result<(), DriveIOError> {
+    fn unchecked_write_large(&mut self, _data: Vec<u8>, _start_block: DiskPointer) -> Result<(), DriveError> {
         panic!("Cannot do large writes to unknown disks!");
     }
 }
@@ -76,7 +76,7 @@ impl BlockAllocation for UnknownDisk {
     }
     
     #[doc = " Update and flush the allocation table to disk."]
-    fn set_allocation_table(&mut self, _new_table: &[u8]) -> Result<(), DriveIOError> {
+    fn set_allocation_table(&mut self, _new_table: &[u8]) -> Result<(), DriveError> {
         panic!("Why are we getting the allocation table for an unknown disk?");
     }
 }

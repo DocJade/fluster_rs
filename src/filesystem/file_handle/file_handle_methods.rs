@@ -103,10 +103,8 @@ lazy_static! {
 //
 
 use crate::{
-    filesystem::{
-        error::filesystem_error_types::*,
-        file_handle::file_handle_struct::FileHandle
-    },
+    error_types::filesystem::*,
+    filesystem::file_handle::file_handle_struct::FileHandle,
     pool::disk::{
         standard_disk::block::{
             directory::directory_struct::{

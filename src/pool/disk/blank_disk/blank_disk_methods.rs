@@ -3,7 +3,7 @@
 use std::fs::File;
 
 use crate::{
-    error_types::drive::DriveIOError,
+    error_types::drive::DriveError,
         pool::disk::{
         blank_disk::blank_disk_struct::BlankDisk,
         generic::{
@@ -21,13 +21,13 @@ use crate::{
 impl GenericDiskMethods for BlankDisk {
     #[doc = " Read a block"]
     #[doc = " Cannot bypass CRC."]
-    fn unchecked_read_block(&self, _block_number: u16) -> Result<RawBlock, DriveIOError> {
+    fn unchecked_read_block(&self, _block_number: u16) -> Result<RawBlock, DriveError> {
         // We should NEVER read a block from a blank disk, why would we do that?
         unreachable!()
     }
 
     #[doc = " Write a block"]
-    fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), DriveIOError> {
+    fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), DriveError> {
         write_block_direct(&self.disk_file, block)
     }
 
@@ -54,13 +54,13 @@ impl GenericDiskMethods for BlankDisk {
     }
 
     #[doc = " Sync all in-memory information to disk"]
-    fn flush(&mut self) -> Result<(), DriveIOError> {
+    fn flush(&mut self) -> Result<(), DriveError> {
         // There is no in-memory information for this disk.
         unreachable!()
     }
     
     #[doc = " Write chunked data, starting at a block."]
-    fn unchecked_write_large(&mut self, _data: Vec<u8>, _start_block: DiskPointer) -> Result<(), DriveIOError> {
+    fn unchecked_write_large(&mut self, _data: Vec<u8>, _start_block: DiskPointer) -> Result<(), DriveError> {
         panic!("Large writes are not allowed on blank disks!");
     }
 }
@@ -79,7 +79,7 @@ impl BlockAllocation for BlankDisk {
     }
     
     #[doc = " Update and flush the allocation table to disk."]
-    fn set_allocation_table(&mut self, _new_table: &[u8]) -> Result<(), DriveIOError> {
+    fn set_allocation_table(&mut self, _new_table: &[u8]) -> Result<(), DriveError> {
         panic!("Why are we allocating blocks on a blank disk?")
         
     }

@@ -156,7 +156,7 @@ impl DiskBootstrap for StandardDisk {
         // We assume the caller has passed in the freshest version of the header.
         let header: StandardDiskHeader =
             StandardDiskHeader::from_block(&block);
-        let mut disk = StandardDisk {
+        let disk = StandardDisk {
             number: header.disk_number,
             disk_file: file,
             header,

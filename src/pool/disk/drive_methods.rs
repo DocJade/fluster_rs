@@ -94,54 +94,7 @@ fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, Dr
 
     // We must ignore the CRC here, since we know nothing about the disk.
     trace!("Reading in the header at block 0...");
-
-    // Block reading is performed in a loop to make sure it works.
-    let mut header_block: Option<RawBlock> = None;
-    for _ in 0..10 {
-        let maybe_header_block = read_block_direct(&disk_file, disk_number, 0, true);
-        // Make sure the read worked.
-        if let Ok(good_read) = maybe_header_block {
-            // Reading worked.
-            header_block = Some(good_read);
-            break
-        }
-
-        // Read did not work
-        if let Err(error) = maybe_header_block {
-            // That did not work, can we cast it up?
-            match DriveError::try_from(error) {
-                Ok(casted) => {
-                    // Throw it upwards, not our problem.
-                    return Err(casted);
-                },
-                Err(err) => {
-                    // This is now our problem to deal with.
-                    match err {
-                        CannotConvertError::MustRetry => {
-                            // We'll try the read again.
-                            continue;
-                        },
-                    }
-                },
-            }
-        }
-    }
-
-    // Check if the read was good
-    let header_block: RawBlock = if let Some(header) = header_block {
-        // Cool!
-        header
-    } else {
-        // We must've ran out of retries. Bummer!
-        CriticalError::OutOfRetries(Location::caller()).handle();
-        // This will not recover, fluster is found dead in the bronx
-        unreachable!()
-    };
-    
-
-    // Reading the block worked
-
-
+    let header_block: RawBlock = read_block_direct(&disk_file, disk_number, 0, true)?;
 
     // Now we check for the magic
     trace!("Checking for magic...");

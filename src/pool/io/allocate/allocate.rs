@@ -2,7 +2,7 @@
 
 use log::debug;
 
-use crate::{error_types::drive::{DriveError, DriveIOError}, pool::{
+use crate::{error_types::drive::DriveError, pool::{
     disk::{
         generic::{
             block::{
@@ -46,7 +46,7 @@ impl Pool {
     /// May swap disks, will not return to where it started.
     /// 
     /// Returns disk pointers for the newly reserved blocks, or a disk error.
-    pub fn find_and_allocate_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointer>, DriveIOError> {
+    pub fn find_and_allocate_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointer>, DriveError> {
         // This is just an abstraction to force a different function name, even though
         // the function it calls is the same as find_free_pool_blocks()
         go_find_free_pool_blocks(blocks, add_crc)
@@ -62,7 +62,7 @@ impl Pool {
     /// Returns how many blocks were freed.
     /// 
     /// Will destroy any data currently in that block.
-    pub fn free_pool_block_from_disk(blocks: &[DiskPointer]) -> Result<u16, DriveIOError> {
+    pub fn free_pool_block_from_disk(blocks: &[DiskPointer]) -> Result<u16, DriveError> {
         go_deallocate_pool_block(blocks)
     }
 }
@@ -227,7 +227,7 @@ fn block_indexes_to_pointers(blocks: &Vec<u16>, disk: u16) -> Vec<DiskPointer> {
 /// Assumes block are already marked.
 /// 
 /// This method only works on standard disks
-fn write_empty_crc(blocks: &[u16], disk: u16) -> Result<(), DriveIOError> {
+fn write_empty_crc(blocks: &[u16], disk: u16) -> Result<(), DriveError> {
     // These new blocks do not have their CRC set, we need to just write empty blocks to them to set the crc.
     let mut empty_data: [u8; 512] = [0_u8; 512];
     // CRC that sucker
@@ -251,7 +251,7 @@ fn write_empty_crc(blocks: &[u16], disk: u16) -> Result<(), DriveIOError> {
     Ok(())
 }
 
-fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, DriveIOError> {
+fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, DriveError> {
     // We assume the blocks are pre-sorted to reduce disk seeking.
 
     // Make sure all of the blocks came from the same disk

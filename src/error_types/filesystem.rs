@@ -1,7 +1,7 @@
-use std::process::exit;
-
 use libc::c_int;
 use log::error;
+
+use crate::error_types::drive::DriveError;
 
 //
 //
@@ -47,3 +47,17 @@ pub(in super::super) const TRY_AGAIN: c_int = libc::ERESTART;
 /// 
 /// Should never happen in fluster due to being single threaded.
 pub(in super::super) const BUSY: c_int = libc::EBUSY;
+
+impl From<DriveError> for c_int {
+    fn from(value: DriveError) -> Self {
+        match value {
+            DriveError::DriveEmpty => {
+                // The drive empty error should never get this high
+                error!("Drive empty error should never make it to the filesystem level!");
+                error!("Telling file system that we are busy...");
+                BUSY
+            },
+            DriveError::Retry => TRY_AGAIN,
+        }
+    }
+}

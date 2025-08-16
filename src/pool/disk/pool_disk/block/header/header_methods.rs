@@ -2,11 +2,15 @@
 
 // Imports
 
+use std::panic::Location;
 use std::process::exit;
 
 use log::debug;
 use log::warn;
 
+use crate::error_types::critical::CriticalError;
+use crate::error_types::drive::DriveError;
+use crate::error_types::header::HeaderError;
 use crate::filesystem::filesystem_struct::USE_VIRTUAL_DISKS;
 use crate::pool::disk::blank_disk::blank_disk_struct::BlankDisk;
 use crate::pool::disk::drive_methods::check_for_magic;
@@ -26,11 +30,11 @@ use super::header_struct::PoolDiskHeader;
 
 impl PoolDiskHeader {
     /// Reterive the header from the pool disk
-    pub fn read() -> Result<Self, FloppyDriveError> {
+    pub fn read() -> Result<Self, DriveError> {
         read_pool_header_from_disk()
     }
     /// Overwrite the current header stored on the pool disk.
-    pub fn write(&self) -> Result<(), FloppyDriveError> {
+    pub fn write(&self) -> Result<(), DriveError> {
         write_pool_header_to_disk(self)
     }
     /// Convert the pool header into a RawBlock
@@ -38,14 +42,14 @@ impl PoolDiskHeader {
         pool_header_to_raw_block(self)
     }
     /// Try and convert a raw block into a pool header
-    pub fn from_block(block: &RawBlock) -> Result<PoolDiskHeader, PoolHeaderError> {
+    pub fn from_block(block: &RawBlock) -> Result<PoolDiskHeader, HeaderError> {
         pool_header_from_raw_block(block)
     }
 }
 
 /// This function bypasses the usual disk types.
 /// I dont want to rewrite this right now. It'll do.
-fn read_pool_header_from_disk() -> Result<PoolDiskHeader, FloppyDriveError> {
+fn read_pool_header_from_disk() -> Result<PoolDiskHeader, DriveError> {
     // Get the header block from the pool disk (disk 0)
     // If the header is missing, and there is no fluster magic, ask if we are creating a new pool.
 
@@ -62,7 +66,9 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, FloppyDriveError> {
     {
         // Not using virtual disks, prompt the user...
         let result =
-            rprompt::prompt_reply("Please insert the pool root disk (Disk 0), then press enter. Or type \"wipe\" to enter disk wiper mode.")?;
+            rprompt::prompt_reply("Please insert the pool root disk (Disk 0), then press enter. Or type \"wipe\" to enter disk wiper mode.").expect(
+                "prompting should not fail."
+            );
 
         // This is the only chance the user gets to enter disk wiping mode.
         // Why are we doing this in pool/header_methods ? idk.
@@ -76,6 +82,7 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, FloppyDriveError> {
     // We will contain all of our logic within a loop, so if the user inserts the incorrect disk we can ask for another, etc
     // This is messy. Sorry.
 
+    let mut read_errors: u8 = 0;
     loop {
         // Attempt to extract the header
         // First we need to open the disk, which can fail for various reasons.
@@ -84,15 +91,20 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, FloppyDriveError> {
         let some_disk = match FloppyDrive::open_direct(0) {
             Ok(ok) => ok,
             Err(error) => {
-                // Opening the disk failed, check if we can recover
-                check_for_external_error(&error)?;
-                // We are still here, error was not fatal, try again...
-                warn!("Reading opening the disk failed, but was not fatal.");
-                warn!("Error type: {error}");
+                warn!("Opening the pool disk failed due to: `{error:#?}`");
+                // Opening the disk failed. We will retry at most 10 times.
+                read_errors += 1;
+                if read_errors == 10 {
+                    // Cooked.
+                    CriticalError::OutOfRetries(Location::caller()).handle();
+                    return Err(DriveError::Retry)
+                }
                 // Try again
                 continue;
             }
         };
+
+        // Reset read failures since we got a good read.
 
         // We've now read in either the PoolDisk, or some other type of disk.
         // Find out what it is.
@@ -124,7 +136,7 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, FloppyDriveError> {
 
 /// Ask the user if they want to create a new pool with the currently inserted disk.
 /// If so, we blank out the disk
-fn prompt_for_new_pool(disk: BlankDisk) -> Result<(), FloppyDriveError> {
+fn prompt_for_new_pool(disk: BlankDisk) -> Result<(), DriveError> {
     // if we are running with virtual disks, we skip the prompt.
     debug!("Locking USE_VIRTUAL_DISKS...");
     if USE_VIRTUAL_DISKS
@@ -144,7 +156,7 @@ fn prompt_for_new_pool(disk: BlankDisk) -> Result<(), FloppyDriveError> {
     // Ask the user if they want to create a new pool starting on this disk (hereafer disk 0 / root disk)
     println!("This disk is blank. Do you wish to create a new pool?");
     loop {
-        let reply = rprompt::prompt_reply("y/n: ")?; // Weirdly enough, this is an IO error, lol
+        let reply = rprompt::prompt_reply("y/n: ").expect("prompts should not fail");
         if reply.to_lowercase().starts_with('y') {
             break;
         } else if reply.to_lowercase().starts_with('n') {
@@ -158,7 +170,7 @@ fn prompt_for_new_pool(disk: BlankDisk) -> Result<(), FloppyDriveError> {
     create_new_pool_disk(disk)
 }
 
-fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolDiskHeader, PoolHeaderError> {
+fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolDiskHeader, HeaderError> {
     // As usual, check for the magic
     if !check_for_magic(&block.data) {
         // There is no magic, thus this cannot be a header
@@ -166,11 +178,11 @@ fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolDiskHeader, PoolHe
         // The disk may be blank though.
         if block.data.iter().all(|byte| *byte == 0) {
             // Disk is blank
-            return Err(PoolHeaderError::Blank);
+            return Err(HeaderError::Blank);
         }
 
         // Something else is wrong.
-        return Err(PoolHeaderError::Invalid);
+        return Err(HeaderError::Invalid);
     }
 
     // Pool headers always have bit 7 set in the flags, other headers are forbidden from writing this bit.
@@ -178,7 +190,7 @@ fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolDiskHeader, PoolHe
         Some(ok) => ok,
         None => {
             // extra bits in the flags were set, either this isn't a pool header, or it is corrupted in some way.
-            return Err(PoolHeaderError::Invalid);
+            return Err(HeaderError::Invalid);
         }
     };
 
@@ -186,7 +198,7 @@ fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolDiskHeader, PoolHe
     if !flags.contains(PoolHeaderFlags::RequiredHeaderBit) {
         // The header must have missed the joke, since it didn't quite get the bit.
         // Not a pool header.
-        return Err(PoolHeaderError::Invalid);
+        return Err(HeaderError::Invalid);
     }
 
     // Now we can actually start extracting the header.
@@ -271,7 +283,7 @@ fn pool_header_to_raw_block(header: PoolDiskHeader) -> RawBlock {
     }
 }
 
-fn create_new_pool_disk(mut disk: BlankDisk) -> Result<(), FloppyDriveError> {
+fn create_new_pool_disk(mut disk: BlankDisk) -> Result<(), DriveError> {
     // Time for a brand new pool!
     debug!("A new pool disk was created.");
     // We will create a brand new header, and write that header to the disk.
@@ -290,46 +302,6 @@ fn create_new_pool_disk(mut disk: BlankDisk) -> Result<(), FloppyDriveError> {
 
     // Done!
     Ok(())
-}
-
-/// Returns () if we can recover, use ? to percolate the error easily.
-fn check_for_external_error(error: &FloppyDriveError) -> Result<(), FloppyDriveError> {
-    // There are certian types of errors we cannot recover from when reading in disks.
-    // Reasons are documented next to their corresponding match arms.
-
-    warn!(
-        "Encountered an error while attempting to get information about the currently inserted floppy."
-    );
-    warn!("{error}");
-
-    // TODO: I just wanna get things working, i'll fix this later.
-    match error {
-        FloppyDriveError::Uninitialized => todo!(),
-        FloppyDriveError::NotBlank => todo!(),
-        FloppyDriveError::WipeFailure => todo!(),
-        FloppyDriveError::WrongDisk => todo!(),
-        FloppyDriveError::BadHeader(header_conversion_error) => {
-            todo!("{header_conversion_error:#?}")
-        }
-        FloppyDriveError::BlockError(block_error) => match block_error {
-            crate::pool::disk::generic::block::block_structs::BlockError::InvalidCRC => todo!(),
-            crate::pool::disk::generic::block::block_structs::BlockError::InvalidOffset => todo!(),
-            crate::pool::disk::generic::block::block_structs::BlockError::PermissionDenied => {
-                // The running user does not have permission to write to the floppy drive.
-                println!("You do not have permission to access the path you've provided as the floppy drive.");
-                println!("Chances are, you need sudo/root permissions to access the floppy drive directly.");
-                println!("Please see the Fluster! documentation for more information.");
-                // Unrecoverable.
-                exit(-1);
-            },
-            crate::pool::disk::generic::block::block_structs::BlockError::WriteFailure => todo!(),
-            crate::pool::disk::generic::block::block_structs::BlockError::DeviceBusy => todo!(),
-            crate::pool::disk::generic::block::block_structs::BlockError::Interrupted => todo!(),
-            crate::pool::disk::generic::block::block_structs::BlockError::Invalid => todo!(),
-            crate::pool::disk::generic::block::block_structs::BlockError::NotFound => todo!(),
-            crate::pool::disk::generic::block::block_structs::BlockError::Unknown(_) => todo!(),
-        },
-    }
 }
 
 // Brand new pool header
@@ -369,7 +341,7 @@ fn new_pool_header() -> PoolDiskHeader {
 }
 
 /// Put that pool away
-fn write_pool_header_to_disk(header: &PoolDiskHeader) -> Result<(), FloppyDriveError> {
+fn write_pool_header_to_disk(header: &PoolDiskHeader) -> Result<(), DriveError> {
     // Make a block
     let header_block = header.to_block();
 

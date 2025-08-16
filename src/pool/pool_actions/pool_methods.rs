@@ -6,7 +6,6 @@ use super::pool_struct::GLOBAL_POOL;
 use super::pool_struct::Pool;
 use super::pool_struct::PoolStatistics;
 use crate::error_types::drive::DriveError;
-use crate::error_types::drive::DriveIOError;
 use crate::pool::disk::drive_struct::DiskBootstrap;
 use crate::pool::disk::drive_struct::FloppyDrive;
 use crate::pool::disk::generic::block::block_structs::RawBlock;
@@ -49,7 +48,7 @@ impl Pool {
     /// Get the root inode block
     ///
     /// May swap disks, but you should be working with enough abstractions to not care.
-    pub fn get_root_directory() -> Result<DirectoryBlock, DriveIOError> {
+    pub fn get_root_directory() -> Result<DirectoryBlock, DriveError> {
         pool_get_root_directory()
     }
     /// Get a DirectoryItem that has details about the root directory.
@@ -214,7 +213,7 @@ fn add_disk<T: DiskBootstrap>() -> Result<T, DriveError> {
 }
 
 /// Grabs the root inode block
-fn pool_get_root_directory() -> Result<DirectoryBlock, DriveIOError> {
+fn pool_get_root_directory() -> Result<DirectoryBlock, DriveError> {
     // Root directory should always be at disk 1 block 2. We just assume that to be the case.
     // Why do we have a root inode that points to the root directory when its always in a static location?
     // Beats me, I forgot why I did that.
