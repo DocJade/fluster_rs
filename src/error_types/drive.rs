@@ -29,6 +29,7 @@ pub enum DriveIOError {
     Critical(CriticalError)
 }
 
+#[derive(Debug, Error, PartialEq)]
 /// Reasons why we cannot use the provided floppy disk path
 pub enum InvalidDriveReason {
     /// Pointed at a folder instead of a file.
