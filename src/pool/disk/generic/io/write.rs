@@ -82,7 +82,10 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
     error!("Write failure, requires assistance.");
     
     // Since we made it out of the loop, the error variable MUST be set.
-    let error = most_recent_error.expect("Shouldn't be able to exit the loop without an error.");
+    let error = match most_recent_error {
+        Some(ok) => ok,
+        None => unreachable!("Shouldn't be able to exit the loop without an error."),
+    };
 
     // Do the error cleanup, if that works, we'll tell the caller to retry.
     CriticalError::FloppyWriteFailure(error.0, error.1).handle();
@@ -152,7 +155,10 @@ pub(crate) fn write_large_direct(disk_file: &File, data: Vec<u8>, start_block: D
     error!("Write failure, requires assistance.");
     
     // Since we made it out of the loop, the error variable MUST be set.
-    let error = most_recent_error.expect("Shouldn't be able to exit the loop without an error.");
+    let error = match most_recent_error {
+        Some(ok) => ok,
+        None => unreachable!("Shouldn't be able to exit the loop without an error."),
+    };
 
     // Do the error cleanup, if that works, we'll tell the caller to retry.
     CriticalError::FloppyWriteFailure(error.0, error.1).handle();

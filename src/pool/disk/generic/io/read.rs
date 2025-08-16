@@ -36,7 +36,7 @@ pub(crate) fn read_block_direct(
     // Bounds checking
     if block_index >= 2880 {
         // This block is impossible to access.
-        panic!("Impossible read offset `{}`!",  block_index)
+        panic!("Impossible read offset `{block_index}`!")
     }
 
     // allocate space for the block
@@ -101,7 +101,10 @@ pub(crate) fn read_block_direct(
     error!("Read failure, requires assistance.");
     
     // Since we made it out of the loop, the error variable MUST be set.
-    let error = most_recent_error.expect("Shouldn't be able to exit the loop without an error.");
+    let error = match most_recent_error {
+        Some(ok) => ok,
+        None => unreachable!("Shouldn't be able to exit the loop without an error."),
+    };
 
     // Do the error cleanup, if that works, we'll tell the caller to retry.
     CriticalError::FloppyReadFailure(error.0, error.1).handle();
