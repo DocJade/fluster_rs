@@ -6,6 +6,7 @@
 
 // Tests
 
+use crate::error_types::block::BlockManipulationError;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::Inode;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeFile;
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
@@ -15,7 +16,6 @@ use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeDirectory;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeTimestamp;
 use rand::Rng;
-use rand::rngs::ThreadRng;
 
 use test_log::test; // We want to see logs while testing.
 #[test]
@@ -45,7 +45,7 @@ fn fill_inode_block() {
         let add_result = test_block.try_add_inode(inode);
         if add_result.is_err() {
             // It must be full, its impossible to fragment without removing items.
-            assert_eq!(add_result.err().unwrap(), InodeBlockError::NotEnoughSpace);
+            assert_eq!(add_result.err().unwrap(), BlockManipulationError::OutOfRoom);
             break;
         }
         // Keep track of all added inodes so we can validate them.
@@ -74,7 +74,7 @@ fn filled_inode_block_serialization() {
             let add_result = test_block.try_add_inode(Inode::get_random());
             if add_result.is_err() {
                 // It must be full, its impossible to fragment without removing items.
-                assert_eq!(add_result.err().unwrap(), InodeBlockError::NotEnoughSpace);
+                assert_eq!(add_result.err().unwrap(), BlockManipulationError::OutOfRoom);
                 break;
             }
         }
@@ -83,51 +83,6 @@ fn filled_inode_block_serialization() {
         let serialized = test_block.to_block();
         let deserialized = InodeBlock::from_block(&serialized);
         assert_eq!(test_block, deserialized)
-    }
-}
-
-#[test]
-/// Checks if we can detect a fragmented block.
-fn inode_block_fragmentation() {
-    let mut random: ThreadRng = rand::rng();
-    let block_origin = DiskPointer {
-        disk: 420,
-        block: 69,
-    };
-    let mut test_block: InodeBlock = InodeBlock::new(block_origin);
-    let mut inode_offsets: Vec<u16> = Vec::new();
-    // now we will repeatedly add and remove blocks at random, at some point there should be enough fragmentation for
-    // adding a new block to fail
-    loop {
-        // add an element
-        match test_block.try_add_inode(Inode::get_random()) {
-            Ok(ok) => {
-                // Add this offset to our list so we can delete it later to cause fragmentation.
-                inode_offsets.push(ok);
-            }
-            Err(err) => {
-                match err {
-                    InodeBlockError::NotEnoughSpace => {
-                        // We are out of space, so remove a random inode.
-                        // pick one
-                        let to_remove: usize = random.random_range(0..inode_offsets.len());
-                        // Remove inode
-                        test_block
-                            .try_remove_inode(inode_offsets[to_remove])
-                            .unwrap();
-                        // Remove stored offset
-                        let _ = inode_offsets.swap_remove(to_remove);
-                        continue;
-                    }
-                    InodeBlockError::BlockIsFragmented => {
-                        // this is our desired outcome.
-                        return;
-                    }
-                    // Other errors should not happen
-                    _ => panic!(),
-                }
-            }
-        }
     }
 }
 

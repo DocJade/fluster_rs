@@ -3,7 +3,6 @@
 // Imports
 
 use bitflags::bitflags;
-use thiserror::Error;
 
 use crate::pool::disk::{
     generic::generic_structs::pointer_struct::DiskPointer,
