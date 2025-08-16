@@ -19,6 +19,7 @@ use crate::pool::disk::generic::disk_trait::GenericDiskMethods;
 // use crate::pool::disk::generic::io::cache::cache_io::CachedBlockIO;
 use crate::pool::disk::generic::io::read::read_block_direct;
 
+use crate::pool::disk::generic::io::wipe::destroy_disk;
 use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
 
 use crate::pool::disk::pool_disk::pool_disk_struct::PoolDisk;
@@ -293,7 +294,7 @@ fn prompt_for_blank_disk(disk_number: u16) -> Result<BlankDisk, FloppyDriveError
         .is_some()
     {
         let _ = rprompt::prompt_reply(
-            "That disk is not blank. Please insert a blank disk, then hit enter.",
+            "Creating a new disk, please insert a blank disk that will become disk {}, then hit enter.",
         )?;
     }
 
@@ -309,13 +310,15 @@ fn prompt_for_blank_disk(disk_number: u16) -> Result<BlankDisk, FloppyDriveError
             // if its blank, all done
             DiskType::Blank(blank_disk) => return Ok(blank_disk),
             DiskType::Unknown(unknown_disk) => {
-                // But if its an unknown disk, we can ask if the user would like to wipe their ass.
-                display_info_and_ask_wipe(unknown_disk.into())?;
+                // But if the disk is not blank, 
+                display_info_and_ask_wipe(&mut unknown_disk.into())?;
                 // try again
                 continue;
             }
             _ => {
                 // This is not a blank disk.
+                // We can ask if the user would like to wipe their ass.
+
                 try_again = true;
             }
         }
@@ -325,19 +328,26 @@ fn prompt_for_blank_disk(disk_number: u16) -> Result<BlankDisk, FloppyDriveError
 /// Takes in a non-blank disk and displays info about it, then asks the user if they would like to wipe the disk.
 /// Wipes the disk if the user asks, returns nothing.
 /// Will also return nothing if the user does not wipe the disk.
-pub fn display_info_and_ask_wipe(disk: DiskType) -> Result<(), FloppyDriveError> {
+pub fn display_info_and_ask_wipe(disk: &mut DiskType) -> Result<(), FloppyDriveError> {
     // This isn't a very friendly interface, but it'll do for now.
 
-    // Display the disk type
-    println!("The disk inserted is not blank. It is of type {disk:?}.");
-    println!("Would you like to wipe this disk?");
     loop {
+        // Display the disk type
+        println!("The disk inserted is not blank. It is of type `{disk:?}`.");
+        println!("Would you like to wipe this disk?");
         let answer = rprompt::prompt_reply("y/n: ")?
             .to_ascii_lowercase()
             .contains('y');
         if answer {
-            // Wipe time!
-            todo!()
+            // Make absolutely sure!
+            if rprompt::prompt_reply("Are you really sure? (Type \"Do as I say!\": ")?
+            .to_ascii_lowercase()
+            .contains("Do as I say!") {
+                // Wipe time!
+                destroy_disk(disk.disk_file_mut())?;
+            }
+            println!("You've chickened out.");
+            continue;
         } else {
             // No wipe.
             print!("Okay, this disk will not be wiped.");

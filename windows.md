@@ -11,7 +11,7 @@ You need to build/run from inside of WSL.
 The default WSL kernels do not have the usb_storage module enabled, we will need to build our own.
 
 Follow [this](https://chris.harrington.mn/project/2022/07/30/wsl2-usb-storage.html) up until the `Windows USB-IP` section.
-`sudo modprobe usb-storage` should not fail. You can check if it was actually loaded with `lsmod`
+`sudo modprobe usb-storage` should not fail. You can check if it was actually loaded with `lsmod`.
 
 # Step 1: USB floppy passthrough.
 
@@ -77,4 +77,40 @@ Required dependancies (non exhaustive):
 - libfuse3-dev
 - rust (duh)
 
-todo
+Open the Fluster! source code directory (the one that contains cargo.toml).
+Build with `cargo build --release`
+(You can also build with `--profile floppy` for a smaller binary. Using `upx --best` on it should make it fit on a floppy if you
+really wanna have fun with it. Currently shrinks to under 800kb!)
+
+Pick a folder to mount to, for this example I will mount in `~/mounted/`.
+Remember your floppy drive path (The SD one). For this example, my drive is at `sde`.
+
+### YOU BETTER MAKE DAMN SURE YOU'RE PASSING IN THE FLOPPY DRIVE
+
+### READ THIS
+Fluster! WILL overwrite data on whatever block device you pass it.
+If you do not know what "block device" even means, this is your final warning. Do NOT continue further.
+
+Since we will be writing directly to the floppy disk without a pre-existing filesystem (we are the file system!) we
+unfortunately need to escalate permissions.
+
+So we'll just run it at sudo. Great idea I know.
+
+There is probably a safer way to do this (Such as using udev rules), but I got bored reading the documentation.
+
+
+Run fluster:
+- Go to the output directory for the binary you built (./target/release/)
+
+Run it as sudo with:
+`sudo ./fluster_fs --block-device-path "/dev/sdX" --mount-point "~/mounted/fluster"`
+
+If you don't want to run as sudo/root, you're smart.
+Smart enough to figure out another solution. Good luck!
+
+Be warned, this will consume the terminal window you started the program with.
+Try using `tmux` to split your window if needed. (Must be installed ofc, Google it.)
+
+You can also run with debug info by pre-pending `RUST_LOG=debug` to the command if you're a nerd.
+This does add some performance overhead, which would only really matter if you're using the
+secret `--use-virtual-disks` option.

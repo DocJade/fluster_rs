@@ -1,5 +1,7 @@
 // Stuff for block structs!
 
+use log::warn;
+
 // Imports
 use super::block_structs::BlockError;
 
@@ -16,6 +18,8 @@ impl From<std::io::Error> for BlockError {
 }
 
 fn extract_read_error(error: std::io::Error) -> BlockError {
+    warn!("Got an error when doing io:");
+    warn!("{error:#?}");
     // What happened?
     match error.kind() {
         // Our handling of these errors is made with the following assumptions:
@@ -38,6 +42,26 @@ fn extract_read_error(error: std::io::Error) -> BlockError {
         std::io::ErrorKind::WriteZero => BlockError::WriteFailure,
         std::io::ErrorKind::ResourceBusy => BlockError::DeviceBusy,
         std::io::ErrorKind::Interrupted => BlockError::Interrupted,
-        _ => BlockError::Unknown(error.to_string()),
+        _ => {
+            // A disk not being in the drive is an uncatagorized error.
+            // Annoyingly there is not a type for that, so we have to extract the error code and check that
+
+            // Os {
+            //     code: 123,
+            //     kind: Uncategorized,
+            //     message: "No medium found",
+            // }
+            if let Some(os_error) = error.raw_os_error() {
+                if os_error == 123 {
+                    // This is probably no floppy inserted.
+                    return BlockError::NotFound;
+                }
+            }
+
+            // Otherwise, no idea what this error is.
+            BlockError::Unknown(error.to_string())
+        },
     }
 }
+
+

@@ -2,6 +2,8 @@
 
 // Imports
 
+use std::process::exit;
+
 use log::debug;
 use log::warn;
 
@@ -16,6 +18,7 @@ use crate::pool::disk::generic::block::block_structs::RawBlock;
 use crate::pool::disk::generic::block::crc::add_crc_to_block;
 use crate::pool::disk::generic::disk_trait::GenericDiskMethods;
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+use crate::pool::disk::generic::io::wipe::destroy_disk;
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolHeaderFlags;
 use crate::pool::disk::pool_disk::pool_disk_struct::PoolDisk;
 
@@ -61,8 +64,16 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, FloppyDriveError> {
         .is_some()
     {
         // Not using virtual disks, prompt the user...
-        let _ =
-            rprompt::prompt_reply("Please insert the pool root disk (Disk 0), then press enter.");
+        let result =
+            rprompt::prompt_reply("Please insert the pool root disk (Disk 0), then press enter. Or type \"wipe\" to enter disk wiper mode.")?;
+
+        // This is the only chance the user gets to enter disk wiping mode.
+        // Why are we doing this in pool/header_methods ? idk.
+
+        if result.contains("wipe") {
+            disk_wiper_mode()
+        }
+
     }
 
     // We will contain all of our logic within a loop, so if the user inserts the incorrect disk we can ask for another, etc
@@ -96,12 +107,12 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, FloppyDriveError> {
             }
             crate::pool::disk::drive_struct::DiskType::Standard(standard_disk) => {
                 // For any disk type other than Blank, we will ask if user wants to wipe it.
-                display_info_and_ask_wipe(DiskType::Standard(standard_disk))?;
+                display_info_and_ask_wipe(&mut DiskType::Standard(standard_disk))?;
                 // Start the loop over, if they wiped the disk, the outcome will change.
                 continue;
             }
             crate::pool::disk::drive_struct::DiskType::Unknown(file) => {
-                display_info_and_ask_wipe(DiskType::Unknown(file))?;
+                display_info_and_ask_wipe(&mut DiskType::Unknown(file))?;
                 continue;
             }
             crate::pool::disk::drive_struct::DiskType::Blank(disk) => {
@@ -126,9 +137,7 @@ fn prompt_for_new_pool(disk: BlankDisk) -> Result<(), FloppyDriveError> {
     {
         debug!("We are running with virtual disks, skipping the new pool prompt.");
         // Using virtual disks, we are going to create the pool immediately.
-        create_new_pool_disk(disk)?;
-        // Return, next loop will catch that this has changed.
-        return Ok(());
+        return create_new_pool_disk(disk);
     } else {
         // If we are running a test, we should never be asking for user input, thus we should always
         // be using virtual disks.
@@ -148,7 +157,8 @@ fn prompt_for_new_pool(disk: BlankDisk) -> Result<(), FloppyDriveError> {
         println!("Try again.")
     }
 
-    todo!()
+    // User said yes. Make the disk.
+    create_new_pool_disk(disk)
 }
 
 fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolDiskHeader, PoolHeaderError> {
@@ -304,7 +314,24 @@ fn check_for_external_error(error: &FloppyDriveError) -> Result<(), FloppyDriveE
         FloppyDriveError::BadHeader(header_conversion_error) => {
             todo!("{header_conversion_error:#?}")
         }
-        FloppyDriveError::BlockError(block_error) => todo!("{block_error:#?}"),
+        FloppyDriveError::BlockError(block_error) => match block_error {
+            crate::pool::disk::generic::block::block_structs::BlockError::InvalidCRC => todo!(),
+            crate::pool::disk::generic::block::block_structs::BlockError::InvalidOffset => todo!(),
+            crate::pool::disk::generic::block::block_structs::BlockError::PermissionDenied => {
+                // The running user does not have permission to write to the floppy drive.
+                println!("You do not have permission to access the path you've provided as the floppy drive.");
+                println!("Chances are, you need sudo/root permissions to access the floppy drive directly.");
+                println!("Please see the Fluster! documentation for more information.");
+                // Unrecoverable.
+                exit(-1);
+            },
+            crate::pool::disk::generic::block::block_structs::BlockError::WriteFailure => todo!(),
+            crate::pool::disk::generic::block::block_structs::BlockError::DeviceBusy => todo!(),
+            crate::pool::disk::generic::block::block_structs::BlockError::Interrupted => todo!(),
+            crate::pool::disk::generic::block::block_structs::BlockError::Invalid => todo!(),
+            crate::pool::disk::generic::block::block_structs::BlockError::NotFound => todo!(),
+            crate::pool::disk::generic::block::block_structs::BlockError::Unknown(_) => todo!(),
+        },
     }
 }
 
@@ -365,4 +392,48 @@ fn write_pool_header_to_disk(header: &PoolDiskHeader) -> Result<(), FloppyDriveE
 
     // All done.
     Ok(())
+}
+
+/// Disk wiper mode
+fn disk_wiper_mode() -> ! {
+    // Time to wipe some disks!
+    println!("Welcome to disk wiper mode!");
+    loop {
+        let are_we_done_yet =
+            rprompt::prompt_reply("Please insert the next disk you would like to wipe, then hit enter. Or type `exit`.").expect("STDIO moment, should not fail");
+        if are_we_done_yet.contains("exit") {
+            // User is bored.
+            break;
+        }
+        // Wiping another disk.
+        println!("Wiping the inserted disk, please wait...");
+        
+        // Get the disk from the drive. Disk numbers do not matter here.
+        let mut disk = match FloppyDrive::open_direct(0) {
+            Ok(ok) => ok,
+            Err(err) => {
+                // Uh oh
+                println!("Opening the disk failed. Here's why:");
+                println!("{err:#?}");
+                break; // cannot go further if the drive is angry.
+            },
+        };
+
+        // Wipe the disk
+        match destroy_disk(disk.disk_file_mut()) {
+            Ok(_) => {},
+            Err(err) => {
+                // Uh oh
+                println!("Wiping the disk failed. Here's why:");
+                println!("{err:#?}");
+                break;
+            },
+        }
+
+        println!("Disk wiped.");
+    }
+
+    // Done wiping disks, user must restart Fluster.
+    println!("Exiting disk wiping mode. You must restart fluster.");
+    exit(0);
 }

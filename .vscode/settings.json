@@ -6,5 +6,8 @@
         "--no-fail-fast",
         "--",
         "--nocapture"
+    ],
+    "cSpell.words": [
+        "uncatagorized"
     ]
 }
