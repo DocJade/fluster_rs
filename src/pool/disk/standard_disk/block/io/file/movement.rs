@@ -2,14 +2,13 @@
 
 use log::debug;
 
-use crate::pool::disk::{
+use crate::{error_types::drive::DriveError, pool::disk::{
     generic::{
         block::block_structs::RawBlock,
         generic_structs::pointer_struct::DiskPointer,
         io::cache::cache_io::CachedBlockIO
     },
-    standard_disk::{
-        block::{
+    standard_disk::block::{
             directory::directory_struct::DirectoryItem,
             file_extents::file_extents_methods::DATA_BLOCK_OVERHEAD,
             inode::inode_struct::{
@@ -18,8 +17,7 @@ use crate::pool::disk::{
                 InodeFile
             }
         }
-    }
-};
+}};
 
 impl InodeFile {
     /// Find where a seek lands.
@@ -46,7 +44,7 @@ impl InodeFile {
 
 impl DirectoryItem {
     /// Retrieve the inode that refers to this block.
-    pub fn get_inode(&self) -> Result<Inode, FloppyDriveError> {
+    pub fn get_inode(&self) -> Result<Inode, DriveError> {
         debug!("Extracting inode from DirectoryItem...");
         // read in that inode block
         let pointer: DiskPointer = self.location.pointer;

@@ -8,26 +8,24 @@
 
 use log::trace;
 
-use crate::pool::{
+use crate::{error_types::{block::BlockManipulationError, drive::DriveError}, pool::{
     disk::{
         generic::{
             block::block_structs::RawBlock,
             generic_structs::pointer_struct::DiskPointer,
             io::cache::cache_io::CachedBlockIO,
         },
-        standard_disk::{
-            block::inode::inode_struct::{
+        standard_disk::block::inode::inode_struct::{
                 Inode,
                 InodeBlock,
                 InodeLocation
-            }
-        },
+            },
     },
     pool_actions::pool_struct::{
         Pool,
         GLOBAL_POOL
     },
-};
+}};
 
 // For the pool implementations, we do not use Self, as we might try to double mut it if the inode
 // addition routine adds a new disk.
@@ -42,7 +40,7 @@ impl Pool {
     /// and create new disks if needed.
     ///
     /// Returns where the inode ended up.
-    pub fn fast_add_inode(inode: Inode) -> Result<InodeLocation, FloppyDriveError> {
+    pub fn fast_add_inode(inode: Inode) -> Result<InodeLocation, DriveError> {
         trace!("Fast adding inode...");
         // Get the pool's latest inode disk
         trace!("Locking GLOBAL_POOL...");
@@ -86,7 +84,7 @@ impl Pool {
     /// and create new disks if needed.
     ///
     /// Returns where the inode ended up.
-    pub fn add_inode(inode: Inode) -> Result<InodeLocation, FloppyDriveError> {
+    pub fn add_inode(inode: Inode) -> Result<InodeLocation, DriveError> {
         trace!("Adding inode, starting from disk 1...");
         // Start from the origin.
         let start_pointer: DiskPointer = DiskPointer { disk: 1, block: 1 };
@@ -114,7 +112,7 @@ impl Pool {
     }
 }
 
-fn go_add_inode(inode: Inode, start_block: InodeBlock) -> Result<InodeLocation, FloppyDriveError> {
+fn go_add_inode(inode: Inode, start_block: InodeBlock) -> Result<InodeLocation, DriveError> {
     // We will start from the provided block.
 
     
@@ -135,14 +133,18 @@ fn go_add_inode(inode: Inode, start_block: InodeBlock) -> Result<InodeLocation, 
                 break;
             }
             Err(error) => match error {
-                InodeBlockError::NotEnoughSpace => {
-                    // Not enough room on this block, go fish.
-                }
-                InodeBlockError::BlockIsFragmented => {
-                    // Someday, we'll be able to request an inode defrag.
-                    todo!("Inode defrag not written.")
-                }
-                InodeBlockError::InvalidOffset => todo!(),
+                BlockManipulationError::OutOfRoom => {
+                                // Not enough room on this block, go fish.
+                            }
+                BlockManipulationError::Impossible => {
+                                // Impossible offsets should never happen.
+                                unreachable!("Impossible inode offset. {inode:#?}")
+                            },
+                BlockManipulationError::NotFinalBlockInChain | BlockManipulationError::NotPresent => {
+                    // Not possible here, inodes dont care about being the final block,
+                    // and adding doesnt check if an item is present.
+                    unreachable!()
+                },
             },
         }
         // There wasn't enough room, proceed to the next block.
@@ -174,7 +176,7 @@ fn go_add_inode(inode: Inode, start_block: InodeBlock) -> Result<InodeLocation, 
     Ok(new_location)
 }
 
-fn get_next_block(current_block: InodeBlock) -> Result<DiskPointer, FloppyDriveError> {
+fn get_next_block(current_block: InodeBlock) -> Result<DiskPointer, DriveError> {
     // Extract the pointer
     if let Some(ok) = current_block.next_block() {
         // Sweet, it exists already.
@@ -199,7 +201,7 @@ fn get_next_block(current_block: InodeBlock) -> Result<DiskPointer, FloppyDriveE
 }
 
 /// We need a new inode block, we will reach upwards and get a new block made for us.
-fn make_new_inode_block() -> Result<DiskPointer, FloppyDriveError> {
+fn make_new_inode_block() -> Result<DiskPointer, DriveError> {
     // Ask the pool for a new block pwease
     // No need for crc since we'll be overwriting it immediately.
     let ask_nicely = Pool::find_and_allocate_pool_blocks(1, false)?;

@@ -3,17 +3,15 @@
 
 use log::{debug, trace};
 
-use crate::pool::disk::{
+use crate::{error_types::drive::DriveError, pool::disk::{
     generic::{
         block::block_structs::RawBlock,
         generic_structs::pointer_struct::DiskPointer,
         io::cache::cache_io::CachedBlockIO
     },
-    standard_disk::{
-        block::{
+    standard_disk::block::{
             directory::directory_struct::{
-                DirectoryItemFlags,
-                DirectoryItem
+                DirectoryItem, DirectoryItemFlags
             },
             file_extents::{
                 file_extents_methods::DATA_BLOCK_OVERHEAD,
@@ -27,26 +25,25 @@ use crate::pool::disk::{
                 InodeFile
             }
         }
-    }
-};
+}};
 
 impl InodeFile {
     // Local functions
     /// Extract all of the extents and spit out a list of all of the blocks.
-    pub(super) fn to_pointers(&self) -> Result<Vec<DiskPointer>, FloppyDriveError> {
+    pub(super) fn to_pointers(&self) -> Result<Vec<DiskPointer>, DriveError> {
         go_to_pointers(self)
     }
     /// Extract all of the extents.
-    pub(super) fn to_extents(&self) -> Result<Vec<FileExtent>, FloppyDriveError> {
+    pub(super) fn to_extents(&self) -> Result<Vec<FileExtent>, DriveError> {
         let root = self.get_root_block()?;
         go_to_extents(&root)
     }
     /// Goes and gets the FileExtentBlock this refers to.
-    fn get_root_block(&self) -> Result<FileExtentBlock, FloppyDriveError> {
+    fn get_root_block(&self) -> Result<FileExtentBlock, DriveError> {
         go_get_root_block(self)
     }
     /// Read a file
-    fn read(&self, seek_point: u64, size: u32) -> Result<Vec<u8>, FloppyDriveError> {
+    fn read(&self, seek_point: u64, size: u32) -> Result<Vec<u8>, DriveError> {
         go_read_file(self, seek_point, size)
     }
 }
@@ -64,7 +61,7 @@ impl DirectoryItem {
     /// Reads in a file at a starting offset, and returns `x` bytes after that offset.
     /// 
     /// Optionally returns to a specified disk.
-    pub fn read_file(&self, seek_point: u64, size: u32) -> Result<Vec<u8>, FloppyDriveError> {
+    pub fn read_file(&self, seek_point: u64, size: u32) -> Result<Vec<u8>, DriveError> {
         // Is this a file?
         if self.flags.contains(DirectoryItemFlags::IsDirectory) {
             // Uh, no it isn't why did you give me a dir?
@@ -96,7 +93,7 @@ impl DirectoryItem {
 
 
 
-fn go_to_pointers(location: &InodeFile) -> Result<Vec<DiskPointer>, FloppyDriveError> {
+fn go_to_pointers(location: &InodeFile) -> Result<Vec<DiskPointer>, DriveError> {
     // get extents
     let extents = location.to_extents()?;
     // Extract all the blocks
@@ -120,7 +117,7 @@ fn go_to_pointers(location: &InodeFile) -> Result<Vec<DiskPointer>, FloppyDriveE
 
 fn go_to_extents(
     block: &FileExtentBlock,
-) -> Result<Vec<FileExtent>, FloppyDriveError> {
+) -> Result<Vec<FileExtent>, DriveError> {
     // Totally didn't just lift the directory logic and tweak it, no sir.
     debug!("Extracting extents for a file...");
     // We need to iterate over the entire ExtentBlock chain and get every single item.
@@ -159,7 +156,7 @@ fn go_to_extents(
 }
 
 
-fn go_get_root_block(file: &InodeFile) -> Result<FileExtentBlock, FloppyDriveError> {
+fn go_get_root_block(file: &InodeFile) -> Result<FileExtentBlock, DriveError> {
     // Make sure this actually goes somewhere
     assert!(!file.pointer.no_destination());
     let raw_block: RawBlock = CachedBlockIO::read_block(file.pointer)?;
@@ -169,7 +166,7 @@ fn go_get_root_block(file: &InodeFile) -> Result<FileExtentBlock, FloppyDriveErr
 
 
 
-fn go_read_file(file: &InodeFile, seek_point: u64, size: u32) -> Result<Vec<u8>, FloppyDriveError> {
+fn go_read_file(file: &InodeFile, seek_point: u64, size: u32) -> Result<Vec<u8>, DriveError> {
     // Make sure the file is big enough
     assert!(file.get_size()>= seek_point + size as u64);
 
@@ -219,7 +216,7 @@ fn go_read_file(file: &InodeFile, seek_point: u64, size: u32) -> Result<Vec<u8>,
 /// Read as many bytes as we can from this block.
 /// 
 /// Returns number of bytes read
-fn read_bytes_from_block(block: DiskPointer, offset: u16, bytes_to_read: u32) -> Result<Vec<u8>, FloppyDriveError> {
+fn read_bytes_from_block(block: DiskPointer, offset: u16, bytes_to_read: u32) -> Result<Vec<u8>, DriveError> {
 
     // How much data a block can hold
     let data_capacity = 512 - DATA_BLOCK_OVERHEAD as usize;

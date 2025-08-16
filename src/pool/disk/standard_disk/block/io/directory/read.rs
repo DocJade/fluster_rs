@@ -2,7 +2,7 @@
 
 use log::{debug, error, warn};
 
-use crate::pool::{
+use crate::{error_types::drive::DriveError, pool::{
     disk::{
         generic::{
             block::block_structs::RawBlock,
@@ -11,15 +11,13 @@ use crate::pool::{
         },
         standard_disk::block::{
             directory::directory_struct::{
-                DirectoryBlock,
-                DirectoryItemFlags,
-                DirectoryItem
+                DirectoryBlock, DirectoryItem, DirectoryItemFlags
             },
             io::directory::types::NamedItem,
         }
     },
     pool_actions::pool_struct::Pool
-};
+}};
 
 impl DirectoryBlock {
     /// Check if this directory contains an item with the provided name and type.
@@ -31,7 +29,7 @@ impl DirectoryBlock {
     pub fn find_item(
         &self,
         item_to_find: &NamedItem,
-    ) -> Result<Option<DirectoryItem>, FloppyDriveError> {
+    ) -> Result<Option<DirectoryItem>, DriveError> {
         let extracted_debug = item_to_find.debug_strings();
         debug!(
             "Checking if a directory contains the {} `{}`...",
@@ -69,7 +67,7 @@ impl DirectoryBlock {
     /// Returned DirectoryItem(s) will have their InodeLocation's disk set.
     ///
     /// May swap disks.
-    pub fn list(&self) -> Result<Vec<DirectoryItem>, FloppyDriveError> {
+    pub fn list(&self) -> Result<Vec<DirectoryItem>, DriveError> {
         go_list_directory(self)
     }
 
@@ -78,7 +76,7 @@ impl DirectoryBlock {
     /// Does not recurse into sub-directories. (Seems to be standard behavior in ls -l)
     /// 
     /// Returns the size in bytes.
-    pub fn get_size(&self) -> Result<u64, FloppyDriveError> {
+    pub fn get_size(&self) -> Result<u64, DriveError> {
         debug!("Getting size of a directory...");
         // get all the items
         debug!("Listing items...");
@@ -129,7 +127,7 @@ impl DirectoryBlock {
     /// Updates the passed in directory block.
     /// 
     /// Returns nothing if the item did not exist.
-    pub(crate) fn find_and_extract_item(&mut self, item_to_find: &NamedItem) -> Result<Option<DirectoryItem>, FloppyDriveError> {
+    pub(crate) fn find_and_extract_item(&mut self, item_to_find: &NamedItem) -> Result<Option<DirectoryItem>, DriveError> {
 
         // Go find the item.
 
@@ -217,7 +215,7 @@ impl DirectoryBlock {
     /// if that block exists or not (will return a final pointer on the last block).
     /// 
     /// Not a public function, use `find_and_extract_item`.
-    fn block_extract_item(&mut self, item_to_find: &NamedItem) -> Result<Option<(DirectoryItem, Option<DiskPointer>)>, FloppyDriveError> {
+    fn block_extract_item(&mut self, item_to_find: &NamedItem) -> Result<Option<(DirectoryItem, Option<DiskPointer>)>, DriveError> {
         // Do we have the requested item?
         if let Some(found) = item_to_find.find_in(&self.directory_items) {
             // Found the item!
@@ -252,7 +250,7 @@ impl DirectoryBlock {
     /// Returns true if the item existed and was renamed.
     /// 
     /// Flushes change to disk.
-    pub(crate) fn try_rename_item(&mut self, to_rename: &NamedItem, new_name: String) -> Result<bool, FloppyDriveError> {
+    pub(crate) fn try_rename_item(&mut self, to_rename: &NamedItem, new_name: String) -> Result<bool, DriveError> {
 
         // Since the size of the item might change (name length change) we cant just update the name directly, we have to
         // extract the item and re-add it.
@@ -298,7 +296,7 @@ impl DirectoryBlock {
                 }
                 // Now we are... fine? The item is still there, it just 
                 // wasn't renamed.
-                Err(FloppyDriveError::BlockError(BlockError::DeviceBusy))
+                Err(DriveError::Retry)
             }
         } else {
             // No such item.
@@ -311,7 +309,7 @@ impl DirectoryBlock {
 
 fn go_list_directory(
     block: &DirectoryBlock,
-) -> Result<Vec<DirectoryItem>, FloppyDriveError> {
+) -> Result<Vec<DirectoryItem>, DriveError> {
     debug!("Listing a directory...");
     // We need to iterate over the entire directory and get every single item.
     // We assume we are handed the first directory in the chain.
@@ -343,7 +341,7 @@ fn go_list_directory(
 /// Does not take in a directory block, since we would need to consume it.
 /// 
 /// Includes the head block.
-fn get_blocks(start_block_location: DiskPointer) -> Result<Vec<DirectoryBlock>, FloppyDriveError> {
+fn get_blocks(start_block_location: DiskPointer) -> Result<Vec<DirectoryBlock>, DriveError> {
     // Needing to consume the incoming block would be stinky. But since cloning is not allowed, and we
     // need to return the head block, we have to go get it ourselves.
 
