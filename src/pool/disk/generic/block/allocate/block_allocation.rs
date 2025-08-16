@@ -7,12 +7,18 @@
 // allocate past the end of the table
 
 use enum_dispatch::enum_dispatch;
-use crate::pool::disk::drive_struct::DiskType;
+use crate::{
+    error_types::drive::DriveIOError,
+    pool::disk::drive_struct::DiskType
+};
 use crate::pool::disk::pool_disk::pool_disk_struct::PoolDisk;
 use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
 use crate::pool::disk::unknown_disk::unknown_disk_struct::UnknownDisk;
 use crate::pool::disk::blank_disk::blank_disk_struct::BlankDisk;
-use log::{debug, trace};
+use log::{
+    debug,
+    trace
+};
 
 // To be able to allocate blocks, we need a couple things
 #[enum_dispatch(DiskType)]
@@ -21,7 +27,7 @@ pub trait BlockAllocation {
     fn get_allocation_table(&self) -> &[u8];
 
     /// Update and flush the allocation table to disk.
-    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), FloppyDriveError>;
+    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), DriveIOError>;
 
     /// Attempts to find free blocks on the disk.
     /// Returns indexes for the found blocks, or returns the number of blocks free if there is not enough space.
@@ -31,13 +37,13 @@ pub trait BlockAllocation {
 
     /// Allocates the requested blocks.
     /// Will panic if fed invalid data.
-    fn allocate_blocks(&mut self, blocks: &Vec<u16>) -> Result<u16, FloppyDriveError> {
+    fn allocate_blocks(&mut self, blocks: &Vec<u16>) -> Result<u16, DriveIOError> {
         go_allocate_or_free_blocks(self, blocks, true)
     }
 
     /// Frees the requested blocks.
     /// Will panic if fed invalid data.
-    fn free_blocks(&mut self, blocks: &Vec<u16>) -> Result<u16, FloppyDriveError> {
+    fn free_blocks(&mut self, blocks: &Vec<u16>) -> Result<u16, DriveIOError> {
         go_allocate_or_free_blocks(self, blocks, false)
     }
 
@@ -86,7 +92,7 @@ fn go_allocate_or_free_blocks<T: BlockAllocation + ?Sized>(
     caller: &mut T,
     blocks: &Vec<u16>,
     allocate: bool,
-) -> Result<u16, FloppyDriveError> {
+) -> Result<u16, DriveIOError> {
     debug!(
         "Attempting to {} {} blocks on the current disk...",
         if allocate { "Allocate" } else { "free" },
