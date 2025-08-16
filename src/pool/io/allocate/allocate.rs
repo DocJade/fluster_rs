@@ -2,7 +2,7 @@
 
 use log::debug;
 
-use crate::{error_types::drive::DriveIOError, pool::{
+use crate::{error_types::drive::{DriveError, DriveIOError}, pool::{
     disk::{
         generic::{
             block::{
@@ -67,7 +67,7 @@ impl Pool {
     }
 }
 
-fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointer>, DriveIOError> {
+fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointer>, DriveError> {
     debug!("Attempting to allocate {blocks} blocks across the pool...");
 
     debug!("Locking GLOBAL_POOL...");

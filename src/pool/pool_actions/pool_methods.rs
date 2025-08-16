@@ -5,6 +5,8 @@
 use super::pool_struct::GLOBAL_POOL;
 use super::pool_struct::Pool;
 use super::pool_struct::PoolStatistics;
+use crate::error_types::drive::DriveError;
+use crate::error_types::drive::DriveIOError;
 use crate::pool::disk::drive_struct::DiskBootstrap;
 use crate::pool::disk::drive_struct::FloppyDrive;
 use crate::pool::disk::generic::block::block_structs::RawBlock;
@@ -27,7 +29,7 @@ use std::sync::Mutex;
 
 impl Pool {
     /// Flush all info about the pool to the pool disk.
-    pub fn flush() -> Result<(), FloppyDriveError> {
+    pub fn flush() -> Result<(), DriveError> {
         flush_pool()
     }
     /// Read in pool information from disk
@@ -37,17 +39,17 @@ impl Pool {
     }
     /// Create a new disk of type and add it to the pool
     /// Returns that new disk.
-    pub fn new_disk<T: DiskBootstrap>() -> Result<T, FloppyDriveError> {
+    pub fn new_disk<T: DiskBootstrap>() -> Result<T, DriveError> {
         add_disk::<T>()
     }
     /// Brand new pools need to run some setup functions to get everything in a ready to use state.
-    fn initalize() -> Result<(), FloppyDriveError> {
+    fn initalize() -> Result<(), DriveError> {
         initalize_pool()
     }
     /// Get the root inode block
     ///
     /// May swap disks, but you should be working with enough abstractions to not care.
-    pub fn get_root_directory() -> Result<DirectoryBlock, FloppyDriveError> {
+    pub fn get_root_directory() -> Result<DirectoryBlock, DriveIOError> {
         pool_get_root_directory()
     }
     /// Get a DirectoryItem that has details about the root directory.
@@ -69,7 +71,7 @@ impl PoolStatistics {
 }
 
 /// Sync information about the pool to disk
-pub(super) fn flush_pool() -> Result<(), FloppyDriveError> {
+pub(super) fn flush_pool() -> Result<(), DriveError> {
     debug!("Flushing pool info to disk...");
     
     // Grab the pool
@@ -150,7 +152,7 @@ pub(super) fn load() -> Arc<Mutex<Pool>> {
 }
 
 /// Set up stuff for a brand new pool
-fn initalize_pool() -> Result<(), FloppyDriveError> {
+fn initalize_pool() -> Result<(), DriveError> {
     debug!("Doing first time pool setup...");
     // Things a pool needs:
     // A second disk to start storing inodes on.
@@ -172,7 +174,7 @@ fn initalize_pool() -> Result<(), FloppyDriveError> {
 /// Add a new disk of Type to the pool.
 /// Takes the next available disk number.
 /// Returns the newly created disk of type T.
-fn add_disk<T: DiskBootstrap>() -> Result<T, FloppyDriveError> {
+fn add_disk<T: DiskBootstrap>() -> Result<T, DriveError> {
     debug!(
         "Attempting to add new disk to the pool of type: {}",
         std::any::type_name::<T>()
@@ -212,7 +214,7 @@ fn add_disk<T: DiskBootstrap>() -> Result<T, FloppyDriveError> {
 }
 
 /// Grabs the root inode block
-fn pool_get_root_directory() -> Result<DirectoryBlock, FloppyDriveError> {
+fn pool_get_root_directory() -> Result<DirectoryBlock, DriveIOError> {
     // Root directory should always be at disk 1 block 2. We just assume that to be the case.
     // Why do we have a root inode that points to the root directory when its always in a static location?
     // Beats me, I forgot why I did that.
