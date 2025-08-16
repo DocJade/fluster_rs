@@ -2,8 +2,6 @@
 // We do not allow string errors. This is RUST damn it, not python!
 use thiserror::Error;
 
-use crate::error_types::critical::CriticalError;
-
 #[derive(Debug, Error, PartialEq)]
 /// Super-error about the floppy drive itself.
 /// 
@@ -18,6 +16,8 @@ pub enum DriveError {
 
 #[derive(Debug, Clone, Copy, Error, PartialEq)]
 /// Errors related to IO on the inserted floppy disk.
+/// 
+/// This is only used at the lowest of levels on actual IO operations.
 pub enum DriveIOError {
     #[error("No disk is currently inserted.")]
     DriveEmpty,

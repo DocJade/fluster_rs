@@ -3,7 +3,7 @@ use std::fs::File;
 
 use log::debug;
 
-use crate::pool::{
+use crate::{error_types::drive::DriveError, pool::{
     disk::{
         drive_struct::{
             DiskBootstrap,
@@ -48,14 +48,14 @@ use crate::pool::{
         Pool,
         GLOBAL_POOL
     },
-};
+}};
 
 // Implementations
 
 // !! Only numbered options should be public! !!
 
 impl DiskBootstrap for StandardDisk {
-    fn bootstrap(file: File, disk_number: u16) -> Result<StandardDisk, FloppyDriveError> {
+    fn bootstrap(file: File, disk_number: u16) -> Result<StandardDisk, DriveError> {
         debug!("Boostrapping a standard disk...");
 
         // Update how many blocks are free in the pool
@@ -173,7 +173,7 @@ impl BlockAllocation for StandardDisk {
         &self.header.block_usage_map
     }
 
-    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), FloppyDriveError> {
+    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), DriveError> {
         self.header.block_usage_map = new_table
             .try_into()
             .expect("Incoming table should be the same as outgoing.");
@@ -202,7 +202,7 @@ impl StandardDiskHeader {
 /// This will only work on a disk that is blank / header-less.
 /// This will create a disk of any disk number, it is up to the caller to ensure that
 /// duplicate disks are not created, and to track the creation of this new disk.
-fn create(file: File, disk_number: u16) -> Result<StandardDisk, FloppyDriveError> {
+fn create(file: File, disk_number: u16) -> Result<StandardDisk, DriveError> {
     debug!("Creating new standard disk {disk_number}");
     debug!("Creating spoofed disk...");
     // Spoof the header, since we're about to give it a new one.
@@ -232,7 +232,7 @@ fn create(file: File, disk_number: u16) -> Result<StandardDisk, FloppyDriveError
 ///
 /// Errors if provided with a disk that has a header.
 // TODO: Somehow prevent duplicate disk numbers?
-fn initialize_numbered(disk: &mut StandardDisk, disk_number: u16) -> Result<(), FloppyDriveError> {
+fn initialize_numbered(disk: &mut StandardDisk, disk_number: u16) -> Result<(), DriveError> {
     debug!("Initializing a new standard disk...");
     // A new, fresh disk!
 
@@ -277,17 +277,17 @@ fn initialize_numbered(disk: &mut StandardDisk, disk_number: u16) -> Result<(), 
 impl GenericDiskMethods for StandardDisk {
     #[doc = " Read a block"]
     #[doc = " Cannot bypass CRC."]
-    fn unchecked_read_block(&self, block_number: u16) -> Result<RawBlock, BlockError> {
+    fn unchecked_read_block(&self, block_number: u16) -> Result<RawBlock, DriveError> {
         read_block_direct(&self.disk_file, self.number, block_number, false)
     }
 
     #[doc = " Write a block"]
-    fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), BlockError> {
+    fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), DriveError> {
         write_block_direct(&self.disk_file, block)
     }
 
     #[doc = " Write chunked data, starting at a block."]
-    fn unchecked_write_large(&mut self, data:Vec<u8>, start_block:DiskPointer) -> Result<(), BlockError> {
+    fn unchecked_write_large(&mut self, data:Vec<u8>, start_block:DiskPointer) -> Result<(), DriveError> {
         write_large_direct(&self.disk_file, data, start_block)
     }
 
@@ -313,7 +313,7 @@ impl GenericDiskMethods for StandardDisk {
 
     #[doc = " Sync all in-memory information to disk"]
     #[doc = " Headers and such."]
-    fn flush(&mut self) -> Result<(), FloppyDriveError> {
+    fn flush(&mut self) -> Result<(), DriveError> {
         // Not really to disk, but if nobody is looking...
         CachedBlockIO::update_block(&self.header.to_block())
     }

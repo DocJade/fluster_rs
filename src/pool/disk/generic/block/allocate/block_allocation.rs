@@ -8,7 +8,7 @@
 
 use enum_dispatch::enum_dispatch;
 use crate::{
-    error_types::drive::DriveIOError,
+    error_types::drive::DriveError,
     pool::disk::drive_struct::DiskType
 };
 use crate::pool::disk::pool_disk::pool_disk_struct::PoolDisk;
@@ -27,7 +27,7 @@ pub trait BlockAllocation {
     fn get_allocation_table(&self) -> &[u8];
 
     /// Update and flush the allocation table to disk.
-    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), DriveIOError>;
+    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), DriveError>;
 
     /// Attempts to find free blocks on the disk.
     /// Returns indexes for the found blocks, or returns the number of blocks free if there is not enough space.
@@ -37,13 +37,13 @@ pub trait BlockAllocation {
 
     /// Allocates the requested blocks.
     /// Will panic if fed invalid data.
-    fn allocate_blocks(&mut self, blocks: &Vec<u16>) -> Result<u16, DriveIOError> {
+    fn allocate_blocks(&mut self, blocks: &Vec<u16>) -> Result<u16, DriveError> {
         go_allocate_or_free_blocks(self, blocks, true)
     }
 
     /// Frees the requested blocks.
     /// Will panic if fed invalid data.
-    fn free_blocks(&mut self, blocks: &Vec<u16>) -> Result<u16, DriveIOError> {
+    fn free_blocks(&mut self, blocks: &Vec<u16>) -> Result<u16, DriveError> {
         go_allocate_or_free_blocks(self, blocks, false)
     }
 
@@ -92,7 +92,7 @@ fn go_allocate_or_free_blocks<T: BlockAllocation + ?Sized>(
     caller: &mut T,
     blocks: &Vec<u16>,
     allocate: bool,
-) -> Result<u16, DriveIOError> {
+) -> Result<u16, DriveError> {
     debug!(
         "Attempting to {} {} blocks on the current disk...",
         if allocate { "Allocate" } else { "free" },

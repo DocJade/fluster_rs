@@ -42,7 +42,7 @@ use lazy_static::lazy_static;
 use log::debug;
 
 use crate::{
-    error_types::drive::{DriveError, DriveIOError},
+    error_types::drive::DriveError,
     pool::disk::{
         drive_struct::{
             DiskType,
@@ -164,7 +164,7 @@ impl BlockCache {
     /// Add an item to the cache, or update it if the item is already present.
     /// 
     /// If the item is new, it will be placed in the lowest tier in the cache.
-    pub(super) fn add_or_update_item(item: CachedBlock) -> Result<(), DriveIOError> {
+    pub(super) fn add_or_update_item(item: CachedBlock) -> Result<(), DriveError> {
         go_add_or_update_item_cache(item)
     }
 
@@ -190,7 +190,7 @@ impl BlockCache {
     /// Reserve a block on a disk, skipping the disk if possible.
     /// 
     /// Panics if block was already allocated.
-    pub(super) fn cached_block_allocation(raw_block: &RawBlock) -> Result<(), DriveIOError> {
+    pub(super) fn cached_block_allocation(raw_block: &RawBlock) -> Result<(), DriveError> {
         let mut cache_disk: CachedAllocationDisk = CachedAllocationDisk::open(raw_block.block_origin.disk)?;
         let _ = cache_disk.allocate_blocks(&vec![raw_block.block_origin.block])?;
         // Shouldn't even need to check if it allocated one block, no way it could allocate more.
@@ -200,7 +200,7 @@ impl BlockCache {
     /// Flushes all information in a tier to disk.
     /// 
     /// Caller must drop all references to cache before calling this.
-    pub(super) fn flush(tier_number: usize) -> Result<(), DriveIOError> {
+    pub(super) fn flush(tier_number: usize) -> Result<(), DriveError> {
         go_flush_tier(tier_number)
     }
 
@@ -395,7 +395,7 @@ fn go_promote_item_cache(cache: &mut BlockCache, t0_item: CachedBlock) {
     // All done!
 }
 
-fn go_add_or_update_item_cache(block: CachedBlock) -> Result<(), DriveIOError> {
+fn go_add_or_update_item_cache(block: CachedBlock) -> Result<(), DriveError> {
 
     // Make sure the block has a valid location
     assert!(!block.block_origin.no_destination());
@@ -596,7 +596,7 @@ fn go_get_tier_worst(tier: &mut TieredCache) -> Option<CachedBlock> {
     tier.items_map.remove(&front_pointer)
 }
 
-fn go_flush_tier(tier_number: usize) -> Result<(), DriveIOError> {
+fn go_flush_tier(tier_number: usize) -> Result<(), DriveError> {
     debug!("Flushing tier {tier_number} of the cache...");
     // We will be flushing all data from this tier of the cache to disk.
     // This can be used on any tier, but will usually be called on tier 0.
@@ -848,7 +848,7 @@ pub(in super::super::cache) fn disk_load_header_invalidation(disk_number: u16) -
     // Update the header on the disk if needed.
     if let Some(cached_block) = possibly_cached {
         // There was a header in the cache, so we now need to update the disk again
-        let update_result = disk.checked_update(&cached_block);
+        disk.checked_update(&cached_block)?;
 
         // Now the disk is out of sync, we need to load it in _again_
         #[allow(deprecated)] // This is being used for the cache.

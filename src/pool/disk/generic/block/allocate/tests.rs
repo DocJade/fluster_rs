@@ -8,7 +8,7 @@ use rand::{
     rngs::ThreadRng
 };
 
-use crate::error_types::drive::DriveIOError;
+use crate::error_types::drive::DriveError;
 
 use super::block_allocation::BlockAllocation;
 
@@ -125,7 +125,7 @@ impl BlockAllocation for TestTable {
         &self.block_usage_map
     }
 
-    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), DriveIOError> {
+    fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), DriveError> {
         self.block_usage_map = new_table
             .try_into()
             .expect("New table should be the same size as old table.");

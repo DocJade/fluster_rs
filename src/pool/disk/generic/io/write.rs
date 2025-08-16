@@ -13,7 +13,7 @@ use log::{
 
 use crate::error_types::conversions::CannotConvertError;
 use crate::error_types::critical::CriticalError;
-use crate::error_types::drive::DriveIOError;
+use crate::error_types::drive::{DriveError, DriveIOError};
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 
 use super::super::block::block_structs::RawBlock;
@@ -28,7 +28,7 @@ use std::{
 
 /// Write a block to the currently inserted disk in the floppy drive
 /// ONLY FOR LOWER LEVEL USE, USE CHECKED_WRITE()!
-pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(), DriveIOError> {
+pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(), DriveError> {
     trace!(
         "Directly writing block {} to currently inserted disk...",
         block.block_origin.block
@@ -59,9 +59,12 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
             let converted: Result<DriveIOError, CannotConvertError> = error.try_into();
             if let Ok(bail) = converted {
                 // We don't need to / can't handle this error, up we go.
-                return Err(bail)
+                // But we might still need to retry this
+                if let Ok(actually_bail) = DriveError::try_from(bail) {
+                    // Something is up that we cant handle here.
+                    return Err(actually_bail)
+                }
             }
-
             // We must handle the error. Down here that just means trying the write again.
             continue;
         }
@@ -83,12 +86,12 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
 
     // Do the error cleanup, if that works, we'll tell the caller to retry.
     CriticalError::FloppyWriteFailure(error.0, error.1).handle();
-    Err(DriveIOError::Retry)
+    Err(DriveError::Retry)
 }
 
 /// Write a vec of bytes starting at offset to the currently inserted disk in the floppy drive.
 /// ONLY FOR LOWER LEVEL USE, USE CHECKED_WRITE()!
-pub(crate) fn write_large_direct(disk_file: &File, data: Vec<u8>, start_block: DiskPointer) -> Result<(), DriveIOError> {
+pub(crate) fn write_large_direct(disk_file: &File, data: Vec<u8>, start_block: DiskPointer) -> Result<(), DriveError> {
     // Bounds checking
     if start_block.block >= 2880 {
         // This block is impossible to access.
@@ -126,10 +129,13 @@ pub(crate) fn write_large_direct(disk_file: &File, data: Vec<u8>, start_block: D
             let converted: Result<DriveIOError, CannotConvertError> = error.try_into();
             if let Ok(bail) = converted {
                 // We don't need to / can't handle this error, up we go.
-                return Err(bail)
+                // But we might still need to retry this
+                if let Ok(actually_bail) = DriveError::try_from(bail) {
+                    // Something is up that we cant handle here.
+                    return Err(actually_bail)
+                }
             }
-
-            // We must handle error. Down here that just means trying the write again.
+            // We must handle the error. Down here that just means trying the write again.
             continue;
         }
 
@@ -150,5 +156,5 @@ pub(crate) fn write_large_direct(disk_file: &File, data: Vec<u8>, start_block: D
 
     // Do the error cleanup, if that works, we'll tell the caller to retry.
     CriticalError::FloppyWriteFailure(error.0, error.1).handle();
-    Err(DriveIOError::Retry)
+    Err(DriveError::Retry)
 }

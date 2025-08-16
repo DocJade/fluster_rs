@@ -4,17 +4,20 @@ use std::process::exit;
 
 use log::error;
 
-use crate::{error_types::drive::{DriveError, DriveIOError}, pool::disk::{
-    generic::{
-        block::{
-            allocate::block_allocation::BlockAllocation,
-            block_structs::RawBlock
+use crate::{
+    error_types::drive::DriveError,
+    pool::disk::{
+        generic::{
+            block::{
+                allocate::block_allocation::BlockAllocation,
+                block_structs::RawBlock
+            },
+            generic_structs::pointer_struct::DiskPointer,
+            io::cache::cache_io::CachedBlockIO
         },
-        generic_structs::pointer_struct::DiskPointer,
-        io::cache::cache_io::CachedBlockIO
-    },
-    standard_disk::block::header::header_struct::StandardDiskHeader
-}};
+        standard_disk::block::header::header_struct::StandardDiskHeader
+    }
+};
 
 // To not require a rewrite of pool block allocation logic, we will make fake disks for it to use.
 pub(crate) struct CachedAllocationDisk {
@@ -25,6 +28,8 @@ pub(crate) struct CachedAllocationDisk {
 impl CachedAllocationDisk {
     /// Attempt to create a new cached disk for allocation.
     /// 
+    /// This only works if the header for this disk is currently in the cache.
+    /// 
     /// To flush the new allocation table to the cache, this needs to be dropped.
     /// Thus, if you allocate then immediately write, you need to drop this before the write.
     pub(crate) fn open(disk_number: u16) -> Result<Self, DriveError> {
@@ -34,8 +39,6 @@ impl CachedAllocationDisk {
             disk: disk_number,
             block: 0,
         };
-
-        // We will attempt to read the 
 
         let read: RawBlock = CachedBlockIO::read_block(header_pointer)?;
         let imitated_header: StandardDiskHeader = StandardDiskHeader::from_block(&read);
@@ -56,7 +59,7 @@ impl BlockAllocation for CachedAllocationDisk {
     }
 
     #[doc = " Update and flush the allocation table to disk."]
-    fn set_allocation_table(&mut self,new_table: &[u8]) -> Result<(), DriveIOError> {
+    fn set_allocation_table(&mut self,new_table: &[u8]) -> Result<(), DriveError> {
         self.imitated_header.block_usage_map = new_table
             .try_into()
             .expect("Incoming table should be the same as outgoing.");

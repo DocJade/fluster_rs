@@ -11,7 +11,7 @@ use log::{
     warn
 };
 
-use crate::{error_types::{conversions::CannotConvertError, critical::CriticalError, drive::DriveIOError}, pool::disk::generic::generic_structs::pointer_struct::DiskPointer};
+use crate::{error_types::{conversions::CannotConvertError, critical::CriticalError, drive::{DriveError, DriveIOError}}, pool::disk::generic::generic_structs::pointer_struct::DiskPointer};
 
 use super::super::block::block_structs::RawBlock;
 use super::super::block::crc::check_crc;
@@ -32,7 +32,7 @@ pub(crate) fn read_block_direct(
     originating_disk: u16,
     block_index: u16,
     ignore_crc: bool,
-) -> Result<RawBlock, DriveIOError> {
+) -> Result<RawBlock, DriveError> {
     // Bounds checking
     if block_index >= 2880 {
         // This block is impossible to access.
@@ -52,8 +52,9 @@ pub(crate) fn read_block_direct(
     for _ in 0..10 {
 
         // Seek to the requested block and read 512 bytes from it
-        if let Err(error) = disk_file.read_exact_at(&mut read_buffer, read_offset) {
-            // That read failed, we need to do something about it.
+        let read_result = disk_file.read_exact_at(&mut read_buffer, read_offset);
+        if let Err(error) = read_result {
+            // That did not work.
 
             // Update the most recent error
             most_recent_error = Some((error.kind(), error.raw_os_error()));
@@ -62,12 +63,15 @@ pub(crate) fn read_block_direct(
             let converted: Result<DriveIOError, CannotConvertError> = error.try_into();
             if let Ok(bail) = converted {
                 // We don't need to / can't handle this error, up we go.
-                return Err(bail)
+                // But we might still need to retry this
+                if let Ok(actually_bail) = DriveError::try_from(bail) {
+                    // Something is up that we cant handle here.
+                    return Err(actually_bail)
+                }
             }
-
-            // We must handle the error. Down here that just means trying the read again.
+            // We must handle the error. Down here that just means trying the write again.
             continue;
-        };
+        }
 
         // Read worked.
 
@@ -101,5 +105,5 @@ pub(crate) fn read_block_direct(
 
     // Do the error cleanup, if that works, we'll tell the caller to retry.
     CriticalError::FloppyReadFailure(error.0, error.1).handle();
-    Err(DriveIOError::Retry)
+    Err(DriveError::Retry)
 }
