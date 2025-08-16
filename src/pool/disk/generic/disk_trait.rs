@@ -5,26 +5,26 @@ use std::fs::File;
 
 use enum_dispatch::enum_dispatch;
 
-use crate::pool::disk::{
+use crate::{error_types::drive::DriveIOError, pool::disk::{
     drive_struct::DiskType,
     generic::{
         block::block_structs::RawBlock,
         generic_structs::pointer_struct::DiskPointer
     },
-};
+}};
 
 // Generic disks must also have disk numbers, and be able to retrieve their inner File.
 #[enum_dispatch(DiskType)] // Force every disk type to implement these methods.
 pub trait GenericDiskMethods {
     /// Read a block
     /// Cannot bypass CRC.
-    fn unchecked_read_block(&self, block_number: u16) -> Result<RawBlock, BlockError>;
+    fn unchecked_read_block(&self, block_number: u16) -> Result<RawBlock, DriveIOError>;
 
     /// Write a block.
-    fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), BlockError>;
+    fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), DriveIOError>;
 
     /// Write chunked data, starting at a block.
-    fn unchecked_write_large(&mut self, data: Vec<u8>, start_block: DiskPointer) -> Result<(), BlockError>;
+    fn unchecked_write_large(&mut self, data: Vec<u8>, start_block: DiskPointer) -> Result<(), DriveIOError>;
 
     /// Get the inner file.
     fn disk_file(self) -> File;
@@ -40,5 +40,5 @@ pub trait GenericDiskMethods {
 
     /// Sync all in-memory information to disk
     /// Headers and such.
-    fn flush(&mut self) -> Result<(), FloppyDriveError>;
+    fn flush(&mut self) -> Result<(), DriveIOError>;
 }

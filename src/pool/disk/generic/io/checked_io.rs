@@ -3,19 +3,17 @@
 
 use log::trace;
 
-use crate::pool::{
-    disk::{
-        generic::{
+use crate::{error_types::drive::DriveIOError, pool::{
+    disk::generic::{
             block::{
                 allocate::block_allocation::BlockAllocation,
                 block_structs::RawBlock,
             },
             disk_trait::GenericDiskMethods,
             generic_structs::pointer_struct::DiskPointer,
-        }
-    },
+        },
     pool_actions::pool_struct::GLOBAL_POOL,
-};
+}};
 
 // A fancy new trait thats built out of other traits!
 // Automatically add it to all types that implement the subtypes we need.
@@ -26,7 +24,7 @@ pub(super) trait CheckedIO: BlockAllocation + GenericDiskMethods {
     /// 
     /// This should ONLY be used in the cache implementation. If you are dealing with disks directly, you are
     /// doing it wrong.
-    fn checked_read(&self, block_number: u16) -> Result<RawBlock, FloppyDriveError> {
+    fn checked_read(&self, block_number: u16) -> Result<RawBlock, DriveIOError> {
         trace!("Performing checked read on block {block_number}...",);
         // Block must be allocated
         assert!(self.is_block_allocated(block_number));
@@ -41,7 +39,7 @@ pub(super) trait CheckedIO: BlockAllocation + GenericDiskMethods {
     /// Sets the block as used after writing.
     ///
     /// Panics if block was not free.
-    fn checked_write(&mut self, block: &RawBlock) -> Result<(), FloppyDriveError> {
+    fn checked_write(&mut self, block: &RawBlock) -> Result<(), DriveIOError> {
         trace!("Performing checked write on block {}...", block.block_origin.block);
         // Make sure block is free
         assert!(!self.is_block_allocated(block.block_origin.block));
@@ -69,7 +67,7 @@ pub(super) trait CheckedIO: BlockAllocation + GenericDiskMethods {
     /// Updates an underlying block with new information.
     /// This overwrites the data in the block. (Obviously)
     /// Panics if block was not previously allocated.
-    fn checked_update(&mut self, block: &RawBlock) -> Result<(), BlockError> {
+    fn checked_update(&mut self, block: &RawBlock) -> Result<(), DriveIOError> {
         trace!(
             "Performing checked update on block {}...",
             block.block_origin.block
@@ -84,7 +82,7 @@ pub(super) trait CheckedIO: BlockAllocation + GenericDiskMethods {
     /// Updates several blocks starting at start_block with data. Blocks must already be allocated.
     /// This overwrites the data in the block. (Obviously)
     /// Panics if any of the blocks were not previously allocated.
-    fn checked_large_update(&mut self, data: Vec<u8>, start_block: DiskPointer) -> Result<(), BlockError> {
+    fn checked_large_update(&mut self, data: Vec<u8>, start_block: DiskPointer) -> Result<(), DriveIOError> {
         trace!(
             "Performing checked large update starting on block {}...",
             start_block.block

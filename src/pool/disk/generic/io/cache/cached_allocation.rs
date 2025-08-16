@@ -4,7 +4,7 @@ use std::process::exit;
 
 use log::error;
 
-use crate::pool::disk::{
+use crate::{error_types::drive::DriveIOError, pool::disk::{
     generic::{
         block::{
             allocate::block_allocation::BlockAllocation,
@@ -13,10 +13,8 @@ use crate::pool::disk::{
         generic_structs::pointer_struct::DiskPointer,
         io::cache::cache_io::CachedBlockIO
     },
-    standard_disk::{
-        block::header::header_struct::StandardDiskHeader
-    }
-};
+    standard_disk::block::header::header_struct::StandardDiskHeader
+}};
 
 // To not require a rewrite of pool block allocation logic, we will make fake disks for it to use.
 pub(crate) struct CachedAllocationDisk {
@@ -29,7 +27,7 @@ impl CachedAllocationDisk {
     /// 
     /// To flush the new allocation table to the cache, this needs to be dropped.
     /// Thus, if you allocate then immediately write, you need to drop this before the write.
-    pub(crate) fn open(disk_number: u16) -> Result<Self, FloppyDriveError> {
+    pub(crate) fn open(disk_number: u16) -> Result<Self, DriveIOError> {
         // Go get the header for this disk. Usually this is cached, but
         // will fall through if needed.
         let header_pointer: DiskPointer = DiskPointer {
@@ -56,7 +54,7 @@ impl BlockAllocation for CachedAllocationDisk {
     }
 
     #[doc = " Update and flush the allocation table to disk."]
-    fn set_allocation_table(&mut self,new_table: &[u8]) -> Result<(),FloppyDriveError> {
+    fn set_allocation_table(&mut self,new_table: &[u8]) -> Result<(), DriveIOError> {
         self.imitated_header.block_usage_map = new_table
             .try_into()
             .expect("Incoming table should be the same as outgoing.");

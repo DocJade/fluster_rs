@@ -41,29 +41,30 @@ use std::{
 use lazy_static::lazy_static;
 use log::debug;
 
-use crate::pool::disk::{
-    drive_struct::{
-        DiskType,
-        FloppyDrive,
-    },
-    generic::{
-        block::{allocate::block_allocation::BlockAllocation,
-            block_structs::RawBlock
+use crate::{
+    error_types::drive::DriveIOError,
+    pool::disk::{
+        drive_struct::{
+            DiskType,
+            FloppyDrive,
         },
-        disk_trait::{
-            GenericDiskMethods
-        },
-        generic_structs::pointer_struct::DiskPointer,
-        io::{
-            cache::{
-                cache_io::CachedBlockIO,
-                cached_allocation::CachedAllocationDisk,
-                statistics::BlockCacheStatistics
+        generic::{
+            block::{allocate::block_allocation::BlockAllocation,
+                block_structs::RawBlock
             },
-            checked_io::CheckedIO
-        }
-    },
-    standard_disk::standard_disk_struct::StandardDisk
+            disk_trait::GenericDiskMethods,
+            generic_structs::pointer_struct::DiskPointer,
+            io::{
+                cache::{
+                    cache_io::CachedBlockIO,
+                    cached_allocation::CachedAllocationDisk,
+                    statistics::BlockCacheStatistics
+                },
+                checked_io::CheckedIO
+            }
+        },
+        standard_disk::standard_disk_struct::StandardDisk
+    }
 };
 
 //
@@ -163,7 +164,7 @@ impl BlockCache {
     /// Add an item to the cache, or update it if the item is already present.
     /// 
     /// If the item is new, it will be placed in the lowest tier in the cache.
-    pub(super) fn add_or_update_item(item: CachedBlock) -> Result<(), FloppyDriveError> {
+    pub(super) fn add_or_update_item(item: CachedBlock) -> Result<(), DriveIOError> {
         go_add_or_update_item_cache(item)
     }
 
@@ -189,7 +190,7 @@ impl BlockCache {
     /// Reserve a block on a disk, skipping the disk if possible.
     /// 
     /// Panics if block was already allocated.
-    pub(super) fn cached_block_allocation(raw_block: &RawBlock) -> Result<(), FloppyDriveError> {
+    pub(super) fn cached_block_allocation(raw_block: &RawBlock) -> Result<(), DriveIOError> {
         let mut cache_disk: CachedAllocationDisk = CachedAllocationDisk::open(raw_block.block_origin.disk)?;
         let _ = cache_disk.allocate_blocks(&vec![raw_block.block_origin.block])?;
         // Shouldn't even need to check if it allocated one block, no way it could allocate more.
@@ -199,7 +200,7 @@ impl BlockCache {
     /// Flushes all information in a tier to disk.
     /// 
     /// Caller must drop all references to cache before calling this.
-    pub(super) fn flush(tier_number: usize) -> Result<(), FloppyDriveError> {
+    pub(super) fn flush(tier_number: usize) -> Result<(), DriveIOError> {
         go_flush_tier(tier_number)
     }
 
@@ -394,7 +395,7 @@ fn go_promote_item_cache(cache: &mut BlockCache, t0_item: CachedBlock) {
     // All done!
 }
 
-fn go_add_or_update_item_cache(block: CachedBlock) -> Result<(), FloppyDriveError> {
+fn go_add_or_update_item_cache(block: CachedBlock) -> Result<(), DriveIOError> {
 
     // Make sure the block has a valid location
     assert!(!block.block_origin.no_destination());
@@ -595,7 +596,7 @@ fn go_get_tier_worst(tier: &mut TieredCache) -> Option<CachedBlock> {
     tier.items_map.remove(&front_pointer)
 }
 
-fn go_flush_tier(tier_number: usize) -> Result<(), FloppyDriveError> {
+fn go_flush_tier(tier_number: usize) -> Result<(), DriveIOError> {
     debug!("Flushing tier {tier_number} of the cache...");
     // We will be flushing all data from this tier of the cache to disk.
     // This can be used on any tier, but will usually be called on tier 0.
@@ -809,7 +810,7 @@ fn go_check_tier_full(tier: &TieredCache) -> bool {
 /// This can only be used in the cache.
 /// 
 /// This should be used in place of direct disk opening to ensure headers are up to date.
-pub(in super::super::cache) fn disk_load_header_invalidation(disk_number: u16) -> Result<StandardDisk, FloppyDriveError> {
+pub(in super::super::cache) fn disk_load_header_invalidation(disk_number: u16) -> Result<StandardDisk, DriveIOError> {
     // Try to find the header for this disk in the cache
 
     let header_pointer: DiskPointer = DiskPointer {
