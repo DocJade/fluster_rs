@@ -36,7 +36,7 @@ pub(crate) fn read_block_direct(
     // Bounds checking
     if block_index >= 2880 {
         // This block is impossible to access.
-        return Err(DriveIOError::Impossible);
+        panic!("Impossible read offset `{}`!",  block_index)
     }
 
     // allocate space for the block
@@ -65,7 +65,7 @@ pub(crate) fn read_block_direct(
                 return Err(bail)
             }
 
-            // We must handle error. Down here that just means trying the read again.
+            // We must handle the error. Down here that just means trying the read again.
             continue;
         };
 

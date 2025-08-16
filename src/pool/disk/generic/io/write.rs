@@ -36,7 +36,7 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
     // Bounds checking
     if block.block_origin.block >= 2880 {
         // This block is impossible to access.
-        return Err(DriveIOError::Impossible);
+        panic!("Impossible write offset `{}`!",  block.block_origin.block)
     }
 
     // Calculate the offset into the disk
@@ -62,7 +62,7 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
                 return Err(bail)
             }
 
-            // We must handle error. Down here that just means trying the write again.
+            // We must handle the error. Down here that just means trying the write again.
             continue;
         }
 
@@ -92,7 +92,7 @@ pub(crate) fn write_large_direct(disk_file: &File, data: Vec<u8>, start_block: D
     // Bounds checking
     if start_block.block >= 2880 {
         // This block is impossible to access.
-        return Err(DriveIOError::Impossible);
+        panic!("Impossible write offset `{}`!",  start_block.block)
     }
 
     // Must write full blocks (512 byte chunks)

@@ -14,22 +14,22 @@ pub enum DriveError {
     DriveEmpty,
     #[error("The operation failed for non-critical reasons, but no corruption occurred, and the operation can be retried with the same arguments.")]
     Retry,
+    #[error("A drive operation has failed so hard that we need intervention.")]
+    Critical(CriticalError)
 }
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Clone, Copy, Error, PartialEq)]
 /// Errors related to IO on the inserted floppy disk.
 pub enum DriveIOError {
     #[error("No disk is currently inserted.")]
     DriveEmpty,
-    #[error("Parameters given to this IO operation were out of bounds, or otherwise unfulfillable.")]
-    Impossible,
     #[error("The operation failed for non-critical reasons, but no corruption occurred, and the operation can be retried with the same arguments.")]
     Retry,
     #[error("An IO operation has failed so hard that we need intervention.")]
     Critical(CriticalError)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 /// Reasons why we cannot use the provided floppy disk path
 pub enum InvalidDriveReason {
     /// Pointed at a folder instead of a file.

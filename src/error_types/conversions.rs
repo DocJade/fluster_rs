@@ -21,17 +21,18 @@ use crate::error_types::drive::InvalidDriveReason;
 
 // We do not allow string errors. This is RUST damn it, not python!
 
-// No direct From<> implementations are allowed, everything must be try.
+// Not all errors allow From due to expectations that the operations that return this
+// type either return a value or fail in a critical way.
 
 
 // We also have a custom conversion error type, so lower level callers can get more info
 // about what they need to do to be able to perform the cast to a higher error type.
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Clone, Copy, Error, PartialEq)]
 /// Errors related to IO on the inserted floppy disk.
 pub enum CannotConvertError {
-    #[error("You must handle this at a lower level. This error cannot be propagated upwards.")]
-    MustHandle
+    #[error("You must retry this operation. If retrying repeatedly fails, throw a Critical error.")]
+    MustRetry,
 }
 
 //
@@ -50,16 +51,9 @@ impl TryFrom<DriveIOError> for DriveError {
                 // about an empty drive.
                 Ok(DriveError::DriveEmpty)
             },
-            DriveIOError::Impossible => {
-                // Throwing impossible operations upwards is not allowed, since we would
-                // end up with another chain of e? -> e? -> e?.
-                // Additionally, impossible operations should be guarded in the first place,
-                // Impossible operations aren't a "whoopsie", they're a logic failure.
-                Err(CannotConvertError::MustHandle)
-            },
             DriveIOError::Retry => {
                 // Operation must be retried, cant cast that up.
-                Err(CannotConvertError::MustHandle)
+                Err(CannotConvertError::MustRetry)
             },
             DriveIOError::Critical(critical_error) => {
                 // Critical error must be handled.

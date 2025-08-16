@@ -2,14 +2,14 @@
 // Returning this error type means you've done all you possibly can, and need saving at a higher level, or
 // we are in a unrecoverable state.
 
-use std::process::exit;
+use std::{panic::Location, process::exit};
 
 use thiserror::Error;
 use log::error;
 
 use crate::error_types::drive::InvalidDriveReason;
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Clone, Copy, Error, PartialEq)]
 /// Use this error type if an error happens that you are unable to
 /// recover from without intervention.
 /// 
@@ -22,6 +22,8 @@ pub enum CriticalError {
     FloppyWriteFailure(std::io::ErrorKind, Option<i32>),
     #[error("The floppy drive is inaccessible for some reason.")]
     DriveInaccessible(InvalidDriveReason),
+    #[error("We've retried an operation too many times. Something must be wrong.")]
+    OutOfRetries(&'static Location<'static>) // Keep track of where we ran out of retries.
 }
 
 
