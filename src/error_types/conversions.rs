@@ -143,7 +143,7 @@ impl TryFrom<std::io::Error> for DriveIOError {
                 // Fluster does not use a filesystem when doing writes to the disk.
                 // Maybe this could happen when attempting to write past the end of the disk?
                 // But we have bounds checking for that.
-                unreachable!();
+                unreachable!("Floppy drive claims to be full.");
             },
             ErrorKind::NotSeekable => {
                 // We must be able to seek files to read and write from them, this is a

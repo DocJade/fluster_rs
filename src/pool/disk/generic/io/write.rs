@@ -126,7 +126,7 @@ pub(crate) fn write_large_direct(disk_file: &File, data: &Vec<u8>, start_block: 
     assert!(start_block.block + ((data.len().div_ceil(512) - 1) as u16) < 2880_u16);
 
     trace!(
-        "Directly writing {} blocks worht of bytes starting at block {} to currently inserted disk...",
+        "Directly writing {} blocks worth of bytes starting at block {} to currently inserted disk...",
         data.len().div_ceil(512), start_block.block
     );
 

@@ -390,10 +390,10 @@ pub fn display_info_and_ask_wipe(disk: &mut DiskType) -> Result<(), DriveError> 
         if answer {
             // Make absolutely sure!
             if rprompt::prompt_reply("Are you really sure? (Type \"Do as I say!\"): ").expect("Prompts should not fail.")
-            .to_ascii_lowercase()
             .contains("Do as I say!") {
                 // Wipe time!
                 destroy_disk(disk.disk_file_mut()).expect("Prompts should not fail.");
+                return Ok(());
             }
             println!("You've chickened out.");
             continue;

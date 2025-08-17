@@ -1,7 +1,6 @@
 use std::{
-    ffi::OsStr, path::PathBuf, process::exit, sync::{
-        atomic::{AtomicBool, Ordering}, Arc
-    }
+    ffi::OsStr,
+    path::PathBuf
 };
 
 use clap::Parser;
@@ -33,28 +32,12 @@ fn main() {
     // get the mount point
     let mount_point = PathBuf::from(cli.mount_point);
 
-    // Functions from easy_fuser/examples/zip_fs/src/main.rs
-
-    // Set up the cleanup function
-    let once_flag = Arc::new(AtomicBool::new(false));
-    let cleanup = |mount_point: &PathBuf, once_flag: &Arc<AtomicBool>| {
-        if once_flag.clone().swap(true, Ordering::SeqCst) {
-            return;
-        }
-        println!("Unmounting filesystem...");
-        let _ = std::process::Command::new("fusermount")
-            .arg("-u")
-            .arg(mount_point)
-            .status();
-    };
-
     // Set up Ctrl+C handler
-    let mount_point_ctrlc = mount_point.clone();
-    let onceflag_ctrlc = once_flag.clone();
     ctrlc::set_handler(move || {
-        println!("Received Ctrl+C, unmounting...");
-        cleanup(&mount_point_ctrlc, &onceflag_ctrlc);
-        exit(1);
+        println!("Fluster cannot be closed with ctrl+c. You need to unmount the filesystem with `fusermount -u (path)`.");
+        println!("Busy? Close everything that may be looking at the filesystem.");
+        println!("Still busy? Too bad, wait it out. Or suffer data loss. Your choice.");
+        println!("Ignoring...");
     })
     .unwrap();
 
