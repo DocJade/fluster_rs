@@ -156,13 +156,12 @@ impl DiskBootstrap for StandardDisk {
         // We assume the caller has passed in the freshest version of the header.
         let header: StandardDiskHeader =
             StandardDiskHeader::from_block(&block);
-        let disk = StandardDisk {
+            
+        StandardDisk {
             number: header.disk_number,
             disk_file: file,
             header,
-        };
-
-        disk
+        }
 
     }
 }
@@ -288,7 +287,7 @@ impl GenericDiskMethods for StandardDisk {
 
     #[doc = " Write chunked data, starting at a block."]
     fn unchecked_write_large(&mut self, data:Vec<u8>, start_block:DiskPointer) -> Result<(), DriveError> {
-        write_large_direct(&self.disk_file, data, start_block)
+        write_large_direct(&self.disk_file, &data, start_block)
     }
 
     #[doc = " Get the inner file used for IO operations"]

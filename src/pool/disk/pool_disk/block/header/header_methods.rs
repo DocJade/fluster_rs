@@ -58,53 +58,34 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, DriveError> {
 
     // Get block 0 of disk 0
 
-    // if we are running with virtual disks, we skip the prompt.
-    if !USE_VIRTUAL_DISKS
-        .try_lock()
-        .expect("Fluster is single threaded.")
-        .is_some()
-    {
-        // Not using virtual disks, prompt the user...
-        let result =
-            rprompt::prompt_reply("Please insert the pool root disk (Disk 0), then press enter. Or type \"wipe\" to enter disk wiper mode.").expect(
-                "prompting should not fail."
-            );
-
-        // This is the only chance the user gets to enter disk wiping mode.
-        // Why are we doing this in pool/header_methods ? idk.
-
-        if result.contains("wipe") {
-            disk_wiper_mode()
-        }
-
-    }
-
     // We will contain all of our logic within a loop, so if the user inserts the incorrect disk we can ask for another, etc
     // This is messy. Sorry.
 
-    let mut read_errors: u8 = 0;
     loop {
-        // Attempt to extract the header
-        // First we need to open the disk, which can fail for various reasons.
-        // This is the unchecked method, so we will need to read the header off ourself.
-        // If this fails, check if its unrecoverable, if it isnt, handle that
-        let some_disk = match FloppyDrive::open_direct(0) {
-            Ok(ok) => ok,
-            Err(error) => {
-                warn!("Opening the pool disk failed due to: `{error:#?}`");
-                // Opening the disk failed. We will retry at most 10 times.
-                read_errors += 1;
-                if read_errors == 10 {
-                    // Cooked.
-                    CriticalError::OutOfRetries(Location::caller()).handle();
-                    return Err(DriveError::Retry)
-                }
-                // Try again
-                continue;
-            }
-        };
+        // if we are running with virtual disks, we skip the prompt.
+        if !USE_VIRTUAL_DISKS
+            .try_lock()
+            .expect("Fluster is single threaded.")
+            .is_some()
+        {
+            // Not using virtual disks, prompt the user...
+            let result =
+                rprompt::prompt_reply("Please insert the pool root disk (Disk 0), then press enter. Or type \"wipe\" to enter disk wiper mode: ").expect(
+                    "prompting should not fail."
+                );
 
-        // Reset read failures since we got a good read.
+            // This is the only chance the user gets to enter disk wiping mode.
+            // Why are we doing this in pool/header_methods ? idk.
+
+            if result.contains("wipe") {
+                disk_wiper_mode()
+            }
+        }
+
+        // User wants to open this disk for the pool.
+
+        // Attempt to extract the header
+        let some_disk = FloppyDrive::open_direct(0)?;
 
         // We've now read in either the PoolDisk, or some other type of disk.
         // Find out what it is.
@@ -382,6 +363,13 @@ fn disk_wiper_mode() -> ! {
             Ok(ok) => ok,
             Err(err) => {
                 // Uh oh
+
+                // If there just isn't a disk in the drive, we can continue
+                if err == DriveError::DriveEmpty {
+                    println!("Cant wipe nothing bozo. Put a disk in!");
+                    continue;
+                }
+
                 println!("Opening the disk failed. Here's why:");
                 println!("{err:#?}");
                 break; // cannot go further if the drive is angry.

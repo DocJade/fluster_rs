@@ -69,9 +69,27 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
             continue;
         }
 
-        // Syncing all of the data to the disk is safer. But for speed reasons its currently disabled.
-        // Unless issues arise with data not hitting the disc correctly, this will remain off.
-        // disk_file.sync_all()?; 
+        // Syncing all of the data to the disk is safer.
+        // We don't sync if this is a test case, since it makes tests way slower.
+        if let Err(failed) = disk_file.sync_all() {
+            // That did not work.
+
+            // Update the most recent error
+            most_recent_error = Some((failed.kind(), failed.raw_os_error()));
+            
+            // Try converting it into a DriveIOError
+            let converted: Result<DriveIOError, CannotConvertError> = failed.try_into();
+            if let Ok(bail) = converted {
+                // We don't need to / can't handle this error, up we go.
+                // But we might still need to retry this
+                if let Ok(actually_bail) = DriveError::try_from(bail) {
+                    // Something is up that we cant handle here.
+                    return Err(actually_bail)
+                }
+            }
+            // We must handle the error. Down here that just means trying the write again.
+            continue;
+        }
 
         // Writing worked! all done.
         trace!("Block written successfully.");
@@ -94,7 +112,7 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
 
 /// Write a vec of bytes starting at offset to the currently inserted disk in the floppy drive.
 /// ONLY FOR LOWER LEVEL USE, USE CHECKED_WRITE()!
-pub(crate) fn write_large_direct(disk_file: &File, data: Vec<u8>, start_block: DiskPointer) -> Result<(), DriveError> {
+pub(crate) fn write_large_direct(disk_file: &File, data: &Vec<u8>, start_block: DiskPointer) -> Result<(), DriveError> {
     // Bounds checking
     if start_block.block >= 2880 {
         // This block is impossible to access.
@@ -105,7 +123,7 @@ pub(crate) fn write_large_direct(disk_file: &File, data: Vec<u8>, start_block: D
     assert!(data.len().rem(512) == 0);
 
     // Make sure we don't run off the end of the disk
-    assert!(start_block.block + (data.len().div_ceil(512) - 1) as u16 <= 2880);
+    assert!(start_block.block + ((data.len().div_ceil(512) - 1) as u16) < 2880_u16);
 
     trace!(
         "Directly writing {} blocks worht of bytes starting at block {} to currently inserted disk...",
@@ -120,7 +138,7 @@ pub(crate) fn write_large_direct(disk_file: &File, data: Vec<u8>, start_block: D
 
     for _ in 0..10 {
         // Write the data.
-        let write_result = disk_file.write_all_at(&data, write_offset);
+        let write_result = disk_file.write_all_at(data, write_offset);
 
         if let Err(error) = write_result {
             // That did not work.
@@ -142,9 +160,27 @@ pub(crate) fn write_large_direct(disk_file: &File, data: Vec<u8>, start_block: D
             continue;
         }
 
-        // Syncing all of the data to the disk is safer. But for speed reasons its currently disabled.
-        // Unless issues arise with data not hitting the disc correctly, this will remain off.
-        // disk_file.sync_all()?; 
+        // Syncing all of the data to the disk is safer.
+        // We don't sync if this is a test case, since it makes tests way slower.
+        if let Err(failed) = disk_file.sync_all() {
+            // That did not work.
+
+            // Update the most recent error
+            most_recent_error = Some((failed.kind(), failed.raw_os_error()));
+            
+            // Try converting it into a DriveIOError
+            let converted: Result<DriveIOError, CannotConvertError> = failed.try_into();
+            if let Ok(bail) = converted {
+                // We don't need to / can't handle this error, up we go.
+                // But we might still need to retry this
+                if let Ok(actually_bail) = DriveError::try_from(bail) {
+                    // Something is up that we cant handle here.
+                    return Err(actually_bail)
+                }
+            }
+            // We must handle the error. Down here that just means trying the write again.
+            continue;
+        }
 
         // Writing worked! all done.
         trace!("Several blocks written successfully.");

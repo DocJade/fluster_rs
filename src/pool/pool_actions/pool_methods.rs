@@ -94,17 +94,38 @@ pub(super) fn flush_pool() -> Result<(), DriveError> {
 pub(super) fn load() -> Arc<Mutex<Pool>> {
     debug!("Loading in pool information...");
     // Read in the header. If this fails, we cannot start the filesystem.
-    let header = match PoolDiskHeader::read() {
-        Ok(ok) => ok,
-        Err(error) => {
-            // We cannot start the pool without reading in the header!
-            error!("Failed to acquire pool header! {error}");
-            println!("Failed to load the pool.");
-            println!("Reason: {error}");
-            println!("Fluster will now exit.");
-            exit(-1);
-        }
+
+    // We try at most 10 times.
+    let mut header: Option<PoolDiskHeader> = None;
+    for _ in 0..10 {
+        match PoolDiskHeader::read() {
+            Ok(ok) =>{
+                header = Some(ok);
+                break
+            },
+            Err(error) => {
+                // If no disk was inserted, yell at the user and try again
+                if error == DriveError::DriveEmpty {
+                    // Dumbass.
+                    println!("Yo. The drive is empty. Actually put in the disk.");
+                    continue;
+                }
+            }
+        };
     };
+
+    // Did we get it?
+    let header: PoolDiskHeader = if let Some(read) = header {
+        // All good.
+        read
+    } else {
+        // Failed to load in the disk header.
+        error!("Failed to acquire pool header after 10 tries! Giving up!");
+        println!("Fluster has failed to load the pool header.");
+        println!("Fluster will now exit.");
+        exit(-1);
+    };
+    
 
     let pool = Pool {
         header,

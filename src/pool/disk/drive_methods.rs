@@ -236,7 +236,7 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Drive
         }
 
         // The conversion worked, can we get it up to a DriveError?
-        let drive_error: Result<DriveError, CannotConvertError> = DriveError::try_from(drive_io_error.clone().expect("Guard."));
+        let drive_error: Result<DriveError, CannotConvertError> = DriveError::try_from(drive_io_error.expect("Guard."));
 
         // Did that also work?
         if let Err(err) = drive_io_error {
@@ -340,7 +340,7 @@ fn prompt_for_blank_disk(disk_number: u16) -> Result<BlankDisk, DriveError> {
         .is_some()
     {
         let _ = rprompt::prompt_reply(
-            "Creating a new disk, please insert a blank disk that will become disk {}, then hit enter.",
+            format!("Creating a new disk, please insert a blank disk that will become disk {disk_number}, then hit enter."),
         ).expect("Prompts should not fail.");
     }
 

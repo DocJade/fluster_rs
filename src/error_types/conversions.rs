@@ -8,6 +8,7 @@ use std::io::ErrorKind;
 use std::process::exit;
 use log::error;
 
+use log::warn;
 use thiserror::Error;
 use crate::error_types::critical::CriticalError;
 use crate::error_types::drive::DriveError;
@@ -226,8 +227,20 @@ impl TryFrom<std::io::Error> for DriveIOError {
             _ => {
                 // This error is newer than the rust version fluster was originally written for.
                 // GLHF!
-                // TODO: Put empty drive error check in here.
-                unreachable!("{value:#?}")
+                
+                // Is the floppy drive empty?
+                // code: 123,
+                // message: "No medium found",
+                if value.raw_os_error().expect("Should get a os error number") == 123_i32 {
+                    // No disk is in the drive.
+                    return Ok(DriveIOError::DriveEmpty);
+                }
+
+                // Well, we'll just pretend we can retry any unknown error...
+                warn!("UNKNOWN ERROR KIND:");
+                warn!("{value:#?}");
+                warn!("Ignoring, pretending we can retry...");
+                Ok(DriveIOError::Retry)
             },
         }
     }
