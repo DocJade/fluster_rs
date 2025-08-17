@@ -103,7 +103,7 @@ Run fluster:
 - Go to the output directory for the binary you built (./target/release/)
 
 Run it as sudo with:
-`sudo ./fluster_fs --block-device-path "/dev/sdX" --mount-point "~/mounted/fluster"`
+`sudo ./fluster_fs --block-device-path "/dev/sdX" --mount-point "/home/(your username here)/mounted/fluster"`
 
 If you don't want to run as sudo/root, you're smart.
 Smart enough to figure out another solution. Good luck!

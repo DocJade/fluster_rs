@@ -346,26 +346,29 @@ fn prompt_for_blank_disk(disk_number: u16) -> Result<BlankDisk, DriveError> {
 
     loop {
         if try_again {
-            let _ = rprompt::prompt_reply(
-                "That disk is not blank. Please insert a blank disk, then hit enter.",
+            let action = rprompt::prompt_reply(
+                "That disk is not blank. Please insert a blank disk, then hit enter. Or type \"wipe\" to forcibly wipe this disk.",
             ).expect("Prompts should not fail.");
+
+            if action.contains("wipe") {
+                // go wipe that disk
+                let mut wipe_me = open_and_deduce_disk(disk_number, false)?;
+                destroy_disk(wipe_me.disk_file_mut())?;
+                drop(wipe_me);
+            }
+
         }
         // we are making a new disk, so we must specify as such.
-        let disk = open_and_deduce_disk(disk_number, true)?;
+        let mut disk = open_and_deduce_disk(disk_number, true)?;
         match disk {
             // if its blank, all done
             DiskType::Blank(blank_disk) => return Ok(blank_disk),
-            DiskType::Unknown(unknown_disk) => {
-                // But if the disk is not blank, 
-                display_info_and_ask_wipe(&mut unknown_disk.into())?;
-                // try again
-                continue;
-            }
             _ => {
-                // This is not a blank disk.
-                // We can ask if the user would like to wipe their ass.
-
+                // But if the disk is not blank, 
+                display_info_and_ask_wipe(&mut disk)?;
+                // try again
                 try_again = true;
+                continue;
             }
         }
     }
