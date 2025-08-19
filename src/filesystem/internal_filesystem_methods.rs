@@ -13,6 +13,7 @@ use std::process::exit;
 
 use log::debug;
 
+use crate::filesystem::filesystem_struct::WRITE_BACKUPS;
 use crate::pool::pool_actions::pool_struct::Pool;
 use crate::filesystem::filesystem_struct::FilesystemOptions;
 use crate::filesystem::filesystem_struct::FlusterFS;
@@ -32,7 +33,7 @@ use crate::filesystem::filesystem_struct::USE_VIRTUAL_DISKS;
 // Filesystem option setup. Does not start filesystem.
 impl FilesystemOptions {
     /// Initializes options for the filesystem, also configures the virtual disks if needed.
-    pub fn new(use_virtual_disks: Option<PathBuf>, floppy_drive: PathBuf) -> Self {
+    pub fn new(use_virtual_disks: Option<PathBuf>, floppy_drive: PathBuf, backup: Option<bool>) -> Self {
         debug!("Configuring file system options...");
         // Set the globals
         // set the floppy disk path
@@ -61,10 +62,19 @@ impl FilesystemOptions {
             debug!("Done.");
         };
 
+        // Disable backups if needed.
+        // Backups default to being enabled.
+        let enable_backup = backup.unwrap_or(true);
+        debug!("Setting WRITE_BACKUPS...");
+        WRITE_BACKUPS.set(enable_backup).expect("This should only ever be called once.");
+        debug!("Done.");
+
+
         debug!("Done configuring.");
         Self {
             use_virtual_disks,
             floppy_drive,
+            enable_backup
         }
     }
 }

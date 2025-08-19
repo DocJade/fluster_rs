@@ -40,7 +40,7 @@ fn add_many_inode() {
 fn get_filesystem() -> FlusterFS {
     let temp_dir = get_new_temp_dir();
     let floppy_drive: PathBuf = PathBuf::new(); // This is never read since we are using temporary disks.
-    let fs_options = FilesystemOptions::new(Some(temp_dir.path().to_path_buf()), floppy_drive);
+    let fs_options = FilesystemOptions::new(Some(temp_dir.path().to_path_buf()), floppy_drive, Some(false));
     FlusterFS::start(&fs_options)
 }
 

@@ -20,6 +20,10 @@ struct Cli {
     /// Run with virtual floppy disks for testing. Path to put tempfiles in.
     #[arg(long)]
     use_virtual_disks: Option<String>,
+    /// Make backups of disks in /var/fluster. Disabling this VERY unsafe, you should
+    /// leave this on unless you are doing testing or don't care that much about your data.
+    #[arg(long)]
+    enable_disk_backup: Option<bool>,
 }
 
 fn main() {
@@ -46,9 +50,10 @@ fn main() {
 
     // Assemble the options
     let use_virtual_disks: Option<PathBuf> = cli.use_virtual_disks.map(PathBuf::from);
+    let backup: Option<bool> = cli.enable_disk_backup;
 
     let options: FilesystemOptions =
-        FilesystemOptions::new(use_virtual_disks, cli.block_device_path.into());
+        FilesystemOptions::new(use_virtual_disks, cli.block_device_path.into(), backup);
 
     let filesystem: FlusterFS = FlusterFS::start(&options);
 

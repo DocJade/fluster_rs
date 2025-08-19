@@ -38,6 +38,9 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
         panic!("Impossible write offset `{}`!",  block.block_origin.block)
     }
 
+    // Update the disk backup
+    crate::filesystem::disk_backup::update::update_backup(block);
+
     let pointer: DiskPointer = block.block_origin;
 
     // Calculate the offset into the disk
@@ -120,6 +123,9 @@ pub(crate) fn write_large_direct(disk_file: &File, data: &Vec<u8>, start_block: 
         "Directly writing {} blocks worth of bytes starting at block {} to currently inserted disk...",
         data.len().div_ceil(512), start_block.block
     );
+
+    // Update the disk backup
+    crate::filesystem::disk_backup::update::large_update_backup(start_block, data);
 
     // Calculate the offset into the disk
     let write_offset: u64 = start_block.block as u64 * 512;
