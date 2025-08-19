@@ -493,8 +493,8 @@ fn go_make_new_tier(size: usize) -> TieredCache {
     // New tiers are obviously empty.
     let mut new_hashmap: HashMap<DiskPointer, CachedBlock> = HashMap::with_capacity(size);
     new_hashmap.shrink_to(size);
-    let mut new_order: VecDeque<DiskPointer> = VecDeque::new();
-    new_order.reserve_exact(size);
+    let mut new_order: VecDeque<DiskPointer> = VecDeque::with_capacity(size);
+    new_order.shrink_to(size);
     TieredCache {
         size,
         items_map: new_hashmap,

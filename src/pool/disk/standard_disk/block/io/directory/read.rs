@@ -352,6 +352,7 @@ fn get_blocks(start_block_location: DiskPointer) -> Result<Vec<DirectoryBlock>, 
     let start_block: DirectoryBlock = DirectoryBlock::from_block(&raw_read);
 
     // We assume we are handed the first directory in the chain.
+    // Cannot pre-allocate the vec, since we dont know how many blocks there will be.
     let mut blocks: Vec<DirectoryBlock> = Vec::new();
     let mut current_dir_block: DirectoryBlock = start_block;
 

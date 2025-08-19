@@ -71,7 +71,7 @@ impl FileExtentBlock {
             flags: FileExtentBlockFlags::default(),
             bytes_free: 501, // new blocks have 501 free bytes
             next_block: DiskPointer::new_final_pointer(),
-            extents: Vec::new(),
+            extents: Vec::new(), // Not pre-allocated, no idea how much will end up in here.
             block_origin,
         }
     }
@@ -90,7 +90,7 @@ impl FileExtentBlock {
     /// Helper function that calculates how many blocks an input amount of data will require.
     /// Does not take into account the sizes of FileExtent blocks or such, just the DataBlock size.
     /// We are assuming you aren't going to write more than 32MB at a time.
-    pub const fn size_to_blocks(size_in_bytes: u64) -> u16 {
+    pub fn size_to_blocks(size_in_bytes: u64) -> u16 {
         // This calculation never changes, since the overhead of block is always the same.
         // A block holds 512 bytes, but we reserve 1 bytes for the flags (Currently unused),
         // and 4 more bytes for the checksum.
@@ -287,7 +287,10 @@ fn extents_to_bytes(extents: &[FileExtent], destination_disk_number: u16) -> Vec
 // Takes in bytes and makes extents, automatically determines when to stop.
 fn bytes_to_extents(bytes: &[u8], origin_disk_number: u16) -> Vec<FileExtent> {
     let mut offset: usize = 0;
-    let mut extent_vec: Vec<FileExtent> = Vec::new();
+
+    // As stated in `to_bytes` file extents are at most 6 bytes, so we will pre-allocate
+    // room for a totally full extent block, which right now is 501 bytes.
+    let mut extent_vec: Vec<FileExtent> = Vec::with_capacity(501_usize.div_ceil(6));
 
     loop {
         // make sure we dont go off the deep end

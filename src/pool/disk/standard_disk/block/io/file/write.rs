@@ -436,6 +436,9 @@ fn expanding_add_extents(file: InodeFile, extents: &[FileExtent]) -> Result<(), 
 /// assumes all of the incoming pointers are already sorted.
 fn pointers_into_extents(pointers: &[DiskPointer]) -> Vec<FileExtent> {
     // I feel like there is 100% a better way to do this, but i dont know it. so too bad!
+
+    // Cant pre-allocate room in the vec, since we dont know how many extents we'll be creating,
+    // and estimating it is hard.
     let mut new_extents: Vec<FileExtent> = Vec::new();
     
     // Loop over the pointers and create extents.
@@ -815,7 +818,9 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
     // == - Just pop off all ones after this one, and hold onto the pointers for them ==
     // == -  so we can free those blocks later. ==
 
-    // Start blocks that we need to free
+    // Start blocks that we need to free.
+    // Cannot pre-allocate, since there's no way to know how many blocks we'll be freeing
+    // at this point. Guesstimations could be made, but oh well.
     let mut blocks_to_free: Vec<DiskPointer> = Vec::new();
 
     // We also need to grab the extra disk pointers from the extent that holds the new
@@ -1035,6 +1040,7 @@ fn truncate_cleanup(pre_collected: Vec<DiskPointer>, next_extent_block: DiskPoin
     let mut next_extent_block = next_extent_block;
 
     // Also collect the extents, gotta remember where the're from too
+    // Cant pre-allocate this, no idea how many extent blocks there will be.
     let mut extents: Vec<(u16, FileExtent)> = Vec::new();
 
     debug!("Collecting blocks referred to by extents...");

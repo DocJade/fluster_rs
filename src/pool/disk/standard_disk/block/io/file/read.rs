@@ -96,8 +96,10 @@ impl DirectoryItem {
 fn go_to_pointers(location: &InodeFile) -> Result<Vec<DiskPointer>, DriveError> {
     // get extents
     let extents = location.to_extents()?;
-    // Extract all the blocks
-    let mut blocks: Vec<DiskPointer> = Vec::new();
+    // Extract all the blocks.
+    // Pre-allocating this vec isn't really possible, but we at least know that
+    // every extent will contain at least one block.
+    let mut blocks: Vec<DiskPointer> = Vec::with_capacity(extents.len());
 
     // For each extent
     for e in extents {
@@ -122,6 +124,7 @@ fn go_to_extents(
     debug!("Extracting extents for a file...");
     // We need to iterate over the entire ExtentBlock chain and get every single item.
     // We assume we are handed the first ExtentBlock in the chain.
+    // Cannot pre-allocate here, since we have no idea how many extents there will be.
     let mut extents_found: Vec<FileExtent> = Vec::new();
     let mut current_dir_block: FileExtentBlock = block.clone();
 

@@ -89,7 +89,10 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
     // First we open up the disk with the most recent successful pool allocation
     let mut disk_to_check = probable_disk;
     let mut new_highest_disk = highest_disk; // We may create new disks during the process.
-    let mut free_blocks: Vec<DiskPointer> = Vec::new();
+
+    // We will assume that we will be getting as many blocks as we need, so we can pre-allocate the
+    // vec.
+    let mut free_blocks: Vec<DiskPointer> = Vec::with_capacity(blocks.into());
 
     // Make sure the highest disks and disk to check are valid
     assert_ne!(disk_to_check, u16::MAX);
@@ -216,7 +219,8 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
 
 // helper
 fn block_indexes_to_pointers(blocks: &Vec<u16>, disk: u16) -> Vec<DiskPointer> {
-    let mut result: Vec<DiskPointer> = Vec::new();
+    // We will have as many pointers as we got blocks in.
+    let mut result: Vec<DiskPointer> = Vec::with_capacity(blocks.len());
     for block in blocks {
         result.push(DiskPointer { disk, block: *block });
     }

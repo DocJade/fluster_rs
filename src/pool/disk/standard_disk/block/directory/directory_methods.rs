@@ -160,6 +160,7 @@ fn new_directory_block(origin: DiskPointer) -> DirectoryBlock {
     // Items
     // New blocks have no items. duh.
     // If this is the root disk, the caller needs to add the root directory.
+    // Not pre-allocated, since we have no idea what's going in here yet.
     let directory_items: Vec<DirectoryItem> = Vec::new();
 
     // All done.

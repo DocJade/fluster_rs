@@ -664,7 +664,7 @@ impl From<InodeTimestamp> for SystemTime {
 // Deconstruct packed InodeLocation information to get the flags and inode offset
 impl InodeOffsetPacking {
     /// Extract the flags and an offset.
-    pub(super) const fn extract(&self) -> (PackedInodeLocationFlags, u16) {
+    pub(super) fn extract(&self) -> (PackedInodeLocationFlags, u16) {
         // First we get the flags, the flags expect 8 bits, so we nab those.
         // Shift right 8 times to bring the flags in line.
         let flag_bits: u8 = (self.inner >> 8) as u8;
@@ -684,7 +684,7 @@ impl InodeOffsetPacking {
 
     /// Make a new one
     /// This can only be used down here, you should be using InodeLocation::new().
-    const fn new(flags: PackedInodeLocationFlags, offset: u16) -> Self {
+    fn new(flags: PackedInodeLocationFlags, offset: u16) -> Self {
         // See extract() for more docs about what is goin on here.
         let inner: u16 = offset | ((flags.bits() as u16) << 8);
         Self {
@@ -696,7 +696,7 @@ impl InodeOffsetPacking {
     /// 
     /// Yes this is silly.
     #[inline]
-    pub(super) const fn from_u16(incoming: u16) -> Self {
+    pub(super) fn from_u16(incoming: u16) -> Self {
         Self { inner: incoming }
     }
 }

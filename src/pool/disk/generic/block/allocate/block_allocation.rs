@@ -6,6 +6,8 @@
 // allocate bytes that are already allocated
 // allocate past the end of the table
 
+use std::cmp::min;
+
 use enum_dispatch::enum_dispatch;
 use crate::{
     error_types::drive::DriveError,
@@ -59,8 +61,10 @@ fn go_find_free_blocks<T: BlockAllocation + ?Sized>(
 ) -> Result<Vec<u16>, u16> {
     // The allocation table is a stream of bits, the first bit is the 0th block.
 
-    // Vector of free block locations
-    let mut free: Vec<u16> = Vec::new();
+    // Vector of free block locations.
+    // Pre-allocated, expecting that we get all of blocks. But we obviously could not find
+    // more than 2880 free blocks per disk.
+    let mut free: Vec<u16> = Vec::with_capacity(min(2880_u16, blocks_requested) as usize);
 
     // Now loop through the table looking for free slots.
     for (byte_index, byte) in caller.get_allocation_table().iter().enumerate() {
