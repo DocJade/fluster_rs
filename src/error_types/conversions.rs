@@ -14,6 +14,8 @@ use crate::error_types::critical::CriticalError;
 use crate::error_types::drive::DriveError;
 use crate::error_types::drive::DriveIOError;
 use crate::error_types::drive::InvalidDriveReason;
+use crate::error_types::drive::WrappedIOError;
+use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 
 
 
@@ -57,26 +59,39 @@ impl TryFrom<DriveIOError> for DriveError {
 }
 
 //
-// std::io::Error to DriveIOError
+// std::io:Error wrapping
 //
 
-impl TryFrom<std::io::Error> for DriveIOError {
+impl WrappedIOError {
+    pub(crate) fn wrap(io_error: std::io::Error, error_origin: DiskPointer) -> Self {
+        WrappedIOError {
+            io_error,
+            error_origin,
+        }
+    }
+}
+
+//
+// WrappedIOError to DriveIOError
+//
+
+impl TryFrom<WrappedIOError> for DriveIOError {
     type Error = CannotConvertError;
 
-    fn try_from(value: std::io::Error) -> Result<Self, Self::Error> {
-        match value.kind() {
+    fn try_from(value: WrappedIOError) -> Result<Self, Self::Error> {
+        match value.io_error.kind() {
             ErrorKind::NotFound => {
                 // The floppy drive path is not there.
-                CriticalError::FloppyReadFailure(ErrorKind::NotFound, value.raw_os_error()).handle();
-                // We cant recover from that
-                unreachable!()
+                CriticalError::DriveInaccessible(InvalidDriveReason::NotFound).handle();
+                // If handling worked, can retry.
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::PermissionDenied => {
                 // Dont have permission to perform IO on the drive.
                 // Nothing we can do.
                 CriticalError::DriveInaccessible(InvalidDriveReason::PermissionDenied).handle();
-                // We cant recover from that
-                unreachable!()
+                // If handling worked, can retry.
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::ConnectionRefused |
             ErrorKind::ConnectionReset |
@@ -106,7 +121,8 @@ impl TryFrom<std::io::Error> for DriveIOError {
             },
             ErrorKind::WouldBlock => {
                 // Fluster does not ask for blocking IO.
-                unreachable!();
+                // In theory this can just be retried.
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::NotADirectory => {
                 // This should never happen, since we always try to write to a file, not a directory.
@@ -130,7 +146,10 @@ impl TryFrom<std::io::Error> for DriveIOError {
             },
             ErrorKind::InvalidInput => todo!(),
             ErrorKind::InvalidData => todo!(),
-            ErrorKind::TimedOut => todo!(),
+            ErrorKind::TimedOut => {
+                // The IO took too long, we should be able to try again.
+                Err(CannotConvertError::MustRetry)
+            },
             ErrorKind::WriteZero => {
                 // Writing a complete bytestream failed.
                 // Maybe the operation was canceled and needs to be retried?
@@ -143,7 +162,8 @@ impl TryFrom<std::io::Error> for DriveIOError {
                 // Fluster does not use a filesystem when doing writes to the disk.
                 // Maybe this could happen when attempting to write past the end of the disk?
                 // But we have bounds checking for that.
-                unreachable!("Floppy drive claims to be full.");
+                warn!("Floppy drive claims to be full, we dont care.");
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::NotSeekable => {
                 // We must be able to seek files to read and write from them, this is a
@@ -231,7 +251,7 @@ impl TryFrom<std::io::Error> for DriveIOError {
                 // Is the floppy drive empty?
                 // code: 123,
                 // message: "No medium found",
-                if value.raw_os_error().expect("Should get a os error number") == 123_i32 {
+                if value.io_error.raw_os_error().expect("Should get a os error number") == 123_i32 {
                     // No disk is in the drive.
                     return Ok(DriveIOError::DriveEmpty);
                 }

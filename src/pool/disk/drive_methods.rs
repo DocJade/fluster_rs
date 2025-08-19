@@ -11,13 +11,16 @@ use log::warn;
 
 use crate::error_types::conversions::CannotConvertError;
 use crate::error_types::critical::CriticalError;
+use crate::error_types::critical::RetryCapError;
 use crate::error_types::drive::DriveError;
 use crate::error_types::drive::DriveIOError;
+use crate::error_types::drive::WrappedIOError;
 use crate::helpers::hex_view::hex_view;
 use crate::pool::disk::blank_disk::blank_disk_struct::BlankDisk;
 use crate::pool::disk::drive_struct::DiskBootstrap;
 use crate::pool::disk::generic::block::block_structs::RawBlock;
 use crate::pool::disk::generic::disk_trait::GenericDiskMethods;
+use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 // The cache is NOT allowed in here at all, since any writes happen through the cache regardless.
 // Thus if we are loading in a disk, this is a real swap.
 // use crate::pool::disk::generic::io::cache::cache_io::CachedBlockIO;
@@ -143,13 +146,7 @@ fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, Dr
 }
 
 /// Get the path of the floppy drive
-#[track_caller] // We need to know where this failed.
 fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, DriveError> {
-    // If someone wants to port this to another operating system, this function will need appropriate changes
-    // to remove its dependency on getting the raw floppy device from Windows.
-
-    // TODO: Prevent blocking (Return NoDiskInserted if file does not load in under 1 second.)
-
     // If we are running with virtual disks enabled, we are going to use a temp folder instead of the actual disk to speed up
     // development, waiting for disk seeks is slow and loud lol.
 
@@ -221,8 +218,14 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Drive
         // That did not work, see if we can cast up the error
         let io_error = open_attempt.expect_err("Guard.");
 
+        let pointer = DiskPointer {
+            disk: disk_number,
+            block: 0,
+        };
+
         // Try converting that up to a DriveError
-        let drive_io_error: Result<DriveIOError, CannotConvertError> = DriveIOError::try_from(io_error);
+        let wrapped: WrappedIOError = WrappedIOError::wrap(io_error, pointer);
+        let drive_io_error: Result<DriveIOError, CannotConvertError> = DriveIOError::try_from(wrapped);
 
         // Did that work?
         if let Err(err) = drive_io_error {
@@ -251,10 +254,14 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Drive
         return Err(drive_error.expect("Guard."));
     };
 
+    drop(disk_path);
+
     // We've failed 10 times. Nothing we can do.
-    CriticalError::OutOfRetries(Location::caller()).handle();
-    // unrecoverable.
-    unreachable!()
+    // We can probably recover for this assuming the critical handler can either rebuild the disk
+    // or somehow make it writable again
+    CriticalError::OutOfRetries(RetryCapError::CantOpenDisk).handle();
+    // If that works, recurse, we should be able to get the file now.
+    get_floppy_drive_file(disk_number, new_disk)
 }
 
 /// Look for the magic "Fluster!" string.

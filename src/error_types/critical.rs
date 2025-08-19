@@ -2,12 +2,13 @@
 // Returning this error type means you've done all you possibly can, and need saving at a higher level, or
 // we are in a unrecoverable state.
 
-use std::{panic::Location, process::exit};
+use std::{fs::OpenOptions, os::unix::fs::FileExt, path::{Path, PathBuf}, process::exit};
 
+use rprompt::prompt_reply;
 use thiserror::Error;
-use log::error;
+use log::{error, warn};
 
-use crate::error_types::drive::InvalidDriveReason;
+use crate::{error_types::drive::InvalidDriveReason, filesystem::{disk_backup::restore::restore_disk, filesystem_struct::FLOPPY_PATH}, pool::disk::generic::generic_structs::pointer_struct::DiskPointer};
 
 #[derive(Debug, Clone, Copy, Error, PartialEq)]
 /// Use this error type if an error happens that you are unable to
@@ -16,18 +17,23 @@ use crate::error_types::drive::InvalidDriveReason;
 /// Creating critical errors is a last resort. Whatever error that was causing
 /// your failure must be passed in.
 pub enum CriticalError {
-    #[error("Reading from the floppy disk is not working.")]
-    FloppyReadFailure(std::io::ErrorKind, Option<i32>),
-    #[error("Writing to the floppy disk is not working.")]
-    FloppyWriteFailure(std::io::ErrorKind, Option<i32>),
     #[error("The floppy drive is inaccessible for some reason.")]
     DriveInaccessible(InvalidDriveReason),
+    /// Set the bool to true if Fluster could reasonably continue even after failing this operation.
     #[error("We've retried an operation too many times. Something must be wrong.")]
-    OutOfRetries(&'static Location<'static>) // Keep track of where we ran out of retries.
+    OutOfRetries(RetryCapError) // Keep track of where we ran out of retries.
 }
 
-
-
+#[derive(Debug, Clone, Copy, PartialEq)]
+/// When you run out of retries on an operation, its useful to know what kind of issue was occurring.
+pub enum RetryCapError {
+    /// Opening the disk is repeatedly failing
+    CantOpenDisk,
+    /// Attempting to write a block is repeatedly failing.
+    CantWriteBlock,
+    /// Attempting to read a block is repeatedly failing.
+    CantReadBlock,
+}
 
 //
 // =========
@@ -55,12 +61,417 @@ fn go_handle_critical(error: CriticalError) {
         panic!("Tried to recover from a critical error! {error:#?}");
     }
 
+    let mitgated = match error {
+        CriticalError::DriveInaccessible(invalid_drive_reason) => handle_drive_inaccessible(invalid_drive_reason),
+        CriticalError::OutOfRetries(reason) => handle_out_of_retries(reason),
+    };
 
+
+    // If that worked, the caller that caused this critical to be thrown should be able to
+    // complete whatever operation they need.
+    if mitgated {
+        return
+    }
 
     // None of that worked. We must give up.
     // .o7
-    error!("Critical error recovery has failed.");
-    error!("{error:#?}");
+    println!("Critical error recovery has failed.");
+    println!("{error:#?}");
     println!("Fluster! has encountered an unrecoverable error, and must shut down.\nGoodbye.");
+    exit(-1);
+}
+
+
+
+//
+// Sub-type handlers
+//
+
+
+// Returns true if mitigation succeeded.
+fn handle_drive_inaccessible(reason: InvalidDriveReason) -> bool {
+    match reason {
+        InvalidDriveReason::NotAFile => {
+            // A non-file cannot be used as a floppy disk
+            inform_improper_floppy_drive()
+        },
+        InvalidDriveReason::PermissionDenied => {
+            // Need to be able to do IO obviously.
+            inform_improper_floppy_drive()
+        },
+        InvalidDriveReason::Networking => {
+            // Cant use network drives
+            inform_improper_floppy_drive()
+        },
+        InvalidDriveReason::ReadOnly => {
+            // need to write sometimes.
+            inform_improper_floppy_drive()
+        },
+        InvalidDriveReason::NotSeekable => {
+            // Floppy drives must be seekable.
+            inform_improper_floppy_drive()
+        },
+        InvalidDriveReason::InvalidPath => {
+            // Need to be able to get to the drive
+            inform_improper_floppy_drive()
+        },
+        InvalidDriveReason::UnsupportedOS => {
+            // Homebrew OS maybe? We don't use that many
+            // file operations, certainly not many unusual ones, thus
+            // this shouldn't happen on normal platforms.
+            println!("Simple file-based IO is marked as unsupported by your operating system.");
+            println!("I'm assuming you're using a non-standard Rust build target / OS destination.");
+            println!("Obviously I cannot support that. If you really want to use Fluster (why?), you'll have to");
+            println!("update Fluster to make it compatible with your system/setup. Good luck!");
+            exit(-1);
+        },
+        InvalidDriveReason::NotFound => {
+            // Maybe the drive is tweaking?
+            // Ask the user if they wanna do troubleshooting.
+            println!("The floppy drive was not found, would you like to retry, or start troubleshooting?");
+            loop {
+                let response = prompt_reply("(R)etry / (T)roubleshoot : ").expect("Prompting should not fail.").to_lowercase();
+                if response.starts_with('r') {
+                    // User just wants to the retry.
+                    // retrun true, since we've "done all we can"
+                    return true;
+                } else if response.starts_with('t') {
+                    // Since the drive is not found, we will first
+                    return troubleshooter();
+                }
+            }
+            
+        },
+    }
+}
+
+/// Returns true if mitigation succeeded.
+/// 
+/// yes this is the same as the other handler, but whatever
+fn handle_out_of_retries(reason:RetryCapError) -> bool {
+    match reason {
+        RetryCapError::CantOpenDisk => {
+            // Run the troubleshooter
+            troubleshooter()
+        },
+        RetryCapError::CantWriteBlock => troubleshooter(),
+        RetryCapError::CantReadBlock => troubleshooter(),
+    }
+}
+
+
+//
+// User guided troubleshooting
+//
+
+/// Returns true if we were able to pinpoint the issue and resolve it.
+fn troubleshooter() -> bool {
+    // Inform the user that the troubleshooter is running.
+    println!("Fluster is troubleshooting, please wait...");
+
+    // Do the easiest things first, preferably ones that do not involve interaction.
+
+    // Run the disk checker.
+
+    // If that passes, we now know:
+    // - Every block on the disk is readable
+    // - Every block on the disk is writable.
+    // - The drive is connected properly and is working.
+    
+    // If all of that is working, troubleshooting is done, since we did not find any issues.
+    // But this is suspicious. Why did the troubleshooter get called when everything is working?
+    if check_disk() {
+        println!("Troubleshooter found nothing wrong. But this is strange.");
+        println!("Suggestion: You should cancel all file operations and unmount Fluster to flush everything");
+        println!("to disk, just in case. If you are already in the process of unmounting, good luck!");
+        let _ = prompt_reply("Press enter to continue.");
+        return true;
+    }
+    
+    // Something is wrong with the disk or the drive. We will now walk through the
+    // fastest and easiest options first.
+    
+    // Ask the user to re-seat the disk.
+    let _ = prompt_reply("Please eject the floppy disk, then re-insert it. When finished, press enter.");
+    
+    // Maybe re-seating was all we needed?
+    if check_disk() {
+        // Neat.
+        println!("Troubleshooter finished.");
+        return true
+    }
+
+    // Now we know for sure that either the disk is dead, or the drive is not working.
+
+    // Let's try another disk, that'll let us narrow it down if the disk was bad.
+    let _ = prompt_reply("Please swap disks to any known good disk. Remember which disk was removed. When finished, press enter.");
+
+    // Run the check then have the user put the possibly bad disk back in for continuity.
+    let disk_bad = check_disk();
+
+    let _ = prompt_reply("Please swap back to the disk you previously removed, then press enter.");
+
+    // Now, if the known good disk passed the disk check, we know that it's the drive that is having issues.
+    // Otherwise, the disk is bad.
+
+    if disk_bad {
+        // Bummer, we need to replace this disk.
+        do_disk_restore();
+
+        // Disk has been restored.
+        return true;
+    }
+
+    // Disk wasn't bad, so the drive must be the issue.
+
+    // Try un-plugging and plugging it back in lmao.
+
+    loop {
+        do_remount();
+
+        if check_disk() {
+            // Remounting fixed it.
+            println!("Troubleshooter finished.");
+            return true;
+        };
+
+        // That failed. Retry?
+        println!("Check disk is still failing. This is our last troubleshooting step before completely giving up.");
+        println!("Would you like to try re-mounting again, or throw in the towel?");
+        let prompted: String = prompt_reply("(Y)es/(G)ive up: ").expect("Prompts should not fail");
+        if prompted.to_ascii_lowercase().contains('g') {
+            // user gives up.
+            break
+        }
+        println!("Let's try that again...");
+    }
+
+    
+
+    // Remounting did not work, and the user has given up.
+    println!("Troubleshooting has failed. No fix that was attempted worked.");
+    println!("All of the disks are backed up to the backup directory. No data should be lost, although there might be partially written data.");
+    println!("Worst comes to worst, you can re-image all of your disks from backups."); // god i hope i dont have to.
+    println!("Before restoring those disks though, make sure to back-up the backups, since they might be slightly corrupt.");
+    return false;
+}
+
+
+//
+// Troubleshooting actions
+//
+
+/// Read every block on the disk to determine if the disk is bad.
+/// 
+/// This may take a while.
+/// 
+/// Returns true if every block was read and written correctly.
+fn check_disk() -> bool {
+    println!("Checking if the disk and drive are working...");
+    // Just loop over all of the blocks and try reading them.
+    // We need to do it manually ourselves since we dont want
+    // to throw another critical error while handling another one.
+
+    // Open the disk currently in the drive.
+    let disk_path = FLOPPY_PATH
+        .try_lock()
+        .expect("Fluster is single threaded.")
+        .clone();
+    
+    // Read the entire thing in one go
+    println!("Open drive...");
+    let disk_file = match OpenOptions::new().read(true).write(true).open(&disk_path) {
+        Ok(ok) => ok,
+        Err(_) => {
+            // There is something wrong with reading in the drive, which would imply that
+            // the drive is inaccessible or something. We cannot resolve here.
+            println!("Fail.");
+            return false;
+        },
+    };
+    println!("Ok.");
+    
+    // Now read in the entire disk.
+    println!("Reading...");
+    let mut whole_disk: Vec<u8> = vec![0; 512*2880];
+    let read_result = disk_file.read_exact_at(&mut whole_disk, 0);
+
+    // If that failed at all, checking the disk is bad either due to the drive, or the disk.
+    if read_result.is_err() {
+        // Read failed. Something is up.
+        println!("Fail.");
+        return false;
+    };
+    println!("Ok.");
+
+    // Now we write the entire disk back again to see if every block accepts writes.
+    println!("Writing...");
+    let write_result = disk_file.write_all_at(&whole_disk, 0);
+
+    // Did the write work?
+    if write_result.is_err() {
+        // nope
+        println!("Fail.");
+        return false;
+    };
+    println!("Ok.");
+    println!("Disk and drive appear to be working correctly.");
+    true
+}
+
+
+/// Some actions might change the path to the floppy disk drive, we need to let the user update that
+/// if they need.
+fn update_drive_path() {
+    println!("Has the path to the floppy drive changed?");
+    loop {
+        let response = prompt_reply("y/n: ").expect("Prompting should not fail.").to_lowercase();
+        if response.starts_with('n') {
+            // Nothing to do.
+            return;
+        } else if response.starts_with('y') {
+            // Need to update the path
+            break
+        }
+        // Needs to be `y` or `n`
+    }
+
+    // what's the new path
+    let new_path: std::path::PathBuf;
+    loop {
+        let possible = prompt_reply("New path: ").expect("Prompting should not fail.");
+        let could_be = PathBuf::from(possible);
+        let maybe = match could_be.canonicalize() {
+            Ok(ok) => ok,
+            Err(err) => {
+                // what
+                println!("=====================");
+                println!("{err:#?}");
+                println!("=====================");
+                println!("Unable to canonicalize path. Please provide a valid path.");
+                continue;
+            },
+        };
+
+        if std::fs::exists(&maybe).unwrap_or(false) {
+            // Good.
+            new_path = maybe;
+            break
+        } else {
+            println!("Unable to either open path, or confirm it exists. Please provide a valid path.");
+            continue;
+        }
+    }
+
+    // Set that new path
+    *FLOPPY_PATH.try_lock().expect("Fluster is single threaded.") = new_path;
+}
+
+
+
+
+//
+// User actions
+//
+
+
+
+/// Ask the user to remount the floppy drive.
+fn do_remount() {
+    println!("Please re-mount the floppy drive.");
+    println!("You can find more information about remounting in the README.");
+    let _ = prompt_reply("Press enter after you have finished re-mounting the drive.");
+    // This might have changed the path to the floppy drive.
+    update_drive_path();
+}
+
+/// Inform the user that the disk needs to be re-created.
+/// 
+/// Make sure to put the bad disk back in the drive beforehand so the user
+/// knows what disk to discard.
+fn do_disk_restore() {
+    println!("The troubleshooter has determined that the disk currently within the drive is bad.");
+    println!("This disk will need to be re-created.");
+
+    // Now start the restore.
+    let mut failure = false;
+    loop {
+        if failure {
+            // We tried restoring the disk, but the restore failed.
+            // Tell the user and ask if they want to attempt to restore to
+            // the same disk again, or have them put in a new disk.
+            println!("Restoring disk has failed.");
+            println!("Restoring can be retried though.");
+            println!("If you would like to attempt restoring to the same disk that you inserted previously,");
+            println!("leave it in the drive, and ignore the message about swapping disks.");
+            println!("You can re-try as many times as you would like, but if the new disk continues to fail, you");
+            println!("should try using another disk to restore onto.");
+            println!("If you just cannot seem to restore to a new disk, idk man you're cooked lmao good luck bozo.");
+            let _ = prompt_reply("Press enter to continue.");
+        }
+
+        // Pull out the bad one, disk restore needs an empty drive.
+        println!("Please remove the bad disk currently inserted in the drive.");
+
+        // We need to know what disk that was.
+        let disk_number: u16;
+        loop {
+            let to_convert = prompt_reply("Please enter the disk number of the bad disk: ").expect("Prompting should not fail");
+            if let Ok(number) = to_convert.parse::<u16>() {
+                disk_number = number;
+                break;
+            }
+            println!("Parsing error, please try again. Only enter the number of the disk.")
+        }
+
+        // Now restore that disk.
+        if restore_disk(disk_number) {
+            // restore worked!
+            return
+        }
+        // Restoration failed, it can be retried.
+        failure = true;
+    }
+}
+
+//
+// User information
+//
+
+fn inform_improper_mount_point() -> ! {
+    println!("The point where you have tried to mount fluster is invalid for some reason.");
+    println!("Please re-confirm that the mount point is: valid, then re-run fluster. Good luck!");
+    exit(-1)
+}
+
+fn inform_improper_floppy_drive() -> bool {
+    // We cannot use this floppy drive.
+
+    // First check if the user has inserted a write-protected disk
+    println!("Please remove the floppy disk from the drive, and confirm that it is not set to read-only.");
+    loop {
+        let prompted: String = prompt_reply("Was the disk read-only? y/n: ").expect("Prompts should not fail");
+        if prompted.contains('y') {
+            // Whoops!
+            println!("Cool! That means we do not need to shut down. Please make sure you do not insert");
+            println!("write protected disks in the future, or the troubleshooter will start again.");
+            let _ = prompt_reply("Press enter to continue.");
+            return true;
+        } else if prompted.contains('n') {
+            // Well crap.
+            break
+        };
+        println!("Try again.")
+    }
+
+    // Disk was not write protected. Drive is bad.
+    println!("We are unable to access the floppy disk from your floppy drive.");
+    println!("Please make sure that the path you provided for the drive is:");
+    println!("- Valid,");
+    println!("- A file, and not a directory,");
+    println!("- Accessible by your current user,");
+    println!("- Is not over the network,");
+    println!("- Is not mounted as read-only,");
+    println!("Fluster will now exist, since operating without a drive is not possible.");
     exit(-1);
 }

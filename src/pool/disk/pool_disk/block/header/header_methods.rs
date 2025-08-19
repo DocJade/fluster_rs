@@ -2,13 +2,10 @@
 
 // Imports
 
-use std::panic::Location;
 use std::process::exit;
 
 use log::debug;
-use log::warn;
 
-use crate::error_types::critical::CriticalError;
 use crate::error_types::drive::DriveError;
 use crate::error_types::header::HeaderError;
 use crate::filesystem::filesystem_struct::USE_VIRTUAL_DISKS;

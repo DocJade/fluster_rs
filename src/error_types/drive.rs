@@ -2,6 +2,8 @@
 // We do not allow string errors. This is RUST damn it, not python!
 use thiserror::Error;
 
+use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+
 #[derive(Debug, Error, PartialEq)]
 /// Super-error about the floppy drive itself.
 /// 
@@ -25,6 +27,16 @@ pub enum DriveIOError {
     Retry,
 }
 
+#[derive(Debug)]
+pub struct WrappedIOError {
+    /// The io error that you are trying to handle
+    pub(super) io_error: std::io::Error,
+    /// The DiskPointer to where this issue occurred.
+    pub(super) error_origin: DiskPointer
+}
+
+
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 /// Reasons why we cannot use the provided floppy disk path
 pub enum InvalidDriveReason {
@@ -42,5 +54,7 @@ pub enum InvalidDriveReason {
     InvalidPath,
     /// The filesystem (or operating system) that you're running fluster on
     /// does not support basic disk IO.
-    UnsupportedOS
+    UnsupportedOS,
+    /// Generic "not found"
+    NotFound
 }

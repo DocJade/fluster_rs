@@ -6,3 +6,4 @@ pub mod io;
 mod file_handle;
 mod item_flag;
 mod file_attributes;
+pub mod disk_backup;

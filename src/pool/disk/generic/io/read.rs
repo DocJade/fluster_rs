@@ -11,7 +11,7 @@ use log::{
     warn
 };
 
-use crate::{error_types::{conversions::CannotConvertError, critical::CriticalError, drive::{DriveError, DriveIOError}}, pool::disk::generic::generic_structs::pointer_struct::DiskPointer};
+use crate::{error_types::{conversions::CannotConvertError, critical::{CriticalError, RetryCapError}, drive::{DriveError, DriveIOError, WrappedIOError}}, pool::disk::generic::generic_structs::pointer_struct::DiskPointer};
 
 use super::super::block::block_structs::RawBlock;
 use super::super::block::crc::check_crc;
@@ -39,6 +39,11 @@ pub(crate) fn read_block_direct(
         panic!("Impossible read offset `{block_index}`!")
     }
 
+    let pointer: DiskPointer = DiskPointer {
+        disk: originating_disk,
+        block: block_index,
+    };
+
     // allocate space for the block
     let mut read_buffer: [u8; 512] = [0u8; 512];
 
@@ -47,7 +52,6 @@ pub(crate) fn read_block_direct(
 
     // Enter a loop to retry reading the block 10 times at most.
     // If we try 10 times without success, we are cooked.
-    let mut most_recent_error: Option<(ErrorKind, Option<i32>)> = None;
 
     for _ in 0..10 {
 
@@ -55,12 +59,10 @@ pub(crate) fn read_block_direct(
         let read_result = disk_file.read_exact_at(&mut read_buffer, read_offset);
         if let Err(error) = read_result {
             // That did not work.
-
-            // Update the most recent error
-            most_recent_error = Some((error.kind(), error.raw_os_error()));
             
             // Try converting it into a DriveIOError
-            let converted: Result<DriveIOError, CannotConvertError> = error.try_into();
+            let wrapped: WrappedIOError = WrappedIOError::wrap(error, pointer);
+            let converted: Result<DriveIOError, CannotConvertError> = wrapped.try_into();
             if let Ok(bail) = converted {
                 // We don't need to / can't handle this error, up we go.
                 // But we might still need to retry this
@@ -99,14 +101,8 @@ pub(crate) fn read_block_direct(
 
     // We've made it out of the loop without a good read. We are doomed.
     error!("Read failure, requires assistance.");
-    
-    // Since we made it out of the loop, the error variable MUST be set.
-    let error = match most_recent_error {
-        Some(ok) => ok,
-        None => unreachable!("Shouldn't be able to exit the loop without an error."),
-    };
 
-    // Do the error cleanup, if that works, we'll tell the caller to retry.
-    CriticalError::FloppyReadFailure(error.0, error.1).handle();
-    Err(DriveError::Retry)
+    // Do the error cleanup, if that works, we will recurse, since the call should now work.
+    CriticalError::OutOfRetries(RetryCapError::CantReadBlock).handle();
+    read_block_direct(disk_file, originating_disk, block_index, ignore_crc)
 }
