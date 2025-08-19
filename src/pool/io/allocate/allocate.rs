@@ -252,11 +252,13 @@ fn write_empty_crc(blocks: &[u16], disk: u16) -> Result<(), DriveError> {
 }
 
 fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, DriveError> {
-    // We assume the blocks are pre-sorted to reduce disk seeking.
+    debug!("Deallocating some blocks from the pool...");
+    // We assume the blocks are pre-sorted to reduce disk seeking, but even
+    // if they aren't, the cache will re-sort them on write.
 
     // Make sure all of the blocks came from the same disk
     let starter: DiskPointer = *blocks.first().expect("Why are we getting 0 blocks?");
-    let mut extracted_blocks: Vec<u16> = Vec::new();
+    let mut extracted_blocks: Vec<u16> = Vec::with_capacity(blocks.len());
     for block in blocks {
         // Are the disk numbers the same?
         assert_eq!(starter.disk, block.disk);
@@ -264,24 +266,21 @@ fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, DriveError> {
         extracted_blocks.push(block.block);
     }
 
-    // Remove the blocks from the cache if they exist.
-    for block in blocks {
-        CachedBlockIO::remove_block(block);
-    }
-
-    // Go zero out the blocks on the disk, just to be safe.
-    // We will bypass the cache.
-    
+    // Go zero out the blocks on the disk, but all of the IO will be cached. Thus if
+    // we are trying to free blocks on a disk that isn't in the drive right now, we
+    // might need to swap, also this will auto-chunk the writes, which is faster.
+    debug!("Zeroing out blocks...");
     for block in blocks {
         let empty: RawBlock = RawBlock {
             block_origin: *block,
             data: [0_u8; 512],
         };
         // Zero em out with the cache.
-        CachedBlockIO::forcibly_write_a_block(&empty)?;
+        CachedBlockIO::update_block(&empty)?;
     }
     
     // Now go to and free the blocks from the allocation table.
+    debug!("Freeing blocks from the disk header...");
     let mut disk: CachedAllocationDisk = CachedAllocationDisk::open(starter.disk)?;
     let blocks_freed = disk.free_blocks(&extracted_blocks)?;
 
@@ -320,6 +319,7 @@ fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, DriveError> {
     .pool_standard_blocks_free += blocks_freed;
 
     // Return the number of blocks freed.
+    debug!("Done. {blocks_freed} pool blocks freed.");
     Ok(blocks_freed)
     
 }

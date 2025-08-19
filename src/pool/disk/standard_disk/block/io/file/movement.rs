@@ -23,7 +23,8 @@ impl InodeFile {
     /// Find where a seek lands.
     /// Returns (index, offset), index is the index into the input blocks array,
     /// offset is the offset within that block, skipping the flag byte already.
-    pub(super) fn byte_finder(byte_offset: u64) -> (usize, u16) {
+    #[inline]
+    pub(super) const fn byte_finder(byte_offset: u64) -> (usize, u16) {
         // Assumptions:
         // We aren't attempting to find a byte offset that is outside of the file.
 

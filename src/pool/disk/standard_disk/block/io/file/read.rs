@@ -180,7 +180,10 @@ fn go_read_file(file: &InodeFile, seek_point: u64, size: u32) -> Result<Vec<u8>,
     let blocks = file.to_pointers()?;
     let mut bytes_remaining: u32 = size;
     let mut current_block: usize = block_index;
-    let mut collected_bytes: Vec<u8> = Vec::new();
+
+    // Since we will be writing into this vec, we need to pre-fill it with zeros to allow for indexing.
+    // Doing it like this also avoids needing to grow the vec with additional data.
+    let mut collected_bytes: Vec<u8> = vec![0_u8; size.try_into().expect("Why are you running on a 16 bit system?")];
 
     // We dont need to deal with the disk at all at this level, we will use
     // the cache for all IO
@@ -191,15 +194,19 @@ fn go_read_file(file: &InodeFile, seek_point: u64, size: u32) -> Result<Vec<u8>,
             // All done!
             break
         }
-        let mut read_bytes = read_bytes_from_block(blocks[current_block], byte_index, bytes_remaining)?;
+
+        // Get where the next bytes need to go
+        let append_point = (size - bytes_remaining) as usize;
+
+        // Read into the buffer
+        let bytes_read = read_bytes_from_block(&mut collected_bytes, append_point, blocks[current_block], byte_index, bytes_remaining)?;
+        
         // After the first read, we are now aligned to the start of blocks
         byte_index = 0;
 
         // Update how many bytes we've read
-        bytes_remaining -= read_bytes.len() as u32;
+        bytes_remaining -= bytes_read as u32;
 
-        // add to the bucket
-        collected_bytes.append(&mut read_bytes);
         // Keep going!
         current_block += 1;
         continue;
@@ -215,12 +222,18 @@ fn go_read_file(file: &InodeFile, seek_point: u64, size: u32) -> Result<Vec<u8>,
 
 /// Read as many bytes as we can from this block.
 /// 
-/// Returns number of bytes read
-fn read_bytes_from_block(block: DiskPointer, offset: u16, bytes_to_read: u32) -> Result<Vec<u8>, DriveError> {
+/// Buffer must have enough room for our write. MUST pre-allocate it.
+/// 
+/// buffer_offset is how far into the provided buffer to append the newly read bytes.
+/// 
+/// Places read bytes into the provided buffer.
+/// 
+/// Returns number of bytes read.
+fn read_bytes_from_block(buffer: &mut [u8], buffer_offset: usize, block: DiskPointer, internal_block_offset: u16, bytes_to_read: u32) -> Result<u16, DriveError> {
 
     // How much data a block can hold
     let data_capacity = 512 - DATA_BLOCK_OVERHEAD as usize;
-    let offset = offset as usize;
+    let offset = internal_block_offset as usize;
 
     // Check for impossible offsets
     assert!(offset < data_capacity, "Tried to read outside of the capacity of a block.");
@@ -243,9 +256,19 @@ fn read_bytes_from_block(block: DiskPointer, offset: u16, bytes_to_read: u32) ->
     // Skip the first byte with the flag
     let start = offset + 1;
     let end = start + bytes_to_read as usize;
+    let amount_read: usize = end - start;
 
-    let read_bytes: Vec<u8> = Vec::from(&block_copy.data[start..end]);
+    // Put the bytes into the buffer that was passed in.
+
+    // Create slices for the buffer and the data, zero cost abstraction i think, just makes
+    // code prettier.
+
+    let destination_slice = &mut buffer[buffer_offset..buffer_offset + amount_read];
+    let block_data = &block_copy.data[start..end];
+
+    destination_slice.copy_from_slice(block_data);
 
     // Return the bytes we read.
-    Ok(read_bytes)
+    // No way to read more than 512 bytes, so u16 is fine
+    Ok(amount_read as u16)
 }
