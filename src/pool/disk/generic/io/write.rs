@@ -68,26 +68,6 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
             continue;
         }
 
-        // Syncing all of the data to the disk is safer.
-        // We don't sync if this is a test case, since it makes tests way slower.
-        if let Err(failed) = disk_file.sync_all() {
-            // That did not work.
-            
-            // Try converting it into a DriveIOError
-            let wrapped: WrappedIOError = WrappedIOError::wrap(failed, pointer);
-            let converted: Result<DriveIOError, CannotConvertError> = wrapped.try_into();
-            if let Ok(bail) = converted {
-                // We don't need to / can't handle this error, up we go.
-                // But we might still need to retry this
-                if let Ok(actually_bail) = DriveError::try_from(bail) {
-                    // Something is up that we cant handle here.
-                    return Err(actually_bail)
-                }
-            }
-            // We must handle the error. Down here that just means trying the write again.
-            continue;
-        }
-
         // Writing worked! all done.
         trace!("Block written successfully.");
         return Ok(());
@@ -140,26 +120,6 @@ pub(crate) fn write_large_direct(disk_file: &File, data: &Vec<u8>, start_block: 
             
              // Try converting it into a DriveIOError
             let wrapped: WrappedIOError = WrappedIOError::wrap(error, pointer);
-            let converted: Result<DriveIOError, CannotConvertError> = wrapped.try_into();
-            if let Ok(bail) = converted {
-                // We don't need to / can't handle this error, up we go.
-                // But we might still need to retry this
-                if let Ok(actually_bail) = DriveError::try_from(bail) {
-                    // Something is up that we cant handle here.
-                    return Err(actually_bail)
-                }
-            }
-            // We must handle the error. Down here that just means trying the write again.
-            continue;
-        }
-
-        // Syncing all of the data to the disk is safer.
-        // We don't sync if this is a test case, since it makes tests way slower.
-        if let Err(failed) = disk_file.sync_all() {
-            // That did not work.
-            
-            // Try converting it into a DriveIOError
-            let wrapped: WrappedIOError = WrappedIOError::wrap(failed, pointer);
             let converted: Result<DriveIOError, CannotConvertError> = wrapped.try_into();
             if let Ok(bail) = converted {
                 // We don't need to / can't handle this error, up we go.
