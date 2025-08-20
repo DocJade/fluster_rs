@@ -163,8 +163,11 @@ fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolDiskHeader, Header
         return Err(HeaderError::Invalid);
     }
 
+    // Easier alignment
+    let mut offset: usize = 8;
+
     // Pool headers always have bit 7 set in the flags, other headers are forbidden from writing this bit.
-    let flags: PoolHeaderFlags = match PoolHeaderFlags::from_bits(block.data[8]) {
+    let flags: PoolHeaderFlags = match PoolHeaderFlags::from_bits(block.data[offset]) {
         Some(ok) => ok,
         None => {
             // extra bits in the flags were set, either this isn't a pool header, or it is corrupted in some way.
@@ -179,21 +182,28 @@ fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolDiskHeader, Header
         return Err(HeaderError::Invalid);
     }
 
+    offset += 1;
+
     // Now we can actually start extracting the header.
 
     // Highest disk
     let highest_known_disk: u16 =
-        u16::from_le_bytes(block.data[9..9 + 2].try_into().expect("Impossible"));
+        u16::from_le_bytes(block.data[offset..offset + 2].try_into().expect("Impossible"));
+
+    offset += 2;
 
     // Disk with next free block
     let disk_with_next_free_block: u16 =
-        u16::from_le_bytes(block.data[11..11 + 2].try_into().expect("Impossible"));
+        u16::from_le_bytes(block.data[offset..offset + 2].try_into().expect("Impossible"));
+
+    offset += 2;
 
     // Blocks free in pool
-    let pool_standard_blocks_free: u16 =
-        u16::from_le_bytes(block.data[13..13 + 2].try_into().expect("Impossible"));
+    let pool_standard_blocks_free: u32 =
+        u32::from_le_bytes(block.data[offset..offset + 4].try_into().expect("Impossible"));
 
     // Block allocation map
+    // Stop using the offset since this is always at the end.
     let block_usage_map: [u8; 360] = block.data[148..148 + 360].try_into().expect("Impossible");
 
     // The latest inode write is not persisted between launches, so we point at the root inode.
@@ -227,22 +237,29 @@ fn pool_header_to_raw_block(header: PoolDiskHeader) -> RawBlock {
     // The magic
     buffer[0..8].copy_from_slice("Fluster!".as_bytes());
 
+    // offset for easier alignment
+    let mut offset: usize = 8;
+
     // Flags
-    buffer[8] = flags.bits();
+    buffer[offset] = flags.bits();
+    offset += 1;
 
     // Highest known disk
-    buffer[9..9 + 2].copy_from_slice(&highest_known_disk.to_le_bytes());
+    buffer[offset..offset + 2].copy_from_slice(&highest_known_disk.to_le_bytes());
+    offset += 2;
 
     // Disk with next free block
-    buffer[11..11 + 2].copy_from_slice(&disk_with_next_free_block.to_le_bytes());
+    buffer[offset..offset + 2].copy_from_slice(&disk_with_next_free_block.to_le_bytes());
+    offset += 2;
 
     // Free blocks
-    buffer[13..13 + 2].copy_from_slice(&pool_standard_blocks_free.to_le_bytes());
+    buffer[offset..offset + 4].copy_from_slice(&pool_standard_blocks_free.to_le_bytes());
 
     // We do not save the inode write disk information.
     let _ = latest_inode_write;
 
     // Block usage map
+    // Doesn't use offset, static location.
     buffer[148..148 + 360].copy_from_slice(&block_usage_map);
 
     // Add the CRC
@@ -299,7 +316,7 @@ fn new_pool_header() -> PoolDiskHeader {
     let disk_with_next_free_block: u16 = 1;
 
     // How many pool blocks are free? None! We only have the root disk!
-    let pool_standard_blocks_free: u16 = 0;
+    let pool_standard_blocks_free: u32 = 0;
 
     // What blocks are free on the pool disk? Not the first one!
     let mut block_usage_map: [u8; 360] = [0u8; 360];

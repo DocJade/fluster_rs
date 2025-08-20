@@ -1,8 +1,6 @@
 # Pool header
 
 The root disk only holds information about the pool. Blocks cannot be stored to this disk.
-This raises the requirement to having a minimum of 2 disks, but the overhead should pay itself off in read speed via caching.
-// TODO: Add caching.
 
 | Offset | Length | Field                                                                                          |
 | ------ | ------ | ---------------------------------------------------------------------------------------------- |
@@ -10,7 +8,7 @@ This raises the requirement to having a minimum of 2 disks, but the overhead sho
 | 8      | 1      | Bitflags                                                                                       |
 | 9      | 2      | Highest known disk number.                                                                     |
 | 11     | 2      | Disk with the next free block in the pool.<br />Set to u16::MAX if the final disk has no room. |
-| 13     | 2      | Number of blocks free across all disks in the pool.                                            |
+| 13     | 4      | Number of blocks free across all disks in the pool.                                            |
 | -      | -      | Reserved                                                                                       |
 | 148    | 360    | Block usage bitplane                                                                           |
 | 509    | 4      | Block CRC                                                                                      |

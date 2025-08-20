@@ -17,7 +17,7 @@ pub struct PoolDiskHeader {
     /// The next disk with a free block on it, or u16::MAX
     pub disk_with_next_free_block: u16,
     /// The number of free standard blocks across all disks
-    pub pool_standard_blocks_free: u16,
+    pub pool_standard_blocks_free: u32,
     /// The disk with the most recent inode write.
     /// Used for speeding up inode additions.
     pub latest_inode_write: DiskPointer,

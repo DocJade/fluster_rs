@@ -142,7 +142,7 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
                     .try_lock()
                     .expect("single threaded")
                     .header
-                    .pool_standard_blocks_free -= ok.len() as u16;
+                    .pool_standard_blocks_free -= ok.len() as u32;
 
                 // Add crc to blocks if requested.
                 if add_crc {
@@ -182,7 +182,7 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
                     .try_lock()
                     .expect("single threaded")
                     .header
-                    .pool_standard_blocks_free -= blockie_doos.len() as u16;
+                    .pool_standard_blocks_free -= blockie_doos.len() as u32;
                 
                 // Add crc to blocks if requested
                 if add_crc {
@@ -320,7 +320,7 @@ fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, DriveError> {
     .try_lock()
     .expect("single threaded")
     .header
-    .pool_standard_blocks_free += blocks_freed;
+    .pool_standard_blocks_free += blocks_freed as u32;
 
     // Return the number of blocks freed.
     debug!("Done. {blocks_freed} pool blocks freed.");
