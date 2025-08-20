@@ -232,6 +232,7 @@ fn block_indexes_to_pointers(blocks: &Vec<u16>, disk: u16) -> Vec<DiskPointer> {
 /// 
 /// This method only works on standard disks
 fn write_empty_crc(blocks: &[u16], disk: u16) -> Result<(), DriveError> {
+    debug!("Adding crc to {} blocks on disk {disk}...", blocks.len());
     // These new blocks do not have their CRC set, we need to just write empty blocks to them to set the crc.
     let mut empty_data: [u8; 512] = [0_u8; 512];
     // CRC that sucker

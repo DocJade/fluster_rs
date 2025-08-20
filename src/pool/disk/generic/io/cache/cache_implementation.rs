@@ -448,10 +448,12 @@ fn go_add_or_update_item_cache(block: CachedBlock) -> Result<(), DriveError> {
     
     // Make sure we have room first
     if cache.tier_0.is_full() {
+        debug!("Tried adding new block to cache, but cache is full. Cleaning up tier 0...");
         // We don't have room, so we need to flush out tier 0 of the cache.
         // But first we can try dropping items that do not require flushing
         drop(cache);
         if BlockCache::cleanup_tier(0).is_none() {
+            debug!("Cleanup wasn't enough, flushing tier 0...");
             // Nothing was removed from the tier, so we have to flush normally, since tier
             // zero is full of items we must write.
             BlockCache::flush(0)?;
@@ -860,6 +862,15 @@ fn go_flush_disk_from_cache(disk_number: u16) -> Result<(), DriveError> {
     // We're done working with the cache.
     let _ = tier_0;
     drop(cache);
+
+    // Exit early if we dont have anything
+    if blocks_to_flush.is_empty() {
+        debug!("Nothing to flush from this disk.");
+        return Ok(());
+    }
+
+    // Debug how many blocks we're about to flush
+    debug!("Writing {} blocks to disk...", blocks_to_flush.len());
     
     // Chunk the blocks for faster writes
     let chunked_blocks = blocks_to_flush.chunk_by(|a, b| b.block_origin.block == a.block_origin.block + 1);
@@ -882,6 +893,10 @@ fn go_flush_disk_from_cache(disk_number: u16) -> Result<(), DriveError> {
         // Unchecked since the headers for the disk may still be in the cache.
         disk.unchecked_write_large(bytes_to_write, block_chunk[0].block_origin)?;
     }
+    debug!("Flushing disk from cache complete.");
+
+    // Now that the writes are done, actually remove the blocks from the cache. If we removed them earlier
+    // and any of these operations failed, we would lose data.
 
     // All done.
     Ok(())

@@ -310,6 +310,7 @@ fn update_block(block: DiskPointer, bytes: &[u8], offset: u16) -> Result<usize, 
 /// 
 /// May swap disks, does not return to any start disk.
 fn expand_file(inode_file: InodeFile, blocks: u16) -> Result<Vec<DiskPointer>, DriveError> {
+    debug!("Expanding a file by {blocks} blocks...");
     // Go grabby some new blocks.
     // These will be already reserved for us.
     // We also need to write the CRC for later.

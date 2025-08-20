@@ -75,7 +75,7 @@ impl FloppyDrive {
 
     /// Find out what disk is currently in the drive.
     pub fn currently_inserted_disk_number() -> u16 {
-        CURRENT_DISK_IN_DRIVE.load(Ordering::SeqCst)
+        CURRENT_DISK_IN_DRIVE.load(Ordering::Relaxed)
     }
 }
 
@@ -288,11 +288,11 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, DriveError> {
         let new_disk_number = disk.get_disk_number();
 
         // Update the current disk if needed
-        let previous_disk = CURRENT_DISK_IN_DRIVE.load(Ordering::SeqCst);
+        let previous_disk = CURRENT_DISK_IN_DRIVE.load(Ordering::Relaxed);
 
         if new_disk_number != previous_disk {
             // We have swapped disks.
-            CURRENT_DISK_IN_DRIVE.store(new_disk_number, Ordering::SeqCst);
+            CURRENT_DISK_IN_DRIVE.store(new_disk_number, Ordering::Relaxed);
             // Update the swap count
             trace!("Locking GLOBAL_POOL, updating disk swap count.");
             GLOBAL_POOL
