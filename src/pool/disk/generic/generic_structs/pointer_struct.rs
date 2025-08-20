@@ -7,12 +7,14 @@ pub(crate) struct DiskPointer {
 }
 
 impl DiskPointer {
-    pub(crate) fn to_bytes(&self) -> [u8; 4] {
+    #[inline]
+    pub(crate) fn to_bytes(self) -> [u8; 4] {
         let mut buffer: [u8; 4] = [0u8; 4];
         buffer[..2].copy_from_slice(&self.disk.to_le_bytes());
         buffer[2..].copy_from_slice(&self.block.to_le_bytes());
         buffer
     }
+    #[inline]
     pub(crate) fn from_bytes(bytes: [u8; 4]) -> Self {
         Self {
             disk: u16::from_le_bytes(bytes[..2].try_into().expect("2 = 2")),
@@ -30,6 +32,7 @@ impl DiskPointer {
         }
     }
     /// Creates a new disk pointer with no destination.
+    #[inline]
     pub(crate) fn new_final_pointer() -> Self {
         Self {
             disk: u16::MAX,
@@ -37,6 +40,7 @@ impl DiskPointer {
         }
     }
     /// Check if this pointer doesn't go anywhere
+    #[inline]
     pub(crate) fn no_destination(&self) -> bool {
         self.disk == u16::MAX || self.block == u16::MAX
     }

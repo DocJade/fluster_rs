@@ -168,6 +168,7 @@ impl DiskBootstrap for StandardDisk {
 
 // This disk has block level allocations
 impl BlockAllocation for StandardDisk {
+    #[inline]
     fn get_allocation_table(&self) -> &[u8] {
         &self.header.block_usage_map
     }

@@ -21,6 +21,7 @@ impl NamedItem {
     }
     /// Search a Vec<DirectoryItem> for a NamedItem
     /// Returns the item if it exists.
+    #[inline]
     pub fn find_in(&self, to_search: &[DirectoryItem]) -> Option<DirectoryItem> {
         // Searching with this function only does the minimum amount of clones
         // to deduce if the item is present or not, instead of needing to clone the
@@ -32,10 +33,12 @@ impl NamedItem {
         item_found.cloned()
     }
     /// Helper function to figure out if this is a file
+    #[inline]
     pub fn is_file(&self) -> bool {
         matches!(self, NamedItem::File(_))
     }
     /// Helper function to figure out if this is a directory
+    #[inline]
     pub fn is_directory(&self) -> bool {
         matches!(self, NamedItem::Directory(_))
     }

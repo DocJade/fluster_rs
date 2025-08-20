@@ -218,6 +218,7 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
 }
 
 // helper
+#[inline]
 fn block_indexes_to_pointers(blocks: &Vec<u16>, disk: u16) -> Vec<DiskPointer> {
     // We will have as many pointers as we got blocks in.
     let mut result: Vec<DiskPointer> = Vec::with_capacity(blocks.len());

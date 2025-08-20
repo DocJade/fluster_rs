@@ -578,6 +578,7 @@ impl InodeLocation {
     }
 
     /// Make a new one!
+    #[inline]
     pub fn new(pointer: DiskPointer, offset: u16) -> Self {
         // In theory the flags are not read, they are calculated on write.
         // Just set the marker bit.
@@ -591,6 +592,7 @@ impl InodeLocation {
 
 impl InodeBlock {
     /// Find the next block in the inode chain, if it exists.
+    #[inline]
     pub fn next_block(&self) -> Option<DiskPointer> {
         // First check if we have anywhere to go
         if self.next_inode_block.no_destination() {
@@ -606,6 +608,7 @@ impl InodeBlock {
 impl InodeFile {
     /// New empty inode files
     /// Pointer points to the first extent block.
+    #[inline]
     pub fn new(disk_pointer: DiskPointer) -> Self {
         Self {
             size: 0, // New files are empty
@@ -613,12 +616,14 @@ impl InodeFile {
         }
     }
     /// Get size of a file
+    #[inline]
     pub fn get_size(&self) -> u64 {
         self.size
     }
     /// Set the size of the file
     /// 
     /// Does not flush change to disk.
+    #[inline]
     pub fn set_size(&mut self, size: u64) {
         self.size = size;
     }
@@ -628,13 +633,16 @@ impl InodeFile {
 // Extract an inode into its inner type
 // TODO: Remove access to innards of Inode, force usage of method calls.
 impl Inode {
+    #[inline]
     pub fn extract_file(&self) -> Option<InodeFile> {
         self.file
     }
+    #[inline]
     pub fn extract_directory(&self) -> Option<InodeDirectory> {
         self.directory
     }
     /// All inodes point somewhere.
+    #[inline]
     pub fn get_pointer(&self) -> DiskPointer {
         if let Some(dir) = self.extract_directory() {
             dir.pointer
@@ -646,6 +654,7 @@ impl Inode {
 
 // convert an inode timestamp into SystemTime
 impl From<InodeTimestamp> for SystemTime {
+    #[inline]
     fn from(value: InodeTimestamp) -> Self {
         // All of our measurements are relative to the Unix Epoch
         // https://xkcd.com/376/
@@ -684,6 +693,7 @@ impl InodeOffsetPacking {
 
     /// Make a new one
     /// This can only be used down here, you should be using InodeLocation::new().
+    #[inline]
     fn new(flags: PackedInodeLocationFlags, offset: u16) -> Self {
         // See extract() for more docs about what is goin on here.
         let inner: u16 = offset | ((flags.bits() as u16) << 8);
