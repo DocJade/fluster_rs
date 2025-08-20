@@ -49,7 +49,8 @@ use crate::{
             FloppyDrive,
         },
         generic::{
-            block::{allocate::block_allocation::BlockAllocation,
+            block::{
+                allocate::block_allocation::BlockAllocation,
                 block_structs::RawBlock
             },
             disk_trait::GenericDiskMethods,
@@ -122,7 +123,7 @@ pub(super) struct CachedBlock {
     block_origin: DiskPointer,
     /// The content of the block.
     data: Vec<u8>,
-    /// Wether or not this block needs to be flushed.
+    /// Whether or not this block needs to be flushed.
     /// 
     /// Blocks that are read but never written do not need to be flushed.
     requires_flush: bool
@@ -214,6 +215,19 @@ impl BlockCache {
     /// Returns how many blocks were discarded, or None if the tier was already empty.
     pub(super) fn cleanup_tier(tier_number: usize) -> Option<u64> {
         go_cleanup_tier(tier_number)
+    }
+
+    /// Flushes any low-importance pending writes on a selected disk.
+    /// 
+    /// This should be called when you know you are about to swap disks, since
+    /// otherwise you might swap disks for a read, then immediately need to swap back
+    /// again because the cache filled up.
+    /// 
+    /// Returns nothing.
+    /// 
+    /// Caller must drop all references to the cache before calling this.
+    pub(super) fn flush_a_disk(disk_number: u16) -> Result<(), DriveError> {
+        go_flush_disk_from_cache(disk_number)
     }
 }
 
@@ -604,6 +618,10 @@ fn go_flush_tier(tier_number: usize) -> Result<(), DriveError> {
     debug!("Flushing tier {tier_number} of the cache...");
     // We will be flushing all data from this tier of the cache to disk.
     // This can be used on any tier, but will usually be called on tier 0.
+
+    // Run tier cleanup first to remove anything that doesn't need to be written.
+    // Don't care how many blocks are cleaned up.
+    let _ = go_cleanup_tier(tier_number);
     
     // We will extract all of the cache items at once, leaving the tier empty.
     let items_map_to_flush: HashMap<DiskPointer, CachedBlock>;
@@ -725,7 +743,8 @@ fn go_flush_tier(tier_number: usize) -> Result<(), DriveError> {
         for block_chunk in chunked_by_block {
             // If this chunk only has one item in it, do a normal write.
             if block_chunk.len() == 1 {
-                current_disk.checked_update(&block_chunk[0].clone().into_raw())?;
+                // Unchecked due to cached headers.
+                current_disk.unchecked_write_block(&block_chunk[0].clone().into_raw())?;
                 continue;
             }
 
@@ -804,6 +823,72 @@ fn go_cleanup_tier(tier_number: usize) -> Option<u64> {
     
     debug!("Dropped {blocks_discarded} un-needed blocks from the tier.");
     Some(blocks_discarded)
+}
+
+/// Flush all blocks in tier 0 that correspond to a certain disk.
+/// 
+/// This should be called before disk swaps to prevent needing to immediately swap back to
+/// flush the cache.
+fn go_flush_disk_from_cache(disk_number: u16) -> Result<(), DriveError> {
+    // Pull out the tier items we need.
+    debug!("Flushing cached content of disk {disk_number}...");
+    
+    // Get the block cache
+    let mut cache = CASHEW.try_lock().expect("Single threaded.");
+    
+    // get tier 0
+    let tier_0: &mut TieredCache = &mut cache.tier_0;
+    
+    // If the tier is empty, there's nothing to do.
+    if tier_0.order.is_empty() {
+        return Ok(());
+    }
+    
+    // Now work our way through the cache, grabbing anything related to the current disk.
+    // Extract it if it refers to the correct disk,
+    // Ignore the block if it does not require flushing.
+    // - We discard it ourselves here since those reads might still be useful, so cleaning up here
+    //   Might be too early.
+    let to_flush: HashMap<DiskPointer, CachedBlock> = tier_0.items_map
+        .extract_if(|pointer, block| pointer.disk == disk_number && block.requires_flush)
+        .collect();
+
+    // Split that into pointers and blocks
+    let pointers_to_discard: Vec<DiskPointer> = to_flush.keys().cloned().collect();
+    let blocks_to_flush: Vec<CachedBlock> = to_flush.into_values().collect();
+
+    
+    // Then discard all of the sorting information about those blocks
+    tier_0.order.retain(|order| !pointers_to_discard.contains(order));
+
+    // We're done working with the cache.
+    let _ = tier_0;
+    drop(cache);
+    
+    // Chunk the blocks for faster writes
+    let chunked_blocks = blocks_to_flush.chunk_by(|a, b| b.block_origin.block == a.block_origin.block + 1);
+
+    // open the disk we're writing to
+    let mut disk: StandardDisk = disk_load_header_invalidation(disk_number)?;
+
+    // Now loop over those.
+    for block_chunk in chunked_blocks {
+        // If this chunk only has one item in it, do a normal write.
+        if block_chunk.len() == 1 {
+            disk.unchecked_write_block(&block_chunk[0].clone().into_raw())?;
+            continue;
+        }
+    
+        // There are multiple blocks in a row to update, we need to stitch their bytes together.
+        let bytes_to_write: Vec<u8> = block_chunk.iter().flat_map(|block| block.data.clone()).collect();
+        
+        // Now do the large write.
+        // Unchecked since the headers for the disk may still be in the cache.
+        disk.unchecked_write_large(bytes_to_write, block_chunk[0].block_origin)?;
+    }
+
+    // All done.
+    Ok(())
 }
 
 #[inline]

@@ -252,6 +252,7 @@ fn pool_get_root_directory() -> Result<DirectoryBlock, DriveError> {
 }
 
 /// Grabs the root inode location, duh
+#[inline]
 fn pool_get_root_inode_location() -> InodeLocation {
     let pointer = DiskPointer {
         disk: 1,
@@ -261,6 +262,7 @@ fn pool_get_root_inode_location() -> InodeLocation {
 }
 
 /// Constructs a directory item with info about the root.
+#[inline]
 fn pool_get_root_directory_item() -> DirectoryItem {
     // The name of the root directory entry is always the delimiter.
     static DELIMITER: char = std::path::MAIN_SEPARATOR;

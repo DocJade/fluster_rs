@@ -1,12 +1,9 @@
 // External interaction with the block cache
 
 use crate::{
-    error_types::{
-        drive::{
-            DriveError
-        }
-    },
+    error_types::drive::DriveError,
     pool::disk::{
+        drive_struct::FloppyDrive,
         generic::{
             block::{
                 allocate::block_allocation::BlockAllocation,
@@ -21,8 +18,7 @@ use crate::{
                 },
             cached_allocation::CachedAllocationDisk
         }
-    },
-    standard_disk::standard_disk_struct::StandardDisk
+    }, standard_disk::standard_disk_struct::StandardDisk
 }};
 
 //
@@ -150,9 +146,17 @@ fn go_read_cached_block(block_location: DiskPointer) -> Result<RawBlock, DriveEr
     }
 
     // The block was not in the cache, we need to go get it old-school style.
+
+    // If we are about to swap disks, we will flush tier 0 of the disk.
+    let current = FloppyDrive::currently_inserted_disk_number();
+    if current != block_location.disk {
+        // About to swap, do the flush
+        BlockCache::flush_a_disk(block_location.disk)?
+    };
+
+    // Now that the cache was flushed (if needed), do the read.
     let disk: StandardDisk = super::cache_implementation::disk_load_header_invalidation(block_location.disk)?;
 
-    // Now read that block.
     // Already checked if it was allocated.
     let read_block = disk.unchecked_read_block(block_location.block)?;
     
