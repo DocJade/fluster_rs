@@ -135,7 +135,6 @@ bitflags! {
 
 /// Convert a flag to a u32 for use in returning.
 impl From<ItemFlag> for u32 {
-    #[inline]
     fn from(value: ItemFlag) -> Self {
         value.bits()
     }

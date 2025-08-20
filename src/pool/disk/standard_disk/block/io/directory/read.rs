@@ -105,7 +105,6 @@ impl DirectoryBlock {
     /// Check if this DirectoryBlock is the head of the root directory.
     /// 
     /// This will return false on any other block than the head block.
-    #[inline]
     fn is_root(&self) -> bool {
         // Lives in a static place.
         static ROOT_BLOCK_LOCATION: DiskPointer = DiskPointer {

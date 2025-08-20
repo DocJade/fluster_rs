@@ -83,7 +83,6 @@ impl DirectoryBlock {
     }
 
     /// Check if this block is empty
-    #[inline]
     pub fn is_empty(&self) -> Result<bool, DriveError> {
         Ok(self.list()?.len() == 0)
     }

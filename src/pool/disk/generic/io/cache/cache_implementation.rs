@@ -516,7 +516,6 @@ fn go_make_new_tier(size: usize) -> TieredCache {
     }
 }
 
-#[inline]
 fn go_find_tier_item(tier: &TieredCache, pointer: &DiskPointer) -> Option<usize> {
     // Does not update order
     // Just see if it exists.
@@ -545,7 +544,6 @@ fn go_get_tier_item(tier: &mut TieredCache, index: usize) -> Option<&CachedBlock
     Some(the_block)
 }
 
-#[inline]
 fn go_extract_tier_item(tier: &mut TieredCache, index: usize) -> Option<CachedBlock> {
     // Pops an item from any index, preserves order of other items
 
@@ -590,7 +588,6 @@ fn go_update_tier_item(tier: &mut TieredCache, index: usize, mut new_item: Cache
     assert!(replaced.is_some());
 }
 
-#[inline]
 fn go_get_tier_best(tier: &mut TieredCache) -> Option<CachedBlock> {
     // Best is at the front
 
@@ -602,7 +599,6 @@ fn go_get_tier_best(tier: &mut TieredCache) -> Option<CachedBlock> {
     tier.items_map.remove(&front_pointer)
 }
 
-#[inline]
 fn go_get_tier_worst(tier: &mut TieredCache) -> Option<CachedBlock> {
     // The worst item is at the end of the vec
     
@@ -891,7 +887,6 @@ fn go_flush_disk_from_cache(disk_number: u16) -> Result<(), DriveError> {
     Ok(())
 }
 
-#[inline]
 fn go_check_tier_full(tier: &TieredCache) -> bool {
     tier.order.len() == tier.size
 }

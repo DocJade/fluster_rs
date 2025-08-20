@@ -151,7 +151,6 @@ fn go_allocate_or_free_blocks<T: BlockAllocation + ?Sized>(
     Ok(blocks.len() as u16)
 }
 
-#[inline] // This function should happen inline, since it's such a small operation.
 fn go_check_block_allocated<T: BlockAllocation + ?Sized>(caller: &T, block_number: u16) -> bool {
     assert!(block_number < 2880, "Tried to free block {block_number}. That is past the end of the disk.");
     // Integer division rounds towards zero, so this is fine.

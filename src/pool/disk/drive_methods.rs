@@ -265,7 +265,6 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Drive
 }
 
 /// Look for the magic "Fluster!" string.
-#[inline]
 pub fn check_for_magic(block_bytes: &[u8]) -> bool {
     // is the "Fluster!" magic present?
     block_bytes[0..8] == *"Fluster!".as_bytes()
