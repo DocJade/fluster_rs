@@ -42,10 +42,17 @@ use fuse_mt::CreatedEntry;
 //
 //
 // ======
-// Helper functions
+// Constants
 // ======
 //
 //
+
+// You should probably be able to set your own custom TTL on mount, but
+// guess what? You should also probably be able to chown files. but that ain't happening either.
+// We will hardcode it to be 1 hour.
+const HANDLE_TIME_TO_LIVE: Duration = Duration::from_secs(60*60);
+
+
 
 //
 //
@@ -91,9 +98,6 @@ impl FilesystemMT for FlusterFS {
         fh: Option<u64>,
     ) -> fuse_mt::ResultEntry {
         debug!("Getting attributes of `{}`...", path.display());
-        // This wants a TTL again, ok...
-        // TODO: Add a ttl setting to FlusterFS type
-        let a_year: Duration = Duration::from_secs(60*60*24*365);
 
         // I already wrote a method for this yay
         // but that assumes we have a handle.
@@ -102,7 +106,7 @@ impl FilesystemMT for FlusterFS {
             // Handle exists, easy path.
             return Ok(
                 (
-                    a_year,
+                    HANDLE_TIME_TO_LIVE,
                     FileHandle::read(handle).try_into()?
                 )
             )
@@ -130,7 +134,7 @@ impl FilesystemMT for FlusterFS {
 
         Ok(
             (
-                a_year,
+                HANDLE_TIME_TO_LIVE,
                 found_attributes
             )
         )
@@ -287,13 +291,11 @@ impl FilesystemMT for FlusterFS {
         let attributes: FileAttr = new_dir.try_into()?;
         debug!("Done.");
 
-        let a_year: Duration = Duration::from_secs(60*60*24*365);
-
         // All done!
         debug!("Directory created successfully.");
         Ok(
             (
-                a_year,
+                HANDLE_TIME_TO_LIVE,
                 attributes
             )
         )
@@ -1580,7 +1582,7 @@ impl FilesystemMT for FlusterFS {
             // I will never drop handles on my side, the OS has to drop em.
             debug!("Done reading in file, returning.");
             return Ok(CreatedEntry {
-                ttl: Duration::from_secs(60*60*24*365), // A year sounds good.
+                ttl: HANDLE_TIME_TO_LIVE,
                 attr: facebook_data,
                 fh: file_handle,
                 flags,  // We use the same flags we came in with. Not the one from the loaded file.
@@ -1611,7 +1613,7 @@ impl FilesystemMT for FlusterFS {
         // Assemble it, and we're done!
         debug!("Done creating file.");
         Ok(CreatedEntry {
-            ttl: Duration::from_secs(60*60*24*365), // A year sounds good.
+            ttl: HANDLE_TIME_TO_LIVE,
             attr: attributes,
             fh: handle_num,
             flags,
