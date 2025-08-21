@@ -165,6 +165,8 @@ impl BlockCache {
     /// Add an item to the cache, or update it if the item is already present.
     /// 
     /// If the item is new, it will be placed in the lowest tier in the cache.
+    /// 
+    /// Make sure you properly set wether the block needs flushing or not.
     pub(super) fn add_or_update_item(item: CachedBlock) -> Result<(), DriveError> {
         go_add_or_update_item_cache(item)
     }
@@ -223,10 +225,10 @@ impl BlockCache {
     /// otherwise you might swap disks for a read, then immediately need to swap back
     /// again because the cache filled up.
     /// 
-    /// Returns nothing.
+    /// Returns how many blocks were freed from the cache.
     /// 
     /// Caller must drop all references to the cache before calling this.
-    pub(super) fn flush_a_disk(disk_number: u16) -> Result<(), DriveError> {
+    pub(super) fn flush_a_disk(disk_number: u16) -> Result<u64, DriveError> {
         go_flush_disk_from_cache(disk_number)
     }
 }
@@ -453,10 +455,13 @@ fn go_add_or_update_item_cache(block: CachedBlock) -> Result<(), DriveError> {
         // But first we can try dropping items that do not require flushing
         drop(cache);
         if BlockCache::cleanup_tier(0).is_none() {
-            debug!("Cleanup wasn't enough, flushing tier 0...");
-            // Nothing was removed from the tier, so we have to flush normally, since tier
-            // zero is full of items we must write.
-            BlockCache::flush(0)?;
+            // Nothing to cleanup, need to write data. Try the current disk first.
+            debug!("Cleanup wasn't enough, flushing current disk...");
+            if BlockCache::flush_a_disk(FloppyDrive::currently_inserted_disk_number())? == 0 {
+                // There wasn't anything to flush for the current disk either!
+                debug!("Nothing to flush for the current disk, doing full cache flush...");
+                BlockCache::flush(0)?;
+            }
         }
 
 
@@ -570,18 +575,17 @@ fn go_add_tier_item(tier: &mut TieredCache, item: CachedBlock) {
     assert!(already_existed.is_none());
 }
 
-fn go_update_tier_item(tier: &mut TieredCache, index: usize, mut new_item: CachedBlock) {
+fn go_update_tier_item(tier: &mut TieredCache, index: usize, new_item: CachedBlock) {
     // Replace the item, IE the contents of the block have changed.
+
+    // If the contents have changed, the new item MUST have the flush bool set.
+    assert!(new_item.requires_flush);
 
     // Updating is an access after all... so we will promote it.
 
     // Update the order
     let to_move = tier.order.remove(index).expect("Should exist.");
     tier.order.push_front(to_move);
-
-    // Set the flush boolean, since this block has been updated with new content, it is
-    // out of sync with the disk
-    new_item.requires_flush = true;
 
     // Now replace the item in the hashmap at the index.
     let replaced = tier.items_map.insert(to_move, new_item);
@@ -827,7 +831,7 @@ fn go_cleanup_tier(tier_number: usize) -> Option<u64> {
 /// 
 /// This should be called before disk swaps to prevent needing to immediately swap back to
 /// flush the cache.
-fn go_flush_disk_from_cache(disk_number: u16) -> Result<(), DriveError> {
+fn go_flush_disk_from_cache(disk_number: u16) -> Result<u64, DriveError> {
     // Pull out the tier items we need.
     debug!("Flushing cached content of disk {disk_number}...");
     
@@ -837,9 +841,9 @@ fn go_flush_disk_from_cache(disk_number: u16) -> Result<(), DriveError> {
     // get tier 0
     let tier_0: &mut TieredCache = &mut cache.tier_0;
     
-    // If the tier is empty, there's nothing to do.
+    // If the tier is already empty, there's nothing to do.
     if tier_0.order.is_empty() {
-        return Ok(());
+        return Ok(0);
     }
     
     // Now work our way through the cache, grabbing anything related to the current disk.
@@ -866,7 +870,7 @@ fn go_flush_disk_from_cache(disk_number: u16) -> Result<(), DriveError> {
     // Exit early if we dont have anything
     if blocks_to_flush.is_empty() {
         debug!("Nothing to flush from this disk.");
-        return Ok(());
+        return Ok(0);
     }
 
     // Debug how many blocks we're about to flush
@@ -898,8 +902,10 @@ fn go_flush_disk_from_cache(disk_number: u16) -> Result<(), DriveError> {
     // Now that the writes are done, actually remove the blocks from the cache. If we removed them earlier
     // and any of these operations failed, we would lose data.
 
+    // TODO: ^^^^^^^^^
+
     // All done.
-    Ok(())
+    Ok(blocks_to_flush.len() as u64)
 }
 
 fn go_check_tier_full(tier: &TieredCache) -> bool {

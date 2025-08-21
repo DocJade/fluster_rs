@@ -22,7 +22,11 @@ use crate::{
 // To not require a rewrite of pool block allocation logic, we will make fake disks for it to use.
 pub(crate) struct CachedAllocationDisk {
     /// The header of the disk we are imitating
-    imitated_header: StandardDiskHeader
+    imitated_header: StandardDiskHeader,
+    /// If anything has changed about the disk while we were using it, it
+    /// needs to be updated in the cache. Otherwise, we would always update
+    /// it even for simple non-mutating checks against the header.
+    was_updated: bool,
 }
 
 impl CachedAllocationDisk {
@@ -44,7 +48,8 @@ impl CachedAllocationDisk {
         let imitated_header: StandardDiskHeader = StandardDiskHeader::from_block(&read);
         Ok(
             Self {
-            imitated_header
+            imitated_header,
+            was_updated: false, // Haven't done anything yet.
             }
         )
     }
@@ -63,6 +68,10 @@ impl BlockAllocation for CachedAllocationDisk {
         self.imitated_header.block_usage_map = new_table
             .try_into()
             .expect("Incoming table should be the same as outgoing.");
+
+        // Since the allocation table has changed, we need to now update the cached block
+        // for this disk later.
+        self.was_updated = true;
         Ok(())
     }
 }
@@ -70,6 +79,14 @@ impl BlockAllocation for CachedAllocationDisk {
 // When these fake disks are dropped, their updated (if updated) blocks need to go into the cache
 impl Drop for CachedAllocationDisk {
     fn drop(&mut self) {
+
+        // If we didn't update the allocation table, we don't need to
+        // do anything, since the cached header is still up to date.
+        if !self.was_updated {
+            return;
+        }
+
+
         // Put our fake header in the cache.
         let updated = self.imitated_header.to_block();
         // If this fails we are major cooked, we will try 10 times.

@@ -150,8 +150,9 @@ fn go_read_cached_block(block_location: DiskPointer) -> Result<RawBlock, DriveEr
     // If we are about to swap disks, we will flush tier 0 of the disk.
     let current = FloppyDrive::currently_inserted_disk_number();
     if current != block_location.disk {
-        // About to swap, do the flush
-        BlockCache::flush_a_disk(block_location.disk)?
+        // About to swap, do the flush.
+        // Dont care how many blocks this flushes.
+        let _ = BlockCache::flush_a_disk(current)?;
     };
 
     // Now that the cache was flushed (if needed), do the read.
