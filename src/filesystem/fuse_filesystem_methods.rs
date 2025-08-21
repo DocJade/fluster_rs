@@ -49,8 +49,8 @@ use fuse_mt::CreatedEntry;
 
 // You should probably be able to set your own custom TTL on mount, but
 // guess what? You should also probably be able to chown files. but that ain't happening either.
-// We will hardcode it to be 1 hour.
-const HANDLE_TIME_TO_LIVE: Duration = Duration::from_secs(60*60);
+// Hard coded to one year, see issue #51
+const HANDLE_TIME_TO_LIVE: Duration = Duration::from_secs(365*24*60*60);
 
 
 
