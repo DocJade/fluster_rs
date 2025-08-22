@@ -279,39 +279,42 @@ fn check_disk() -> bool {
         .clone();
     
     // Read the entire thing in one go
-    println!("Open drive...");
+    println!("Open floppy drive...");
     let disk_file = match OpenOptions::new().read(true).write(true).open(&disk_path) {
         Ok(ok) => ok,
-        Err(_) => {
+        Err(error) => {
             // There is something wrong with reading in the drive, which would imply that
             // the drive is inaccessible or something. We cannot resolve here.
-            println!("Fail.");
+            println!("Failed to open drive.");
+            println!("{error:#?}");
             return false;
         },
     };
     println!("Ok.");
     
     // Now read in the entire disk.
-    println!("Reading...");
+    println!("Reading entire disk...");
     let mut whole_disk: Vec<u8> = vec![0; 512*2880];
     let read_result = disk_file.read_exact_at(&mut whole_disk, 0);
-
+    
     // If that failed at all, checking the disk is bad either due to the drive, or the disk.
-    if read_result.is_err() {
+    if let Err(error) =  read_result {
         // Read failed. Something is up.
         println!("Fail.");
+        println!("{error:#?}");
         return false;
     };
     println!("Ok.");
-
+    
     // Now we write the entire disk back again to see if every block accepts writes.
-    println!("Writing...");
+    println!("Writing entire disk...");
     let write_result = disk_file.write_all_at(&whole_disk, 0);
-
+    
     // Did the write work?
-    if write_result.is_err() {
+    if let Err(error) = write_result {
         // nope
         println!("Fail.");
+        println!("{error:#?}");
         return false;
     };
     println!("Ok.");

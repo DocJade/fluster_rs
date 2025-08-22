@@ -284,6 +284,14 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, DriveError> {
         // We do not create disks here.
         disk = open_and_deduce_disk(disk_number, false)?;
 
+        // Obviously, a blank disk cannot be the right disk, since it has
+        // no disk number.
+        if let DiskType::Blank(_) = disk {
+            // what
+            println!("Wrong disk. This disk is blank. Try again.");
+            continue;
+        }
+
         // Is this the correct disk?
         let new_disk_number = disk.get_disk_number();
 

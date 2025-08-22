@@ -6,6 +6,7 @@
 
 use std::io::ErrorKind;
 use std::process::exit;
+use log::debug;
 use log::error;
 
 use log::warn;
@@ -253,7 +254,12 @@ impl TryFrom<WrappedIOError> for DriveIOError {
                 // message: "No medium found",
                 if value.io_error.raw_os_error().expect("Should get a os error number") == 123_i32 {
                     // No disk is in the drive.
-                    return Ok(DriveIOError::DriveEmpty);
+                    // This can happen even if there is a disk in the drive, so we keep
+                    // trying.
+                    debug!("Is no disk inserted?");
+                    // Just keep retrying, if there is an issue with the floppy drive, we need to
+                    // eventually end up in the panic handler.
+                    return Err(CannotConvertError::MustRetry);
                 }
 
                 // Well, we'll just pretend we can retry any unknown error...
