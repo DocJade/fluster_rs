@@ -295,7 +295,9 @@ fn check_disk() -> bool {
     // Now read in the entire disk.
     println!("Reading entire disk...");
     let mut whole_disk: Vec<u8> = vec![0; 512*2880];
+    let _ = disk_file.sync_all();
     let read_result = disk_file.read_exact_at(&mut whole_disk, 0);
+    let _ = disk_file.sync_all();
     
     // If that failed at all, checking the disk is bad either due to the drive, or the disk.
     if let Err(error) =  read_result {
@@ -308,7 +310,9 @@ fn check_disk() -> bool {
     
     // Now we write the entire disk back again to see if every block accepts writes.
     println!("Writing entire disk...");
+    let _ = disk_file.sync_all();
     let write_result = disk_file.write_all_at(&whole_disk, 0);
+    let _ = disk_file.sync_all();
     
     // Did the write work?
     if let Err(error) = write_result {

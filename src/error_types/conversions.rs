@@ -259,7 +259,7 @@ impl TryFrom<WrappedIOError> for DriveIOError {
                     debug!("Is no disk inserted?");
                     // Just keep retrying, if there is an issue with the floppy drive, we need to
                     // eventually end up in the panic handler.
-                    return Err(CannotConvertError::MustRetry);
+                    return Ok(DriveIOError::DriveEmpty)
                 }
 
                 // Well, we'll just pretend we can retry any unknown error...

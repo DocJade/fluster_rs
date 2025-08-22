@@ -14,6 +14,7 @@ use log::{
 use crate::error_types::conversions::CannotConvertError;
 use crate::error_types::critical::{CriticalError, RetryCapError};
 use crate::error_types::drive::{DriveError, DriveIOError, WrappedIOError};
+use crate::filesystem::filesystem_struct::WRITE_BACKUPS;
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 
 use super::super::block::block_structs::RawBlock;
@@ -46,7 +47,7 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
     // Calculate the offset into the disk
     let write_offset: u64 = block.block_origin.block as u64 * 512;
 
-    for _ in 0..10 {
+    for _ in 0..3 {
         // Write the data.
         let write_result = disk_file.write_all_at(&block.data, write_offset);
 
@@ -61,7 +62,12 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
                 // But we might still need to retry this
                 if let Ok(actually_bail) = DriveError::try_from(bail) {
                     // Something is up that we cant handle here.
-                    return Err(actually_bail)
+                    // We don't bail on missing disks though, sometimes the drive is just being
+                    // a bit silly and needs a few tries to realize the disk is in there.
+                    if actually_bail == DriveError::DriveEmpty {
+                        // Try again.
+                        continue;
+                    }
                 }
             }
             // We must handle the error. Down here that just means trying the write again.
@@ -70,6 +76,16 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
 
         // Writing worked! all done.
         trace!("Block written successfully.");
+
+        // Attempt to sync the write, we only do this if backups are turned on, since we dont
+        // wanna slow down tests.
+        if let Some(enabled) = WRITE_BACKUPS.get() {
+            if *enabled {
+                // if this fails, oh well.
+                let _ = disk_file.sync_all();
+            }
+        }
+
         return Ok(());
     };
 
@@ -110,8 +126,18 @@ pub(crate) fn write_large_direct(disk_file: &File, data: &Vec<u8>, start_block: 
     // Calculate the offset into the disk
     let write_offset: u64 = start_block.block as u64 * 512;
 
+    // Pre-sync the disk just in case its already writing.
+    if let Some(enabled) = WRITE_BACKUPS.get() {
+        if *enabled {
+            // if this fails, oh well.
+            let _ = disk_file.sync_all();
+        }
+    }
+
+
+
     // Now enter a loop so we can attempt the write at most 10 times, in case it fails.
-    for _ in 0..10 {
+    for _ in 0..3 {
         // Write the data.
         let write_result = disk_file.write_all_at(data, write_offset);
 
@@ -126,7 +152,12 @@ pub(crate) fn write_large_direct(disk_file: &File, data: &Vec<u8>, start_block: 
                 // But we might still need to retry this
                 if let Ok(actually_bail) = DriveError::try_from(bail) {
                     // Something is up that we cant handle here.
-                    return Err(actually_bail)
+                    // We don't bail on missing disks though, sometimes the drive is just being
+                    // a bit silly and needs a few tries to realize the disk is in there.
+                    if actually_bail == DriveError::DriveEmpty {
+                        // Try again.
+                        continue;
+                    }
                 }
             }
             // We must handle the error. Down here that just means trying the write again.
@@ -135,6 +166,16 @@ pub(crate) fn write_large_direct(disk_file: &File, data: &Vec<u8>, start_block: 
 
         // Writing worked! all done.
         trace!("Several blocks written successfully.");
+
+        // Attempt to sync the write, we only do this if backups are turned on, since we dont
+        // wanna slow down tests.
+        if let Some(enabled) = WRITE_BACKUPS.get() {
+            if *enabled {
+                // if this fails, oh well.
+                let _ = disk_file.sync_all();
+            }
+        }
+
         return Ok(());
     };
 

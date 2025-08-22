@@ -11,11 +11,27 @@ use log::{
     warn
 };
 
-use crate::{error_types::{conversions::CannotConvertError, critical::{CriticalError, RetryCapError}, drive::{DriveError, DriveIOError, WrappedIOError}}, pool::disk::generic::generic_structs::pointer_struct::DiskPointer};
+use crate::{
+    error_types::{
+        conversions::CannotConvertError, critical::{
+            CriticalError,
+            RetryCapError
+        },
+        drive::{
+            DriveError,
+            DriveIOError,
+            WrappedIOError
+        }
+    },
+    pool::disk::generic::generic_structs::pointer_struct::DiskPointer
+};
 
 use super::super::block::block_structs::RawBlock;
 use super::super::block::crc::check_crc;
-use std::{fs::File, io::ErrorKind, os::unix::fs::FileExt};
+use std::{
+    fs::File,
+    os::unix::fs::FileExt
+};
 
 // Implementations
 
@@ -51,9 +67,9 @@ pub(crate) fn read_block_direct(
     let read_offset: u64 = block_index as u64 * 512;
 
     // Enter a loop to retry reading the block 10 times at most.
-    // If we try 10 times without success, we are cooked.
+    // If we try 3 times without success, we are cooked.
 
-    for _ in 0..10 {
+    for _ in 0..3 {
 
         // Seek to the requested block and read 512 bytes from it
         let read_result = disk_file.read_exact_at(&mut read_buffer, read_offset);
@@ -68,6 +84,13 @@ pub(crate) fn read_block_direct(
                 // But we might still need to retry this
                 if let Ok(actually_bail) = DriveError::try_from(bail) {
                     // Something is up that we cant handle here.
+                    // We don't bail on missing disks though, sometimes the drive is just being
+                    // a bit silly and needs a few tries to realize the disk is in there.
+                    if actually_bail == DriveError::DriveEmpty {
+                        // Try again.
+                        continue;
+                    }
+
                     return Err(actually_bail)
                 }
             }

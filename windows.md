@@ -60,6 +60,9 @@ sde   8:64   1   1.4M  0 disk
 Take note of which `sd` device it is. Mine happens to be `sde`.
 This will be the path that you use when starting Fluster.
 
+***A grain of salt***
+This is SO unstable, you might also have to disable, then uninstall the floppy drive in device manager first.
+
 ### Note:
 My floppy disks were completely blank (every byte had been zeroed out), if your disks arent completely blank, im unsure if this will effect mounting the drive.
 If your floppy already has a mountpoint, unmount it before continuing.

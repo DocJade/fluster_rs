@@ -397,6 +397,13 @@ fn disk_wiper_mode() -> ! {
                 // Uh oh
                 println!("Wiping the disk failed. Here's why:");
                 println!("{err:#?}");
+                match err {
+                    DriveError::DriveEmpty => {},
+                    DriveError::Retry => {},
+                    DriveError::TakingTooLong => {
+                        println!("That disk is responding VERY slowly to writes, its probably bad.")
+                    },
+                }
                 break;
             },
         }

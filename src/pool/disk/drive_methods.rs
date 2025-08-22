@@ -41,7 +41,6 @@ use super::drive_struct::FloppyDrive;
 
 use std::fs::File;
 use std::fs::OpenOptions;
-use std::panic::Location;
 use std::sync::atomic::AtomicU16;
 use std::sync::atomic::Ordering;
 
@@ -202,6 +201,15 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Drive
 
     // Open the disk, or return an error from it.
 
+    // Before that though, make sure the block device we are trying to
+    // access is actually mounted
+    if !std::fs::exists(&disk_path).unwrap_or(false) {
+        // Bound to fail.
+        return Err(DriveError::DriveEmpty)
+    }
+
+
+
     // We will try 10 times.
     // If we fail to open the floppy drive file, there's a bigger issue than this function can deal with.
 
@@ -242,7 +250,7 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Drive
         let drive_error: Result<DriveError, CannotConvertError> = DriveError::try_from(drive_io_error.expect("Guard."));
 
         // Did that also work?
-        if let Err(err) = drive_io_error {
+        if let Err(err) = drive_error {
             match err {
                 CannotConvertError::MustRetry => {
                     continue;

@@ -58,6 +58,7 @@ impl From<DriveError> for c_int {
                 BUSY
             },
             DriveError::Retry => TRY_AGAIN,
+            DriveError::TakingTooLong => BUSY,
         }
     }
 }

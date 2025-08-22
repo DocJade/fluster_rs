@@ -14,6 +14,8 @@ pub enum DriveError {
     DriveEmpty,
     #[error("The operation failed for non-critical reasons, but no corruption occurred, and the operation can be retried with the same arguments.")]
     Retry,
+    #[error("An operation on this disk is taking too long..")]
+    TakingTooLong
 }
 
 #[derive(Debug, Clone, Copy, Error, PartialEq)]
