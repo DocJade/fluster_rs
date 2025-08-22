@@ -6,6 +6,7 @@ use super::pool_struct::GLOBAL_POOL;
 use super::pool_struct::Pool;
 use super::pool_struct::PoolStatistics;
 use crate::error_types::drive::DriveError;
+use crate::pool::disk::blank_disk::blank_disk_struct::BlankDisk;
 use crate::pool::disk::drive_struct::DiskBootstrap;
 use crate::pool::disk::drive_struct::FloppyDrive;
 use crate::pool::disk::generic::block::block_structs::RawBlock;
@@ -213,7 +214,22 @@ fn add_disk<T: DiskBootstrap>() -> Result<T, DriveError> {
     // For virtual disk reasons, we still need to pass in the disk number that
     // we wish to create.
     debug!("Getting a new blank disk...");
-    let blank_disk = FloppyDrive::get_blank_disk(next_open_disk)?;
+    // We loop until there is a disk in the drive, just in case.
+    // try 10 times
+    let blank_disk: BlankDisk;
+    let mut tries: u8 = 0;
+    loop {
+        if let Ok(disk) = FloppyDrive::get_blank_disk(next_open_disk){
+            blank_disk = disk;
+            break
+        };
+        // We need that blank mf.
+        if tries == 10 {
+            // shiet
+            panic!("Couldnt get a blank disk! cooked!")
+        }
+        tries += 1;
+    }
 
     // Now we need to create a disk to put in there from the supplied generic
     debug!("Bootstrapping the new disk...");
