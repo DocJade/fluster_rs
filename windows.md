@@ -62,6 +62,8 @@ This will be the path that you use when starting Fluster.
 
 ***A grain of salt***
 This is SO unstable, you might also have to disable, then uninstall the floppy drive in device manager first.
+If your disk is spinning forever without seeming to do anything, you need to wait it out. Pulling out the disk
+(at least on my drive) in that state makes USBIPD give up and unmount the drive.
 
 ### Note:
 My floppy disks were completely blank (every byte had been zeroed out), if your disks arent completely blank, im unsure if this will effect mounting the drive.
