@@ -34,8 +34,8 @@
 
 ## Features
 
--  Multi-disk
-	- Spans a single filesystem across as many floppy disks as are required to store the data, treating them as a single pool.
+*  Multi-disk
+	* Spans a single filesystem across as many floppy disks as are required to store the data, treating them as a single pool.
 * Disk failure detection
 	* Automatically detects and troubleshoot drive and disk issues.
 * Automatic backups
