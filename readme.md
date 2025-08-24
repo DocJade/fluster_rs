@@ -91,6 +91,7 @@ sudo ./target/floppy/fluster_fs --block-device-path "/dev/sdX" --mount-point "~/
 ```bash
 fusermount -u ~/fluster_mount_point
 ```
+- Do note that unmounting `Fluster!` does not immediately shut down fluster, you will still need to swap disks to flush the cache to disk.
 ## Credits
 
 - [DocJade](https://docjade.com/) (That's me!)
