@@ -18,15 +18,19 @@
 	<img alt="Gluten free!" src="https://img.shields.io/badge/Gluten_free!-blue">
 </a>
 </p>
----
+
 <p align="center">
   <a href="#features">Features</a> •
   <a href="#how-to-use">How To Use</a> •
   <a href="#credits">Credits</a> •
   <a href="#license">License</a>
 </p>
-PLACEHOLDER IMAGE
-![screenshot](https://ralfvanveen.com/wp-content/uploads/2021/06/Placeholder-_-Glossary.svg)
+
+
+<p align="center">
+	PLACEHOLDER IMAGE
+	<img src="https://ralfvanveen.com/wp-content/uploads/2021/06/Placeholder-_-Glossary.svg" alt="Fluster" width="256">
+</p>
 
 ## Features
 
