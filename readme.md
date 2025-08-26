@@ -43,9 +43,9 @@
 * Tiered caching
 	* Triple tiered, in-memory cache to minimize disk swapping, while only using 2 floppy disks worth of memory.
 * Error checking
-	* Every 512 byte block has a 4 byte CRC to ensure we detect corruption or bad reads, and will automatically retry reads if the CRC fails.
+	* Every 512 byte block has a 4 byte CRC to detect corruption or bad reads, and disk operations will automatically retry if the CRC fails.
 * FUSE based
-	* Built on [FUSE](https://github.com/libfuse/libfuse), which makes it mountable on any UNIX or UNIX-like system that supports FUSE.
+	* Built on [FUSE](https://github.com/libfuse/libfuse), which makes Fluster! mountable on any UNIX or UNIX-like system that supports FUSE.
 
  
 ## How To Use
@@ -58,10 +58,10 @@ To clone and run Fluster!, you'll need [Rust](https://www.google.com/url?sa=E&
 - **Install:**
 	- **Rust:** Follow the official installation [guide](https://www.rust-lang.org/).
 	- **FUSE:** On most Linux distributions, libfuse is available through your package manager (e.g., sudo apt-get install libfuse-dev).
-		- On macOS, you may need [macFUSE](https://www.google.com/url?sa=E&q=https%3A%2F%2Fosxfuse.github.io%2F), although I have not tested `Fluster!` on MacOS at all, since you should use a real operating system.
+		- On macOS, you may need [macFUSE](https://macfuse.github.io/), although I have not tested Fluster! on MacOS at all, since you should use a real operating system.
 
 #### For Windows Users
-- If you're running `Fluster!` on Windows, please [read this guide](https://github.com/DocJade/fluster_rs/blob/master/windows.md).
+- If you're running Fluster! on Windows, please [read this guide](https://github.com/DocJade/fluster_rs/blob/master/windows.md).
 
 ### Building and running
 
@@ -91,7 +91,7 @@ sudo ./target/floppy/fluster_fs --block-device-path "/dev/sdX" --mount-point "~/
 ```bash
 fusermount -u ~/fluster_mount_point
 ```
-- Do note that unmounting `Fluster!` does not immediately shut down fluster, you will still need to swap disks to flush the cache to disk.
+- Do note that unmounting Fluster! does not immediately shut down fluster, you will still need to swap disks to flush the cache to disk.
 ## Credits
 
 - [DocJade](https://docjade.com/) (That's me!)
