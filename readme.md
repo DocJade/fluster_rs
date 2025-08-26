@@ -50,7 +50,7 @@
  
 ## How To Use
 
-To clone and run Fluster!, you'll need [Rust](https://www.google.com/url?sa=E&q=https%3A%2F%2Fwww.rust-lang.org%2Ftools%2Finstall), a FUSE implementation, a floppy drive, and at least two floppy disks.
+To clone and run Fluster!, you'll need [Rust](www.rust-lang.org), a FUSE implementation, a floppy drive, and at least two floppy disks.
 
 ### Prerequisites
 #### For Linux & macOS
