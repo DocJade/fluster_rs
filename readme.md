@@ -109,7 +109,7 @@ fusermount -u ~/fluster_mount_point
 
 ## License
 
-TBD
+<a href="https://github.com/DocJade/fluster_rs">Fluster!</a> © 2025 by <a href="https://docjade.com/">DocJade</a> is licensed under <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International</a>
 
 ---
 
