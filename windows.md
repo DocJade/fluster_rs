@@ -51,13 +51,11 @@ The floppy drive will also (probably) spin up, assuming you have a disk inserted
 
 Double check that the floppy is there
 ```
-NAME
-    MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
 $ lsblk
 sde   8:64   1   1.4M  0 disk
 ```
 
-Take note of which `sd` device it is. Mine happens to be `sde`.
+Take note of which `sdX` device it is. Mine happens to be `sde`.
 This will be the path that you use when starting Fluster.
 
 ***A grain of salt***
@@ -65,16 +63,10 @@ This is SO unstable, you might also have to disable, then uninstall the floppy d
 If your disk is spinning forever without seeming to do anything, you need to wait it out. Pulling out the disk
 (at least on my drive) in that state makes USBIPD give up and unmount the drive.
 
-### Note:
-My floppy disks were completely blank (every byte had been zeroed out), if your disks arent completely blank, im unsure if this will effect mounting the drive.
-If your floppy already has a mountpoint, unmount it before continuing.
-
 # Step 2.5:
 You need to allow `other user` mounting in fuse to let you access Fluster! from windows through WSL.
 `sudo nano /etc/fuse.conf`
 Uncomment `#user_allow_other`
-
-
 
 # Step 3: Building and running: 
 Required dependancies (non exhaustive):
