@@ -39,7 +39,7 @@
 * Disk failure detection
 	* Automatically detects and troubleshoot drive and disk issues.
 * Automatic backups
-	* Floppy disks are unreliable, so every block operation is backed up to `/var/fluster` in case recovered is required.
+	* Floppy disks are unreliable, so every block operation is backed up to `/var/fluster` in case disk recovery is required.
 * Tiered caching
 	* Triple tiered, in-memory cache to minimize disk swapping, while only using 2 floppy disks worth of memory.
 * Error checking
