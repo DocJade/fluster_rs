@@ -1,35 +1,8 @@
 // Gotta talk to people sometimes.
 
-use std::sync::{mpsc, Mutex};
+use crate::{filesystem::filesystem_struct::USE_TUI, tui::notify::TUI_MANAGER};
 
-use lazy_static::lazy_static;
-
-// We need channels to talk through
-lazy_static! {
-    // filesystem sends, the TUI receives
-    static ref TUI_REQUEST_SENDER: Mutex<mpsc::Sender<TuiPrompt>> = {
-        let (tx, _) = mpsc::channel();
-        Mutex::new(tx)
-    };
-
-    // TUI uses this for receiving
-    static ref TUI_REQUEST_RECEIVER: Mutex<mpsc::Receiver<TuiPrompt>> = {
-        // This is a bit of a trick to share the receiver from the sender.
-        let (tx, rx) = mpsc::channel();
-        *TUI_REQUEST_SENDER.lock().expect("Man i dont even know if this is safe, shame on me") = tx;
-        Mutex::new(rx)
-    };
-}
-
-// Helper to get the sender
-pub(crate) fn get_tui_sender() -> mpsc::Sender<TuiPrompt> {
-    let _ = &*TUI_REQUEST_RECEIVER; 
-    TUI_REQUEST_SENDER.lock().expect("idk anymore").clone()
-}
-
-
-
-pub(super) struct TuiPrompt {
+pub(crate) struct TuiPrompt {
     /// Title of the prompt
     pub(super) title: String,
     /// What the prompt is telling the user
@@ -44,3 +17,86 @@ pub(super) struct TuiPrompt {
 
 
 // if the TUI is disabled, we still need to be able to prompt for input.
+impl TuiPrompt {
+    /// Make a new prompt for pressing enter.
+    /// 
+    /// This will block until the user presses enter.
+    pub(crate) fn prompt_enter(title: String, content: String, flash: bool) {
+        // Assemble and start the prompt.
+        let prompt = TuiPrompt {
+            title,
+            content,
+            response: None,
+            flash,
+        };
+
+        if !USE_TUI.get().expect("USE_TUI should be set") {
+            return legacy_prompt_enter(prompt);
+        }
+
+        // Run the prompt
+        loop {
+            if let Ok(mut lock) = TUI_MANAGER.try_lock() {
+                lock.user_prompt = Some(prompt);
+                break
+            }
+        }
+
+        // Now we wait for the prompt to be gone (ie the user finished it)
+        loop {
+            {
+                // Another block so we dont hold onto the lock
+                if let Ok(lock) = TUI_MANAGER.try_lock() {
+                    if lock.user_prompt.is_none() {
+                        break
+                    }
+                }
+            }
+            // Still waiting. Stall for a bit.
+            std::thread::sleep(std::time::Duration::from_millis(32));
+        } 
+        // All done.
+    }
+
+    /// Make a new prompt for text input.
+    /// 
+    /// This will block until the user responds.
+    pub(crate) fn prompt_input(title: String, content: String, flash: bool) -> String {
+        // Get the channel for communicating the result of the prompt
+        let (response_tx, response_rx) = oneshot::channel();
+
+
+        // Assemble and start the prompt.
+        let prompt = TuiPrompt {
+            title,
+            content,
+            response: Some(response_tx),
+            flash,
+        };
+
+        if !USE_TUI.get().expect("USE_TUI should be set") {
+            return legacy_prompt_input(prompt);
+        }
+
+        // Run the prompt
+        loop {
+            if let Ok(mut lock) = TUI_MANAGER.try_lock() {
+                lock.user_prompt = Some(prompt);
+                break
+            }
+        }
+
+        // Wait for a response, and return it.
+        response_rx.recv().expect("Sender should send.")
+    }
+}
+
+
+// Prompt without the TUI
+fn legacy_prompt_enter(prompt: TuiPrompt) {
+    let _ = rprompt::prompt_reply(format!("[{}]: {}", prompt.title, prompt.content));
+}
+
+fn legacy_prompt_input(prompt: TuiPrompt) -> String {
+    rprompt::prompt_reply(format!("[{}]: {}", prompt.title, prompt.content)).expect("stdin should not fail.")
+}

@@ -17,7 +17,7 @@ lazy_static! {
 // This just sticks a return into the function if the TUI is enabled.
 macro_rules! skip_if_tui_disabled {
     () => {
-        if !USE_TUI.get().expect("USE_TUI should be enabled.") {
+        if !USE_TUI.get().expect("USE_TUI should be set") {
             return
         }
     };

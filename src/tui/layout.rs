@@ -241,7 +241,7 @@ fn pop_up_handler(frame: &mut Frame, pop_up: TuiPrompt) {
         .title(pop_up.title.clone())
         .title_alignment(Alignment::Center)
         // Blinking!
-        .border_style(if pop_up.flash {Style::new().slow_blink().red()} else {Style::new().fg(Color::Green)})
+        .border_style(if pop_up.flash {Style::new().slow_blink().red().on_black()} else {Style::new().white().on_black()})
         .border_set(ratatui::symbols::border::FULL)
         // Make the inside of the pop-up white on cyan.
         .style(Style::new().on_cyan().white());
@@ -275,7 +275,7 @@ fn pop_up_handler(frame: &mut Frame, pop_up: TuiPrompt) {
         // Text input
         let mut text_area = TextArea::default();
         text_area.set_style(Style::default().green().on_black());
-        text_area.set_block(Block::bordered());
+        text_area.set_block(Block::bordered().title("Text entry"));
         loop {
             // Update the text box
             frame.render_widget(&text_area, bottom);

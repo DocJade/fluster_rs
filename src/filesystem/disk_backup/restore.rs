@@ -5,9 +5,7 @@ use std::io::{
     Seek
 };
 
-use rprompt::prompt_reply;
-
-use crate::pool::disk::{
+use crate::{pool::disk::{
     drive_struct::{
         DiskType,
         FloppyDrive
@@ -16,7 +14,7 @@ use crate::pool::disk::{
         disk_trait::GenericDiskMethods,
         generic_structs::pointer_struct::DiskPointer
     }
-};
+}, tui::prompts::TuiPrompt};
 
 /// Returns true if the entire disk was re-created successfully.
 /// 
@@ -25,7 +23,12 @@ pub fn restore_disk(number: u16) -> bool {
     println!("Beginning restore of disk `{number}`.");
 
     // Get a new blank disk.
-    let _ = prompt_reply(format!("Please insert a brand new, blank disk that will become the new disk {number}, then press enter."));
+    TuiPrompt::prompt_enter(
+        "Insert blank disk.".to_string(),
+        format!("Please insert a brand new, blank disk that will become the new disk {number}, then press enter.\n
+        WARNING: Disk will NOT be checked for blankness, this WILL destroy data if a non-blank disk is inserted!"),
+        false
+    );
 
     // Find the disk in the backup folder
     // If it't not in there, you're cooked.
