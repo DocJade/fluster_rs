@@ -8,7 +8,7 @@ use tui_logger::{TuiLoggerLevelOutput, TuiLoggerWidget};
 use crate::tui::{state::FlusterTUIState, tasks::TaskInfo};
 
 /// The TUI interface of fluster. Call methods on this to update the interface as often as you'd like.
-pub(crate) struct FlusterTUI {
+pub struct FlusterTUI {
     /// The actual internal state
     pub(super) state: FlusterTUIState,
     /// The last time the interface was updated
@@ -21,7 +21,7 @@ impl FlusterTUI {
     /// Draw the TUI interface for Fluster
     /// 
     /// Takes in a frame from the terminal.
-    pub(crate) fn draw(&self, frame: &mut Frame) {
+    pub fn draw(&self, frame: &mut Frame) {
         // Split the window into sections
         let layout = Layout::default().margin(1).direction(Direction::Vertical).constraints([
             // Progress bars

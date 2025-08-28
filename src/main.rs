@@ -1,13 +1,13 @@
 use std::{
-    ffi::OsStr,
-    path::PathBuf
+    ffi::OsStr, path::PathBuf, sync::{atomic::{AtomicBool, Ordering}, Arc}, thread, time::Duration
 };
 
 use clap::Parser;
-use fluster_fs::filesystem::filesystem_struct::{FilesystemOptions, FlusterFS};
+use fluster_fs::{filesystem::filesystem_struct::{FilesystemOptions, FlusterFS}, tui::notify::TUI_MANAGER};
 
 // Logging
 use env_logger::Env;
+use ratatui::{crossterm::{execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}}, prelude::CrosstermBackend, Terminal};
 
 #[derive(Parser)]
 struct Cli {
@@ -67,6 +67,46 @@ fn main() {
     let options: FilesystemOptions =
         FilesystemOptions::new(use_virtual_disks, cli.block_device_path.into(), backup, enable_tui);
 
+
+    // Now before starting the filesystem, we need to start the TUI if needed.
+
+    // We also need to be able to tell the TUI to shut down when we unmount.
+    let shutdown_tui = Arc::new(AtomicBool::new(false));
+
+
+    let tui_thread_handle = if enable_tui {
+        let signal = Arc::clone(&shutdown_tui);
+        // Spawn a thread that handles the TUI
+        Some(thread::spawn(move || {
+            // Set up the terminal window
+            let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stdout())).unwrap();
+            // Swap to another screen to preserve old terminal content
+            execute!(terminal.backend_mut(), EnterAlternateScreen).unwrap();
+            // Raw mode for tui stuff
+            enable_raw_mode().unwrap();
+
+            // Rendering loop, we do terminal cleanup when told to.
+            while !signal.load(Ordering::Relaxed) {
+                // Try and lock the TUI, if we cant, we'll just skip this frame.
+                if let Ok(tui) = TUI_MANAGER.lock() {
+                    // Draw it!
+                    // We ignore if the drawing fails, we'll just try it again.
+                    let _ = terminal.draw(|frame| tui.draw(frame));
+                }
+                // Now wait before drawing the next frame.
+                thread::sleep(Duration::from_millis(16)); // just above 60fps
+            }
+
+            // We've broken from the loop, time to shut down the TUI.
+            execute!(terminal.backend_mut(), LeaveAlternateScreen).unwrap();
+            disable_raw_mode().unwrap();
+        }))
+    } else {
+        None
+    };
+
+
+
     let filesystem: FlusterFS = FlusterFS::start(&options);
 
     // Now for the fuse mount options
@@ -81,8 +121,6 @@ fn main() {
         OsStr::new("-oallow_other"), // Allow other users to open the mount point (ie windows outisde of WSL)
         OsStr::new("-ofsname=fluster"), // Set the name of the fuse mount
     ];
-
-    // todo!("fuse mount options for limiting read/write sizes and disabling async");
 
     // Mount it
 
@@ -102,4 +140,11 @@ fn main() {
             println!("Fluster is dead and you killed them. {err:#?}");
         },
     }
+
+    // Clean up the TUI.
+    if let Some(handle) = tui_thread_handle {
+        shutdown_tui.store(true, Ordering::Relaxed);
+        handle.join().expect("TUI rendering thread failed to join on shutdown! But Fluster otherwise shut down successfully.");
+    }
+
 }

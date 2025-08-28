@@ -35,3 +35,20 @@ pub(super) struct FlusterTUIState {
     // Current in-progress task, if there is one.
     pub(super) task: Option<ProgressableTask>
 }
+
+impl FlusterTUIState {
+    /// Brand new state, used for init
+    pub(super) fn new() -> Self {
+        Self {
+            disk_swap_count: 0,
+            disk_blocks_read: 0,
+            disk_blocks_written: 0,
+            cache_hit_rate: 0.0,
+            cache_blocks_read: 0,
+            cache_blocks_written: 0,
+            cache_flushes: 0,
+            cache_swaps_saved: 0,
+            task: None,
+        }
+    }
+}
