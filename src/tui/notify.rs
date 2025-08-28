@@ -9,7 +9,7 @@ use crate::{filesystem::filesystem_struct::USE_TUI, tui::{layout::FlusterTUI, ta
 
 // Global TUI state
 lazy_static! {
-    pub static ref TUI_MANAGER: Mutex<FlusterTUI> = Mutex::new(FlusterTUI::new());
+    pub static ref TUI_MANAGER: Mutex<FlusterTUI<'static>> = Mutex::new(FlusterTUI::new());
 }
 
 // We only run some logic if the TUI is enabled.

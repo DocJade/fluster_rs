@@ -10,7 +10,7 @@ use std::time::Instant;
 
 use crate::tui::{layout::FlusterTUI, state::FlusterTUIState, tasks::ProgressableTask};
 
-impl FlusterTUI {
+impl FlusterTUI<'_> {
     /// Complete a step in the currently in-progress task.
     pub(super) fn task_step(&mut self) {
         self.state.task.as_mut().expect("Can't progress without a task!").finish_step();

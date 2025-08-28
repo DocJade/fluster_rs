@@ -1,36 +1,30 @@
 // how da tui looks.
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use ratatui::{crossterm, layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style, Stylize}, text::Text, widgets::{Block, Borders, Clear, Gauge, List}, Frame};
 use tui_logger::{TuiLoggerLevelOutput, TuiLoggerWidget};
-use tui_textarea::{Input, Key, TextArea};
+use tui_textarea::{Input, Key};
 
 use crate::tui::{prompts::TuiPrompt, state::FlusterTUIState, tasks::TaskInfo};
 
 /// The TUI interface of fluster. Call methods on this to update the interface as often as you'd like.
-pub struct FlusterTUI {
+pub struct FlusterTUI<'a> {
     /// The actual internal state
     pub(super) state: FlusterTUIState,
     /// The last time the interface was updated
     pub(super) last_update: Instant,
     /// User prompt, if any.
-    pub(super) user_prompt: Option<TuiPrompt>
+    pub(super) user_prompt: Option<TuiPrompt<'a>>,
 }
 
 
 // Drawing time!
-impl FlusterTUI {
+impl FlusterTUI<'_> {
     /// Draw the TUI interface for Fluster
     /// 
     /// Takes in a frame from the terminal.
     pub fn draw(&mut self, frame: &mut Frame) {
-        // If a popup is needed, skip everything and just use the pop-up handler.
-        if let Some(pop_up) = self.user_prompt.take() {
-            return pop_up_handler(frame, pop_up);
-        }
-
-
         // Split the window into sections
         let layout = Layout::default().margin(1).direction(Direction::Vertical).constraints([
             // Progress bars
@@ -211,12 +205,24 @@ impl FlusterTUI {
         // Render it in!
         frame.render_widget(logs, logs_area);
 
+        // Finally, handle pop-ups if needed.
+        return pop_up_handler(frame, &mut self.user_prompt);
+
         // Done!
     }
 }
 
 // Display pop-ups and prompt for input.
-fn pop_up_handler(frame: &mut Frame, pop_up: TuiPrompt) {
+fn pop_up_handler(frame: &mut Frame, incoming_pop_up: &mut Option<TuiPrompt>) {
+
+    // Grab the popup if it exists.
+    let pop_up = if let Some(up) = incoming_pop_up {
+        up
+    } else {
+        // No pop up, nothing to do.
+        return
+    };
+
     // We'll be putting a box in the middle of the screen.
     // Annoyingly we have to create a grid then just pull the middle out
     let row  = Layout::default().direction(Direction::Vertical).constraints([
@@ -260,7 +266,7 @@ fn pop_up_handler(frame: &mut Frame, pop_up: TuiPrompt) {
         Constraint::Ratio(3, 10),
     ]).split(popup_inside);
     let top = top_bottom[0];
-    let bottom = top_bottom[0];
+    let bottom = top_bottom[1];
 
     // Assemble the top half of the window, which is just text.
     let text = Text::from(pop_up.content.clone()).centered();
@@ -270,46 +276,46 @@ fn pop_up_handler(frame: &mut Frame, pop_up: TuiPrompt) {
 
 
     // And finally, for the part the user interacts with.
-    // Either just tell the user to press enter, or have a box to type in
-    if let Some(response) = pop_up.response {
-        // Text input
-        let mut text_area = TextArea::default();
-        text_area.set_style(Style::default().green().on_black());
-        text_area.set_block(Block::bordered().title("Text entry"));
-        loop {
-            // Update the text box
-            frame.render_widget(&text_area, bottom);
-            
-            // Check if we are done.
-            match crossterm::event::read().expect("Reading from terminal should not fail.").into() {
-                Input {
-                    key: Key::Esc | Key::Enter,
-                    ..
-                } => break,
-                input => {
-                    // User typed
-                    let _ = text_area.input(input);
-                }
-            }
-        }
-
-        // Respond
-        response.send(text_area.lines()[0].clone()).expect("Receiver should not be dropped.");
+    // If the caller wants a string back, we'll return it. Otherwise we'll just discard it.
+    
+    // Render either the text box, or the continue prompt.
+    if pop_up.expects_string {
+        frame.render_widget(&pop_up.text_area, bottom);
     } else {
-        // Just press enter.
         let prompt = Text::from("Press enter to continue.").centered();
         frame.render_widget(prompt, bottom);
-        // Spin until the user hits enter.
-        loop {
-            match crossterm::event::read().expect("Reading from the terminal shouldn't fail.") {
-                crossterm::event::Event::Key(key_event) => match key_event.code {
-                    crossterm::event::KeyCode::Enter => break,
-                    _ => continue,
-                },
-                _ => continue,
-            }
-        }
     }
 
-    
+    // Now we check for input, if it's enter, we will return the string if needed, and
+    // remove the prompt.
+
+    // But we don't block here, we just see if a key has been pressed.
+    let event_waiting = crossterm::event::poll(Duration::from_millis(0)).expect("Polling for events should not fail.");
+    if !event_waiting {
+        // No events, so we're done.
+        return
+    }
+
+    // Handle the event.
+    match crossterm::event::read().expect("Reading from terminal should not fail.").into() {
+        Input {
+            key: Key::Esc | Key::Enter,
+            ..
+        } => {
+            // The user has exited the prompt, we're done!
+            // To respond, we need to pull out the TuiPrompt and swap a None into its place
+            let extracted = incoming_pop_up.take().expect("Guard.");
+            
+            // We always send the string back, caller will toss it if they dont need it.
+            extracted.callback.send(extracted.text_area.into_lines().concat()).expect("Receiver should not be dropped.");
+            return
+        },
+        input => {
+            // User typed
+            // This still updates the invisible text area, even if we
+            // dont expect input.
+            let _ = &pop_up.text_area.input(input);
+            return
+        }
+    }    
 }

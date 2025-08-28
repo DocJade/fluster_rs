@@ -85,10 +85,13 @@ fn main() {
             // Raw mode for tui stuff
             enable_raw_mode().unwrap();
 
+            // Wait a bit for Fluster! to start up and initialize things
+            thread::sleep(Duration::from_millis(100));
+
             // Rendering loop, we do terminal cleanup when told to.
             while !signal.load(Ordering::Relaxed) {
                 // Try and lock the TUI, if we cant, we'll just skip this frame.
-                if let Ok(mut tui) = TUI_MANAGER.lock() {
+                if let Ok(mut tui) = TUI_MANAGER.try_lock() {
                     // Draw it!
                     // We ignore if the drawing fails, we'll just try it again.
                     let _ = terminal.draw(|frame| tui.draw(frame));
