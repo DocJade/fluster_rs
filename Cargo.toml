@@ -21,6 +21,7 @@ rprompt = "2.2.0"
 tempfile = "3.20.0"
 test-log = "0.2.18"
 thiserror = "2.0.12"
+tui-logger = "0.17.3"
 
 # Floppy builds should be small enough to fit on a single floppy.
 # Because thats funny.

@@ -29,6 +29,8 @@ lazy_static! {
 // Backups cannot be disabled at runtime, so we use a once lock for them
 /// Enable and disable backing up disks to /var/fluster
 pub(crate) static WRITE_BACKUPS: OnceLock<bool> = OnceLock::new();
+// TUI cannot be disabled mid run.
+pub(crate) static USE_TUI: OnceLock<bool> = OnceLock::new();
 
 /// Options availble at time of pool creation / filesystem load
 pub struct FilesystemOptions {
@@ -41,5 +43,8 @@ pub struct FilesystemOptions {
     pub(super) floppy_drive: PathBuf,
     /// Enable backing up disks to /var/fluster
     #[allow(dead_code)] // it's lying.
-    pub(super) enable_backup: bool
+    pub(super) enable_backup: bool,
+    /// Enable the TUI
+    #[allow(dead_code)] // it's lying.
+    pub(super) enable_tui: bool
 }

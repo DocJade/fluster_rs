@@ -33,7 +33,7 @@ pub fn start_filesystem() -> FuseMT<FlusterFS> {
     let temp_dir = get_new_temp_dir();
     let floppy_drive: PathBuf = PathBuf::new(); // This is never read since we are using temporary disks.
     // Disable backups, since we don't use those in tests for obvious reasons.
-    let fs_options = FilesystemOptions::new(Some(temp_dir.path().to_path_buf()), floppy_drive, Some(false));
+    let fs_options = FilesystemOptions::new(Some(temp_dir.path().to_path_buf()), floppy_drive, Some(false), false);
     let started = FlusterFS::start(&fs_options);
     // MT thing that is actually used for mounting.
     // Zero threads for fully sync.

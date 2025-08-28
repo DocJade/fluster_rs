@@ -24,14 +24,25 @@ struct Cli {
     /// leave this on unless you are doing testing or don't care that much about your data.
     #[arg(long)]
     enable_disk_backup: Option<bool>,
+    /// Disable the TUI interface.
+    #[arg(long)]
+    disable_tui: Option<bool>,
 }
 
 fn main() {
-    // Start the logger
-    env_logger::Builder::from_env(Env::default().default_filter_or("error")).init();
-
-    // Get the block device that the user specifies is their floppy drive
+    // Get cli arguments
     let cli = Cli::parse();
+
+    // Start the logger
+    // If we are using the tui, we need to use the TUI logger instead of env.
+    if cli.disable_tui.unwrap_or(false) {
+        // use the tui
+        tui_logger::init_logger(log::LevelFilter::Debug).unwrap();
+        tui_logger::set_default_level(log::LevelFilter::Error);
+    } else {
+        // normal logger
+        env_logger::Builder::from_env(Env::default().default_filter_or("error")).init();
+    }
 
     // get the mount point
     let mount_point = PathBuf::from(cli.mount_point);
@@ -51,9 +62,10 @@ fn main() {
     // Assemble the options
     let use_virtual_disks: Option<PathBuf> = cli.use_virtual_disks.map(PathBuf::from);
     let backup: Option<bool> = cli.enable_disk_backup;
+    let enable_tui = !cli.disable_tui.unwrap_or(false);
 
     let options: FilesystemOptions =
-        FilesystemOptions::new(use_virtual_disks, cli.block_device_path.into(), backup);
+        FilesystemOptions::new(use_virtual_disks, cli.block_device_path.into(), backup, enable_tui);
 
     let filesystem: FlusterFS = FlusterFS::start(&options);
 

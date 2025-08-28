@@ -9,11 +9,6 @@
 use crate::tui::{layout::FlusterTUI, tasks::ProgressableTask};
 
 impl FlusterTUI {
-    /// Update, and display the TUI. Does not update the currently in-progress task.
-    fn update(&mut self) {
-        todo!()
-    }
-
     /// Complete a step in the currently in-progress task.
     fn task_step(&mut self) {
         self.state.task.as_mut().expect("Can't progress without a task!").finish_step();

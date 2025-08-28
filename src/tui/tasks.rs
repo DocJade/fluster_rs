@@ -1,6 +1,6 @@
 // Keeping track of what we're working on
 
-use std::time::Instant;
+use std::{fmt, path::Path, time::Instant};
 
 
 /// Progress of events.
@@ -16,6 +16,16 @@ use std::time::Instant;
 /// All actions on a ProgressableTask implicitly apply to the final task in the chain of
 /// sub-tasks. IE, if you have a->b->c, calling finish_step() will affect c.
 pub(crate) struct ProgressableTask {
+    /// What the task is
+    task: TaskInfo,
+    /// A sub task, if any.
+    sub_task: Option<Box<ProgressableTask>>
+}
+
+/// Task information is stored in a second struct for ease of use, since
+/// everything besides sub-tasks can be Copy-ed.
+#[derive(Clone)]
+pub(super) struct TaskInfo {
     /// The type of task being performed.
     task_type: TaskType,
     /// How many "steps" of the task are needed to finish this task.
@@ -24,14 +34,19 @@ pub(crate) struct ProgressableTask {
     steps_finished: u64,
     /// When this task was started
     start_time: Instant,
-    /// A sub task, if any.
-    sub_task: Option<Box<ProgressableTask>>
 }
 
 /// Every kind of task that can indicate its progress.
+#[derive(Clone)]
 pub(crate) enum TaskType {
     DiskWriteBlock,
     DiskReadBlock,
+    /// Includes the name of the file.
+    FilesystemReadFile(String), // man strings are annoying, no more copy
+    /// Includes the name of the file.
+    FilesystemWriteFile(String),
+    /// Includes the name of the file.
+    FilesystemTruncateFile(String),
 }
 
 
@@ -40,16 +55,47 @@ pub(crate) enum TaskType {
 // Implementations
 //
 
+impl TaskInfo {
+    // yeah
+    fn new(task_type: TaskType, steps: u64) -> TaskInfo {
+        Self {
+            task_type,
+            steps,
+            steps_finished: 0,
+            start_time: Instant::now(),
+        }
+    }
+
+    /// Get the string name of this task
+    pub(super) fn name(&self) -> String {
+        match &self.task_type {
+            TaskType::DiskWriteBlock => "Writing a block...".to_string(),
+            TaskType::DiskReadBlock => "Reading a block...".to_string(),
+            TaskType::FilesystemReadFile(name) => {
+                        format!("Reading from file \"{name}\"...")
+                    },
+            TaskType::FilesystemWriteFile(name) => {
+                        format!("Writing to file \"{name}\"...")
+                    },
+            TaskType::FilesystemTruncateFile(name) => {
+                        format!("Truncating \"{name}\"...")
+                    },
+        }
+    }
+
+    /// Get a float for how finished the task is
+    pub(super) fn progress(&self) -> f64 {
+        self.steps_finished as f64 / self.steps as f64
+    }
+}
+
 impl ProgressableTask {
     /// Create a new task.
     /// 
     /// New tasks cannot have a sub task pre-attached.
     pub(crate) fn new(task_type: TaskType, steps: u64) -> ProgressableTask {
         ProgressableTask {
-            task_type,
-            steps,
-            steps_finished: 0,
-            start_time: Instant::now(),
+            task: TaskInfo::new(task_type, steps),
             sub_task: None,
         }
     }
@@ -63,7 +109,7 @@ impl ProgressableTask {
             return sub_task.add_work(steps_to_add)
         }
 
-        self.steps += steps_to_add;
+        self.task.steps += steps_to_add;
     }
 
     /// Indicate that a step has been completed.
@@ -75,9 +121,9 @@ impl ProgressableTask {
             return sub_task.finish_step()
         }
 
-        self.steps_finished += 1;
+        self.task.steps_finished += 1;
         // You cannot finish more steps than you need to complete.
-        assert!(self.steps_finished <= self.steps);
+        assert!(self.task.steps_finished <= self.task.steps);
     }
 
     /// Add a sub-task.
@@ -111,7 +157,7 @@ impl ProgressableTask {
         }
         
         // This is the final task in the chain.
-        assert!(self.steps == self.steps_finished, "Task was not finished!");
+        assert!(self.task.steps == self.task.steps_finished, "Task was not finished!");
 
         // Remove the task.
         None
@@ -131,5 +177,25 @@ impl ProgressableTask {
         }
         // This is the last task, remove it.
         None
+    }
+
+    /// Extract a Vec<TaskInfo> from this task.
+    /// 
+    /// The head task is the first in the vec.
+    pub(super) fn get_tasks_info(&self) -> Vec<TaskInfo> {
+        // Recurse downwards, adding a copy of each task info as we go down.
+        let mut tasks: Vec<TaskInfo> = Vec::new();
+        tasks.push(self.task.clone());
+
+        let mut sub = &self.sub_task;
+        while let Some(new_sub) = sub.as_deref() {
+            // Get the task out
+            tasks.push(new_sub.task.clone());
+            // go deeper
+            sub = &new_sub.sub_task;
+        }
+
+        // All tasks have been collected.
+        tasks
     }
 }
