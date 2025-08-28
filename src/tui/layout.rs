@@ -60,7 +60,7 @@ impl FlusterTUI<'_> {
 
             // if we cant render any tasks, the window is too small.
             if max_tasks == 0 {
-                todo!("Enforce terminal window size minimums.")
+                return // just skip rendering entirely, lazy solution.
             }
 
             // Since we wouldn't be able to render them anyways, we can discard any tasks
@@ -88,7 +88,15 @@ impl FlusterTUI<'_> {
                 // Make the gauge
                 let gauge = Gauge::default()
                     // Surround the gauge with a border, and put the title of the task on it
-                    .block(Block::default().borders(Borders::ALL).title(task.name()))
+                    .block(
+                        Block::default()
+                        .borders(
+                            Borders::ALL
+                        )
+                        .title(task.name())
+                        // Add a note for how long this has been running
+                        .title_bottom(task.time_passed())
+                    )
                     // Make it blue because blue is cool
                     .gauge_style(Style::default().fg(Color::LightBlue))
                     // Add the percentage
@@ -97,7 +105,11 @@ impl FlusterTUI<'_> {
                 // Render the gauge into its area
                 frame.render_widget(gauge, *area);
             }
-        } // Done with progress bars
+        } else {
+            // No tasks to display.
+            let container_block: Block = Block::bordered().title("Idle, waiting for tasks...");
+            frame.render_widget(&container_block, progress_area);
+        }// Done with progress bars
 
         // Now for the statistics.
         let statistics_area = layout[1];
@@ -161,13 +173,16 @@ impl FlusterTUI<'_> {
             // Gauge only needs 3 lines
             Constraint::Min(3),
             // The rest of the room is for other stats.
-            Constraint::Fill(10),
+            Constraint::Fill(1),
         ]).split(cache_box_size);
         let gauge_space = cache_split[0];
-        let cache_text = cache_split[0];
+        let cache_text = cache_split[1];
 
         // Make the gauge
-        let hit_gauge: Gauge = Gauge::default().block(Block::bordered().title("Cache hit rate:"));
+        let hit_gauge: Gauge = Gauge::default()
+        .block(Block::bordered()
+        .title("Cache hit rate:"))
+        .ratio(self.state.cache_hit_rate.into());
         
         // Render it in
         frame.render_widget(hit_gauge, gauge_space);
@@ -206,7 +221,10 @@ impl FlusterTUI<'_> {
         frame.render_widget(logs, logs_area);
 
         // Finally, handle pop-ups if needed.
-        return pop_up_handler(frame, &mut self.user_prompt);
+        pop_up_handler(frame, &mut self.user_prompt);
+
+        // Update the render time
+        self.last_update = Instant::now();
 
         // Done!
     }
@@ -308,14 +326,12 @@ fn pop_up_handler(frame: &mut Frame, incoming_pop_up: &mut Option<TuiPrompt>) {
             
             // We always send the string back, caller will toss it if they dont need it.
             extracted.callback.send(extracted.text_area.into_lines().concat()).expect("Receiver should not be dropped.");
-            return
         },
         input => {
             // User typed
             // This still updates the invisible text area, even if we
             // dont expect input.
             let _ = &pop_up.text_area.input(input);
-            return
         }
     }    
 }

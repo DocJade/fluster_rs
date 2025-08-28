@@ -48,10 +48,10 @@ impl NotifyTui {
         TUI_MANAGER.lock().expect("Single thread, kinda.").state.disk_blocks_read += 1;
     }
 
-    /// A block has been written to disk.
-    pub(crate) fn block_written() {
+    /// Block(s) has been written to disk.
+    pub(crate) fn block_written(amount: u16) {
         skip_if_tui_disabled!();
-        TUI_MANAGER.lock().expect("Single thread, kinda.").state.disk_blocks_written += 1;
+        TUI_MANAGER.lock().expect("Single thread, kinda.").state.disk_blocks_written += amount as u64;
     }
 
     //
@@ -83,7 +83,7 @@ impl NotifyTui {
     }
 
     /// Update the cache hit-rate
-    pub(super) fn set_cache_hit_rate(rate: f32) {
+    pub(crate) fn set_cache_hit_rate(rate: f64) {
         skip_if_tui_disabled!();
         TUI_MANAGER.lock().expect("Single thread, kinda.").state.cache_hit_rate = rate;
     }

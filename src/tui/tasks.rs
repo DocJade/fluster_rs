@@ -87,6 +87,12 @@ impl TaskInfo {
     pub(super) fn progress(&self) -> f64 {
         self.steps_finished as f64 / self.steps as f64
     }
+
+    /// Returns a string `[mm:ss]` of how long the task has been running
+    pub(super) fn time_passed(&self) -> String {
+        let elapsed_seconds = self.start_time.elapsed().as_secs();
+        format!("[{:0>2}:{:0>2}]", elapsed_seconds/60, elapsed_seconds%60)
+    }
 }
 
 impl ProgressableTask {

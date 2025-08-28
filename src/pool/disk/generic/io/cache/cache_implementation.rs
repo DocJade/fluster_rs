@@ -65,7 +65,7 @@ use crate::{
             }
         },
         standard_disk::standard_disk_struct::StandardDisk
-    }
+    }, tui::notify::NotifyTui
 };
 
 //
@@ -172,7 +172,7 @@ impl BlockCache {
     }
 
     /// get the hit-rate of the cache
-    pub(super) fn get_hit_rate() -> f32 {
+    pub(super) fn get_hit_rate() -> f64 {
         BlockCacheStatistics::get_hit_rate()
     }
 
@@ -762,6 +762,9 @@ fn go_flush_tier(tier_number: usize) -> Result<(), DriveError> {
     
     // All done, don't need to do any cleanup for previously stated reasons
     debug!("Done flushing tier {tier_number} of the cache.");
+
+    // Let the TUI know
+    NotifyTui::cache_flushed();
     
     Ok(())
 }
@@ -824,6 +827,10 @@ fn go_cleanup_tier(tier_number: usize) -> Option<u64> {
     }
     
     debug!("Dropped {blocks_discarded} un-needed blocks from the tier.");
+
+    // Now is a good time to update the hit rate of the TUI, since the hit rate must have decreased
+    NotifyTui::set_cache_hit_rate(BlockCache::get_hit_rate());
+
     Some(blocks_discarded)
 }
 
@@ -903,6 +910,9 @@ fn go_flush_disk_from_cache(disk_number: u16) -> Result<u64, DriveError> {
     // and any of these operations failed, we would lose data.
 
     // TODO: ^^^^^^^^^
+
+    // Update the hit rate of the cache, might as well.
+    NotifyTui::set_cache_hit_rate(BlockCache::get_hit_rate());
 
     // All done.
     Ok(blocks_to_flush.len() as u64)

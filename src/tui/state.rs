@@ -26,7 +26,7 @@ pub(super) struct FlusterTUIState {
 
     /// The current hit rate of the cache (Only needs to be updated on
     /// disk swap.)
-    pub(super) cache_hit_rate: f32,
+    pub(super) cache_hit_rate: f64,
     /// Number of times we went to read a block, but got it from
     /// the cache instead of hitting the disk
     pub(super) cache_blocks_read: u64,

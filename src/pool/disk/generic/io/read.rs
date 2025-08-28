@@ -23,7 +23,7 @@ use crate::{
             WrappedIOError
         }
     },
-    pool::disk::generic::generic_structs::pointer_struct::DiskPointer
+    pool::disk::generic::generic_structs::pointer_struct::DiskPointer, tui::notify::NotifyTui
 };
 
 use super::super::block::block_structs::RawBlock;
@@ -115,6 +115,9 @@ pub(crate) fn read_block_direct(
             disk: originating_disk,
             block: block_index,
         };
+
+        // Inform TUI
+        NotifyTui::block_read();
 
         return Ok(RawBlock {
             block_origin,

@@ -16,6 +16,7 @@ use crate::error_types::critical::{CriticalError, RetryCapError};
 use crate::error_types::drive::{DriveError, DriveIOError, WrappedIOError};
 use crate::filesystem::filesystem_struct::WRITE_BACKUPS;
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+use crate::tui::notify::NotifyTui;
 
 use super::super::block::block_structs::RawBlock;
 use std::ops::Rem;
@@ -85,6 +86,9 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
                 let _ = disk_file.sync_all();
             }
         }
+
+        // Notify the TUI
+        NotifyTui::block_written(1);
 
         return Ok(());
     };
@@ -175,6 +179,9 @@ pub(crate) fn write_large_direct(disk_file: &File, data: &Vec<u8>, start_block: 
                 let _ = disk_file.sync_all();
             }
         }
+
+        // Notify the TUI
+        NotifyTui::block_written((data.len()/512) as u16);
 
         return Ok(());
     };

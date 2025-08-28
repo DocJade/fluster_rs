@@ -40,7 +40,7 @@ impl BlockCacheStatistics {
             // swaps_saved: 0,
         }
     }
-    pub(super) fn get_hit_rate() -> f32 {
+    pub(super) fn get_hit_rate() -> f64 {
         // Get ourselves
         let stats = CACHE_STATISTICS.lock().expect("Single threaded");
         if stats.hits_and_misses.is_empty() {
@@ -48,7 +48,7 @@ impl BlockCacheStatistics {
         }
         // rate is hits / total requests
         let hits = stats.hits_and_misses.iter().filter(|&&hit| hit).count();
-        hits as f32 / stats.hits_and_misses.len() as f32
+        hits as f64 / stats.hits_and_misses.len() as f64
     }
     /// Record a cache hit.
     /// 

@@ -35,6 +35,7 @@ use crate::filesystem::filesystem_struct::FLOPPY_PATH;
 use crate::filesystem::filesystem_struct::USE_VIRTUAL_DISKS;
 use crate::pool::disk::unknown_disk::unknown_disk_struct::UnknownDisk;
 use crate::pool::pool_actions::pool_struct::GLOBAL_POOL;
+use crate::tui::notify::NotifyTui;
 use crate::tui::prompts::TuiPrompt;
 
 use super::drive_struct::DiskType;
@@ -313,6 +314,10 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, DriveError> {
 
         if new_disk_number != previous_disk {
             // We have swapped disks.
+
+            // Inform the TUI
+            NotifyTui::disk_swapped();
+
             CURRENT_DISK_IN_DRIVE.store(new_disk_number, Ordering::Relaxed);
             // Update the swap count
             trace!("Locking GLOBAL_POOL, updating disk swap count.");
