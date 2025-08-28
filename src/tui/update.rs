@@ -49,6 +49,7 @@ impl FlusterTUI {
         Self {
             state: FlusterTUIState::new(),
             last_update: Instant::now(),
+            user_prompt: None,
         }
     }
 }

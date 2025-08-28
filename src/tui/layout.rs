@@ -2,17 +2,20 @@
 
 use std::time::Instant;
 
-use ratatui::{layout::{Constraint, Direction, Layout, Rect}, style::{Color, Style, Stylize}, widgets::{Block, Borders, Gauge, List}, Frame};
+use ratatui::{crossterm, layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style, Stylize}, text::Text, widgets::{Block, Borders, Clear, Gauge, List}, Frame};
 use tui_logger::{TuiLoggerLevelOutput, TuiLoggerWidget};
+use tui_textarea::{Input, Key, TextArea};
 
-use crate::tui::{state::FlusterTUIState, tasks::TaskInfo};
+use crate::tui::{prompts::TuiPrompt, state::FlusterTUIState, tasks::TaskInfo};
 
 /// The TUI interface of fluster. Call methods on this to update the interface as often as you'd like.
 pub struct FlusterTUI {
     /// The actual internal state
     pub(super) state: FlusterTUIState,
     /// The last time the interface was updated
-    pub(super) last_update: Instant
+    pub(super) last_update: Instant,
+    /// User prompt, if any.
+    pub(super) user_prompt: Option<TuiPrompt>
 }
 
 
@@ -21,7 +24,13 @@ impl FlusterTUI {
     /// Draw the TUI interface for Fluster
     /// 
     /// Takes in a frame from the terminal.
-    pub fn draw(&self, frame: &mut Frame) {
+    pub fn draw(&mut self, frame: &mut Frame) {
+        // If a popup is needed, skip everything and just use the pop-up handler.
+        if let Some(pop_up) = self.user_prompt.take() {
+            return pop_up_handler(frame, pop_up);
+        }
+
+
         // Split the window into sections
         let layout = Layout::default().margin(1).direction(Direction::Vertical).constraints([
             // Progress bars
@@ -204,4 +213,103 @@ impl FlusterTUI {
 
         // Done!
     }
+}
+
+// Display pop-ups and prompt for input.
+fn pop_up_handler(frame: &mut Frame, pop_up: TuiPrompt) {
+    // We'll be putting a box in the middle of the screen.
+    // Annoyingly we have to create a grid then just pull the middle out
+    let row  = Layout::default().direction(Direction::Vertical).constraints([
+        Constraint::Ratio(1, 10),
+        Constraint::Ratio(8, 10),
+        Constraint::Ratio(1, 10),
+    ]).split(frame.area())[1];
+    let popup_layout = Layout::default().direction(Direction::Horizontal).constraints([
+        Constraint::Ratio(1, 10),
+        Constraint::Ratio(8, 10),
+        Constraint::Ratio(1, 10),
+    ]).split(row)[1];
+    // Darken everything by dimming everything
+    let frame_size = frame.area();
+    frame.buffer_mut().set_style(frame_size, Style::new().dim());
+
+    // Clear out the area that the pop-up is about to draw into
+    frame.render_widget(Clear, popup_layout);
+
+    // Now make the prompting window.
+    let pop_up_block = Block::bordered()
+        .title(pop_up.title.clone())
+        .title_alignment(Alignment::Center)
+        // Blinking!
+        .border_style(if pop_up.flash {Style::new().slow_blink().red()} else {Style::new().fg(Color::Green)})
+        .border_set(ratatui::symbols::border::FULL)
+        // Make the inside of the pop-up white on cyan.
+        .style(Style::new().on_cyan().white());
+
+    // Get the side of the inside of that
+    let popup_inside = pop_up_block.inner(popup_layout);
+
+    // Render the pop up window
+    frame.render_widget(pop_up_block, popup_layout);
+
+    // Now for the inside of the window.
+    // Split into 2 parts, the top for the message, and the bottom for the input.
+
+    let top_bottom = Layout::default().direction(Direction::Vertical).constraints([
+        Constraint::Ratio(7, 10),
+        Constraint::Ratio(3, 10),
+    ]).split(popup_inside);
+    let top = top_bottom[0];
+    let bottom = top_bottom[0];
+
+    // Assemble the top half of the window, which is just text.
+    let text = Text::from(pop_up.content.clone()).centered();
+
+    // Render it
+    frame.render_widget(text, top);
+
+
+    // And finally, for the part the user interacts with.
+    // Either just tell the user to press enter, or have a box to type in
+    if let Some(response) = pop_up.response {
+        // Text input
+        let mut text_area = TextArea::default();
+        text_area.set_style(Style::default().green().on_black());
+        text_area.set_block(Block::bordered());
+        loop {
+            // Update the text box
+            frame.render_widget(&text_area, bottom);
+            
+            // Check if we are done.
+            match crossterm::event::read().expect("Reading from terminal should not fail.").into() {
+                Input {
+                    key: Key::Esc | Key::Enter,
+                    ..
+                } => break,
+                input => {
+                    // User typed
+                    let _ = text_area.input(input);
+                }
+            }
+        }
+
+        // Respond
+        response.send(text_area.lines()[0].clone()).expect("Receiver should not be dropped.");
+    } else {
+        // Just press enter.
+        let prompt = Text::from("Press enter to continue.").centered();
+        frame.render_widget(prompt, bottom);
+        // Spin until the user hits enter.
+        loop {
+            match crossterm::event::read().expect("Reading from the terminal shouldn't fail.") {
+                crossterm::event::Event::Key(key_event) => match key_event.code {
+                    crossterm::event::KeyCode::Enter => break,
+                    _ => continue,
+                },
+                _ => continue,
+            }
+        }
+    }
+
+    
 }

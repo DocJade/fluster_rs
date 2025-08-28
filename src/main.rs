@@ -88,7 +88,7 @@ fn main() {
             // Rendering loop, we do terminal cleanup when told to.
             while !signal.load(Ordering::Relaxed) {
                 // Try and lock the TUI, if we cant, we'll just skip this frame.
-                if let Ok(tui) = TUI_MANAGER.lock() {
+                if let Ok(mut tui) = TUI_MANAGER.lock() {
                     // Draw it!
                     // We ignore if the drawing fails, we'll just try it again.
                     let _ = terminal.draw(|frame| tui.draw(frame));

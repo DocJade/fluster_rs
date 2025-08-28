@@ -6,7 +6,10 @@ use crate::tui::tasks::ProgressableTask;
 
 /// Struct for holding information about Fluster's current state.
 pub(super) struct FlusterTUIState {
+    //
     // Disk stats
+    //
+
     // All stats are from the perspective of the current run. Fluster does not
     // store statistics on shutdown.
     /// How many times total the disk has been swapped
@@ -17,7 +20,10 @@ pub(super) struct FlusterTUIState {
     /// The total number of blocks that have been written to the physical disk.
     pub(super) disk_blocks_written: u64,
 
+    //
     // Cache stats
+    //
+
     /// The current hit rate of the cache (Only needs to be updated on
     /// disk swap.)
     pub(super) cache_hit_rate: f32,
@@ -32,8 +38,12 @@ pub(super) struct FlusterTUIState {
     /// Number of times we avoided swapping disks by doing a cached operation
     pub(super) cache_swaps_saved: u64,
 
+    //
+    // Tasks
+    //
+
     // Current in-progress task, if there is one.
-    pub(super) task: Option<ProgressableTask>
+    pub(super) task: Option<ProgressableTask>,
 }
 
 impl FlusterTUIState {
