@@ -861,7 +861,7 @@ fn go_cleanup_tier(tier_number: usize) -> Option<u64> {
 /// flush the cache.
 fn go_flush_disk_from_cache(disk_number: u16) -> Result<u64, DriveError> {
     // Pull out the tier items we need.
-    let task_handle = NotifyTui::start_task(TaskType::FlushCurrentDisk, 1);
+    let handle = NotifyTui::start_task(TaskType::FlushCurrentDisk, 1);
     debug!("Flushing cached content of disk {disk_number}...");
     
     // Get the block cache
@@ -872,6 +872,7 @@ fn go_flush_disk_from_cache(disk_number: u16) -> Result<u64, DriveError> {
     
     // If the tier is already empty, there's nothing to do.
     if tier_0.order.is_empty() {
+        NotifyTui::cancel_task(handle);
         return Ok(0);
     }
     
@@ -918,12 +919,13 @@ fn go_flush_disk_from_cache(disk_number: u16) -> Result<u64, DriveError> {
 
     // Now loop over those.
 
-    NotifyTui::add_steps_to_task(&task_handle, chunked_blocks.len() as u64);
+    NotifyTui::add_steps_to_task(&handle, chunked_blocks.len() as u64);
+    NotifyTui::complete_task_step(&handle);
     for block_chunk in chunked_blocks {
         // If this chunk only has one item in it, do a normal write.
         if block_chunk.len() == 1 {
             disk.unchecked_write_block(&block_chunk[0].clone().into_raw())?;
-            NotifyTui::complete_task_step(&task_handle);
+            NotifyTui::complete_task_step(&handle);
             continue;
         }
         
@@ -933,10 +935,10 @@ fn go_flush_disk_from_cache(disk_number: u16) -> Result<u64, DriveError> {
         // Now do the large write.
         // Unchecked since the headers for the disk may still be in the cache.
         disk.unchecked_write_large(bytes_to_write, block_chunk[0].block_origin)?;
-        NotifyTui::complete_task_step(&task_handle);
+        NotifyTui::complete_task_step(&handle);
     }
     debug!("Flushing disk from cache complete.");
-    NotifyTui::finish_task(task_handle);
+    NotifyTui::finish_task(handle);
 
     // Now that the writes are done, actually remove the blocks from the cache. If we removed them earlier
     // and any of these operations failed, we would lose data.

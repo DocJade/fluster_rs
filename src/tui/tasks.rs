@@ -17,6 +17,7 @@ use crate::tui::notify::NotifyTui;
 /// 
 /// All actions on a ProgressableTask implicitly apply to the final task in the chain of
 /// sub-tasks. IE, if you have a->b->c, calling finish_step() will affect c.
+#[derive(Debug)]
 pub(crate) struct ProgressableTask {
     /// What the task is
     task: TaskInfo,
@@ -26,7 +27,7 @@ pub(crate) struct ProgressableTask {
 
 /// Task information is stored in a second struct for ease of use, since
 /// everything besides sub-tasks can be Copy-ed.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(super) struct TaskInfo {
     /// The type of task being performed.
     task_type: TaskType,
@@ -39,7 +40,7 @@ pub(super) struct TaskInfo {
 }
 
 /// Every kind of task that can indicate its progress.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum TaskType {
     DiskWriteBlock,
     DiskWriteLarge,
@@ -279,7 +280,7 @@ impl ProgressableTask {
         }
         
         // This is the final task in the chain.
-        assert!(self.task.steps == self.task.steps_finished, "Task was not finished!");
+        assert!(self.task.steps == self.task.steps_finished, "Task was not finished! {:#?}", self.task);
 
         // Remove the task.
         None

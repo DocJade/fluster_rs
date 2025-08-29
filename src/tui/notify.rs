@@ -160,7 +160,7 @@ impl NotifyTui {
     /// Finish a task.
     /// 
     /// Handle required to ensure you actually have a task you're working on
-    pub(crate) fn finish_task(handle: TaskHandle) {
+    pub(crate) fn finish_task(mut handle: TaskHandle) {
         skip_if_tui_disabled!();
         let stored_task = &mut TUI_MANAGER.lock().expect("Single thread, kinda.")
         .state
@@ -168,16 +168,14 @@ impl NotifyTui {
 
         *stored_task = stored_task.take().expect("If a handle exists, so does a task.").finish_task();
 
-        // Update and drop handle.
-        let mut internal = handle;
-        internal.task_was_finished_or_canceled = true;
-        drop(internal);
+        // Update and drop handle by letting it fall out of scope.
+        handle.task_was_finished_or_canceled = true;
     }
 
     /// Cancel a task.
     /// 
     /// Handle required to ensure you actually have a task you're working on
-    pub(crate) fn cancel_task(handle: TaskHandle) {
+    pub(crate) fn cancel_task(mut handle: TaskHandle) {
         skip_if_tui_disabled!();
         let stored_task = &mut TUI_MANAGER.lock().expect("Single thread, kinda.")
         .state
@@ -185,22 +183,22 @@ impl NotifyTui {
 
         *stored_task = stored_task.take().expect("If a handle exists, so does a task.").cancel_task();
 
-        // Update and drop handle.
-        let mut internal = handle;
-        internal.task_was_finished_or_canceled = true;
-        drop(internal);
+        // Update and drop handle by letting it fall out of scope.
+        handle.task_was_finished_or_canceled = true;
     }
 
     /// Forcibly cancel a task without a handle.
     /// Only used for dropping
     pub(super) fn force_cancel_task() {
         skip_if_tui_disabled!();
-
         let stored_task = &mut TUI_MANAGER.lock().expect("Single thread, kinda.")
         .state
         .task;
 
-        *stored_task = stored_task.take().expect("If a handle exists, so does a task.").cancel_task();
+        // Only try to cancel if there's actually a task
+        if let Some(task) = stored_task.take() {
+            *stored_task = task.cancel_task();
+        }
     }
     
 }
