@@ -8,6 +8,7 @@ use fluster_fs::{filesystem::filesystem_struct::{FilesystemOptions, FlusterFS}, 
 // Logging
 use env_logger::Env;
 use ratatui::{crossterm::{execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}}, prelude::CrosstermBackend, Terminal};
+use tui_logger::TuiLoggerFile;
 
 #[derive(Parser)]
 struct Cli {
@@ -29,23 +30,41 @@ struct Cli {
     disable_tui: Option<bool>,
 }
 
-fn main() {
+fn main() {    
     // Get cli arguments
     let cli = Cli::parse();
 
-    // Start the logger
-    // If we are using the tui, we need to use the TUI logger instead of env.
-    if cli.disable_tui.unwrap_or(false) {
-        // use the tui
-        tui_logger::init_logger(log::LevelFilter::Debug).unwrap();
-        tui_logger::set_default_level(log::LevelFilter::Error);
-    } else {
-        // normal logger
-        env_logger::Builder::from_env(Env::default().default_filter_or("error")).init();
-    }
-
     // get the mount point
     let mount_point = PathBuf::from(cli.mount_point);
+
+    // Start the logger
+    // If we are using the tui, we need to use the TUI logger instead of env.
+    if !cli.disable_tui.unwrap_or(false) {
+        // use the tui
+        tui_logger::init_logger(log::LevelFilter::Debug).unwrap();
+        let log_level = std::env::var("RUST_LOG")
+            .map(|s| match s.to_lowercase().as_str() {
+                "error" => log::LevelFilter::Error,
+                "warn" => log::LevelFilter::Warn,
+                "info" => log::LevelFilter::Info,
+                "debug" => log::LevelFilter::Debug,
+                "trace" => log::LevelFilter::Trace,
+                _ => log::LevelFilter::Debug,
+            })
+            .unwrap_or(log::LevelFilter::Debug);
+        tui_logger::set_default_level(log_level);
+        // Also write out to a file.
+        tui_logger::set_log_file(TuiLoggerFile::new(
+            &mount_point.parent()
+            .expect("You really shouldn't be mounting fluster as `/` lmao.")
+            .join("flusterlog.txt")
+            .display()
+            .to_string()
+        ));
+    } else {
+        // normal logger
+        env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
+    }
 
     // Set up Ctrl+C handler
     ctrlc::set_handler(move || {
@@ -107,8 +126,6 @@ fn main() {
     } else {
         None
     };
-
-
 
     let filesystem: FlusterFS = FlusterFS::start(&options);
 

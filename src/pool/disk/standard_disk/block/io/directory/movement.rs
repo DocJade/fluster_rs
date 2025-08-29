@@ -34,7 +34,7 @@ impl DirectoryBlock {
         directory_name: String,
     ) -> Result<Option<DirectoryBlock>, DriveError> {
         let handle = NotifyTui::start_task(TaskType::ChangingDirectory(directory_name.clone()), 3);
-        info!("Attempting to CD to `{directory_name}`");
+        debug!("Attempting to CD to `{directory_name}`");
         // Get all items in this directory
 
         let found_dir = self.find_item(&NamedItem::Directory(directory_name))?;
@@ -43,16 +43,16 @@ impl DirectoryBlock {
             // The directory did not exist.
             NotifyTui::complete_multiple_task_steps(&handle, 2);
             NotifyTui::finish_task(handle);
-            info!("Directory did not exist.");
+            debug!("Directory did not exist.");
             return Ok(None)
         }
-        info!("Directory exists.");
+        debug!("Directory exists.");
         let wanted = found_dir.expect("Just checked");
         
         // Directory exists, time to open that bad boy
         // Extract the location
         let final_destination = &wanted.location;
-        info!(
+        debug!(
             "Directory claims to live at: disk {} block {} offset {}",
             final_destination.pointer.disk,
             final_destination.pointer.block,
