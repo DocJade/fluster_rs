@@ -70,6 +70,18 @@ impl CachedBlockIO {
         None
     }
 
+    
+    /// Check if a block is in the cache, and if it is dirty or not.
+    /// 
+    /// Returns Some(true) if the block is dirty, false if clean, or None if the block is absent.
+    pub fn status_of_cached_block(block_origin: DiskPointer) -> Option<bool> {
+        if let Some(cached) = BlockCache::try_find(block_origin) {
+            return Some(cached.requires_flush)
+        }
+        // Missing.
+        None
+    }
+
     /// Reads in a block from disk, attempts to read it from the cache first.
     /// 
     /// Block must already be allocated on origin disk.

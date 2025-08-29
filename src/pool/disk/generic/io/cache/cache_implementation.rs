@@ -126,7 +126,7 @@ pub(super) struct CachedBlock {
     /// Whether or not this block needs to be flushed.
     /// 
     /// Blocks that are read but never written do not need to be flushed.
-    requires_flush: bool
+    pub(super) requires_flush: bool
 }
 
 //
@@ -968,51 +968,35 @@ pub(in super::super::cache) fn disk_load_header_invalidation(disk_number: u16) -
         block: 0,
     };
 
-    let possibly_cached: Option<RawBlock>;
-    if let Some(cached) = CachedBlockIO::try_read(header_pointer) {
-        // block is in the cache, hold onto it
-        possibly_cached = Some(cached);
-        // And remove it from the cache
-        CachedBlockIO::remove_block(&header_pointer);
-    } else {
-        // it isnt there
-        possibly_cached = None;
-    }
+    // If the header is already cached, and is not dirty, we don't need to update the underlying disk.
 
-    // Now we can load in the disk without worrying about the header being cached already.
-    
+    if let Some(is_dirty) = CachedBlockIO::status_of_cached_block(header_pointer) {
+        if is_dirty {
+            // Header needs to be written to the disk real quick
+            // Grab the header from the cache.
+            let header_block = CachedBlockIO::read_block(header_pointer)?;
+            // Remove it
+            CachedBlockIO::remove_block(&header_pointer);
 
+            // Now write that to the disk
+#           [allow(deprecated)] // This is being used for the cache.
+            let mut disk: StandardDisk = match FloppyDrive::open(disk_number)? {
+                DiskType::Standard(standard_disk) => DiskType::Standard(standard_disk),
+                _ => unreachable!("Cache cannot be used for pool disks."),
+            }.try_into().expect("Must be standard.");
+
+            disk.unchecked_write_block(&header_block)?;
+
+            // Disk is now out of date, we will toss it, then it will be opened again below.
+            drop(disk);
+        }
+    } 
+
+    // Header is not cached, or is not dirty. Or we have now written the updated header back to disk.
     #[allow(deprecated)] // This is being used for the cache.
-    let mut disk: DiskType = match FloppyDrive::open(disk_number)? {
-        // Due to the caching nature of writing headers, blank disks dont
-        // immediately get their header written, even though they are now
-        // standard disks, this also applies to unknown disks.
-        // Thus, unless its a pool disk, it gets let through.
-        // // Maybe, commented out others to see...
+    let outgoing = match FloppyDrive::open(disk_number)? {
         DiskType::Standard(standard_disk) => DiskType::Standard(standard_disk),
-        // DiskType::Blank(blank) => DiskType::Blank(blank),
-        // DiskType::Unknown(unknown) => DiskType::Unknown(unknown),
         _ => unreachable!("Cache cannot be used for pool disks."),
     };
-
-    // Update the header on the disk if needed.
-    if let Some(cached_block) = possibly_cached {
-        // There was a header in the cache, so we now need to update the disk again
-        disk.checked_update(&cached_block)?;
-
-        // Now the disk is out of sync, we need to load it in _again_
-        #[allow(deprecated)] // This is being used for the cache.
-        let some_disk = FloppyDrive::open(disk_number)?;
-        disk = match some_disk {
-            DiskType::Standard(standard_disk) => DiskType::Standard(standard_disk),
-            // We dont put blank here again, since the header must be written at this point.
-            _ => unreachable!("Cache cannot be used for non-standard disks."),
-        };
-    }
-
-    // At this point, this must be a standard disk.
-    let standard_disk: StandardDisk = disk.try_into().expect("Must be standard at this point");
-
-    // The header on the disk is now up to date.
-    Ok(standard_disk)
+    Ok(outgoing.try_into().expect("Must be standard"))
 }
