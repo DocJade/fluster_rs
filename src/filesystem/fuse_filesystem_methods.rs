@@ -1303,7 +1303,7 @@ impl FilesystemMT for FlusterFS {
     ) -> fuse_mt::ResultWrite {
         debug!("Writing `{}` bytes to file `{}`...", data.len(), path.display());
         let task_handle = NotifyTui::start_task(
-            TaskType::FilesystemReadFile(
+            TaskType::FilesystemWriteFile(
                 path.file_name()
                 .unwrap_or(OsStr::new("?")).display().to_string()
             ),
