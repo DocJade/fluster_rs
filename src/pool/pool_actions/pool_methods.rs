@@ -19,6 +19,8 @@ use crate::pool::disk::standard_disk::block::directory::directory_struct::Direct
 use crate::pool::disk::standard_disk::block::directory::directory_struct::DirectoryItem;
 use crate::pool::disk::standard_disk::block::inode::inode_struct::InodeLocation;
 use crate::pool::disk::standard_disk::standard_disk_struct::StandardDisk;
+use crate::tui::notify::NotifyTui;
+use crate::tui::tasks::TaskType;
 use log::debug;
 use log::error;
 use std::process::exit;
@@ -196,6 +198,7 @@ fn initalize_pool() -> Result<(), DriveError> {
 /// Takes the next available disk number.
 /// Returns the newly created disk of type T.
 fn add_disk<T: DiskBootstrap>() -> Result<T, DriveError> {
+    let handle = NotifyTui::start_task(TaskType::CreateNewDisk, 2);
     debug!(
         "Attempting to add new disk to the pool of type: {}",
         std::any::type_name::<T>()
@@ -231,10 +234,14 @@ fn add_disk<T: DiskBootstrap>() -> Result<T, DriveError> {
         tries += 1;
     }
 
+    NotifyTui::complete_task_step(&handle);
+    
     // Now we need to create a disk to put in there from the supplied generic
     debug!("Bootstrapping the new disk...");
     let bootstrapped = T::bootstrap(blank_disk.disk_file(), next_open_disk)?;
 
+    NotifyTui::complete_task_step(&handle);
+    
     // The disk has now bootstrapped itself, we are done here.
     debug!("Locking GLOBAL_POOL...");
     GLOBAL_POOL
@@ -246,6 +253,7 @@ fn add_disk<T: DiskBootstrap>() -> Result<T, DriveError> {
         .highest_known_disk += 1;
 
     debug!("Done adding new disk.");
+    NotifyTui::finish_task(handle);
     Ok(bootstrapped)
 }
 

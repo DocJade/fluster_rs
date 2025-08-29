@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 use lazy_static::lazy_static;
 
-use crate::{filesystem::filesystem_struct::USE_TUI, tui::{layout::FlusterTUI, tasks::ProgressableTask}};
+use crate::{filesystem::filesystem_struct::USE_TUI, tui::{layout::FlusterTUI, tasks::{ProgressableTask, TaskHandle, TaskType}}};
 
 // Global TUI state
 lazy_static! {
@@ -93,33 +93,114 @@ impl NotifyTui {
     //
 
     /// Start a new task.
-    pub(super) fn start_task(new: ProgressableTask) {
-        skip_if_tui_disabled!();
-        TUI_MANAGER.lock().expect("Single thread, kinda.").new_task(new);
+    /// 
+    /// You must keep the TaskHandle to be able to update this task.
+    #[must_use] // Cant ignore the handle!
+    pub(crate) fn start_task(task_type: TaskType, steps: u64) -> TaskHandle {
+        // Return a dummy handle if TUI is disabled.
+        if !USE_TUI.get().expect("USE_TUI should be set") {
+            return TaskHandle::new();
+        }
+
+        // Create the task and make a new handle
+        let new_task = ProgressableTask::new(task_type, steps);
+        let handle: TaskHandle = TaskHandle::new();
+
+
+        let state = &mut TUI_MANAGER.lock().expect("Single thread, kinda.").state;
+        // If we already have a task, append it
+        if let Some(ref mut task) = state.task {
+            task.add_sub_task(new_task);
+            return handle;
+        }
+        // Currently don't have any tasks, add it directly.
+        state.task = Some(new_task);
+        handle
     }
 
-    /// Complete a step of a task
-    pub(super) fn complete_task_step() {
+    /// Complete one step of a task
+    /// 
+    /// Handle required to ensure you actually have a task you're working on
+    pub(crate) fn complete_task_step(_handle: &TaskHandle) {
         skip_if_tui_disabled!();
-        TUI_MANAGER.lock().expect("Single thread, kinda.").task_step();
+        TUI_MANAGER.lock()
+        .expect("Single thread, kinda.")
+        .state
+        .task.as_mut()
+        .expect("There shouldn't be any handles if we have no tasks.")
+        .finish_steps(1);
+    }
+
+    /// Complete multiple steps of a task.
+    /// 
+    /// Handle required to ensure you actually have a task you're working on
+    pub(crate) fn complete_multiple_task_steps(_handle: &TaskHandle, steps: u64) {
+        skip_if_tui_disabled!();
+        TUI_MANAGER.lock()
+        .expect("Single thread, kinda.")
+        .state
+        .task.as_mut()
+        .expect("There shouldn't be any handles if we have no tasks.")
+        .finish_steps(steps);
     }
 
     /// Add more steps to the current task.
-    pub(super) fn add_steps_to_task(steps: u64) {
+    ///
+    /// Handle required to ensure you actually have a task you're working on
+    pub(crate) fn add_steps_to_task(_handle: &TaskHandle, steps: u64) {
         skip_if_tui_disabled!();
-        TUI_MANAGER.lock().expect("Single thread, kinda.").task_add_work(steps);
+        TUI_MANAGER.lock()
+        .expect("Single thread, kinda.")
+        .state
+        .task.as_mut()
+        .expect("There shouldn't be any handles if we have no tasks.")
+        .add_work(steps);
     }
 
     /// Finish a task.
-    pub(super) fn finish_task() {
+    /// 
+    /// Handle required to ensure you actually have a task you're working on
+    pub(crate) fn finish_task(handle: TaskHandle) {
         skip_if_tui_disabled!();
-        TUI_MANAGER.lock().expect("Single thread, kinda.").task_finish();
+        let stored_task = &mut TUI_MANAGER.lock().expect("Single thread, kinda.")
+        .state
+        .task;
+
+        *stored_task = stored_task.take().expect("If a handle exists, so does a task.").finish_task();
+
+        // Update and drop handle.
+        let mut internal = handle;
+        internal.task_was_finished_or_canceled = true;
+        drop(internal);
     }
 
     /// Cancel a task.
-    pub(super) fn cancel_task() {
+    /// 
+    /// Handle required to ensure you actually have a task you're working on
+    pub(crate) fn cancel_task(handle: TaskHandle) {
         skip_if_tui_disabled!();
-        TUI_MANAGER.lock().expect("Single thread, kinda.").task_cancel();
+        let stored_task = &mut TUI_MANAGER.lock().expect("Single thread, kinda.")
+        .state
+        .task;
+
+        *stored_task = stored_task.take().expect("If a handle exists, so does a task.").cancel_task();
+
+        // Update and drop handle.
+        let mut internal = handle;
+        internal.task_was_finished_or_canceled = true;
+        drop(internal);
+    }
+
+    /// Forcibly cancel a task without a handle.
+    /// Only used for dropping
+    pub(super) fn force_cancel_task() {
+        skip_if_tui_disabled!();
+
+        let stored_task = &mut TUI_MANAGER.lock().expect("Single thread, kinda.")
+        .state
+        .task;
+
+        *stored_task = stored_task.take().expect("If a handle exists, so does a task.").cancel_task();
     }
     
 }

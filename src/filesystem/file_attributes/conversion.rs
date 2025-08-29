@@ -6,7 +6,7 @@ use std::time::SystemTime;
 use crate::{
     error_types::drive::DriveError, filesystem::file_handle::file_handle_struct::FileHandle, pool::disk::standard_disk::block::directory::directory_struct::{
                 DirectoryItem, DirectoryItemFlags
-            }
+            }, tui::{notify::NotifyTui, tasks::TaskType}
 };
 
 
@@ -34,6 +34,7 @@ impl TryFrom<DirectoryItem> for FileAttr {
 
 fn go_get_metadata(item: DirectoryItem) -> Result<FileAttr, DriveError> {
     debug!("Extracting metadata from item `{}`...", item.name);
+    let handle = NotifyTui::start_task(TaskType::GetMetadata(item.name.clone()), 3);
     // Now for ease of implementation, we (very stupidly) ignore all file access permissions,
     // owner information, and group owner information.
     
@@ -48,12 +49,14 @@ fn go_get_metadata(item: DirectoryItem) -> Result<FileAttr, DriveError> {
     // How big is it
     debug!("Getting size...");
     let size: u64 = item.get_size()?;
+    NotifyTui::complete_task_step(&handle);
     
     // extract the times
     debug!("Created at...");
     let creation_time: SystemTime = item.get_created_time()?.into();
     debug!("Modified at...");
     let modified_time: SystemTime = item.get_modified_time()?.into();
+    NotifyTui::complete_task_step(&handle);
     
     // "What kind of item is this?"
     // https://www.tiktok.com/@ki2myyysc6/video/7524954406438161694
@@ -66,9 +69,11 @@ fn go_get_metadata(item: DirectoryItem) -> Result<FileAttr, DriveError> {
         debug!("Is a file...");
         FileType::RegularFile
     };
-
+    NotifyTui::complete_task_step(&handle);
+    
     debug!("Metadata done.");
-
+    NotifyTui::finish_task(handle);
+    
     // Put it all together
     Ok(FileAttr {
         // Size of item in bytes.

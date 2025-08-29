@@ -22,7 +22,7 @@ use crate::{error_types::drive::DriveError, pool::{
         Pool,
         GLOBAL_POOL
     },
-}};
+}, tui::{notify::NotifyTui, tasks::TaskType}};
 
 impl Pool {
     /// Finds blocks across the entire pool.
@@ -68,6 +68,7 @@ impl Pool {
 }
 
 fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointer>, DriveError> {
+    let handle = NotifyTui::start_task(TaskType::PoolAllocateBlocks(blocks), blocks.into());
     debug!("Attempting to allocate {blocks} blocks across the pool...");
 
     debug!("Locking GLOBAL_POOL...");
@@ -150,6 +151,8 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
                     write_empty_crc(&ok, disk_to_check)?;
                 }
 
+                NotifyTui::complete_multiple_task_steps(&handle, ok.len() as u64);
+
                 break;
             }
             Err(amount) => {
@@ -190,6 +193,8 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
                     write_empty_crc(&blockie_doos, disk_to_check)?;
                 }
 
+                NotifyTui::complete_multiple_task_steps(&handle, blockie_doos.len() as u64);
+
                 // Waiter! Waiter! More disks please!
                 disk_to_check += 1;
                 continue;
@@ -214,6 +219,7 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
     free_blocks.sort_unstable_by_key(|pointer| (pointer.disk, pointer.block));
 
     debug!("Allocation complete.");
+    NotifyTui::finish_task(handle);
     Ok(free_blocks)
 }
 
@@ -233,6 +239,7 @@ fn block_indexes_to_pointers(blocks: &Vec<u16>, disk: u16) -> Vec<DiskPointer> {
 /// This method only works on standard disks
 fn write_empty_crc(blocks: &[u16], disk: u16) -> Result<(), DriveError> {
     debug!("Adding crc to {} blocks on disk {disk}...", blocks.len());
+    let handle = NotifyTui::start_task(TaskType::WriteCRC, blocks.len() as u64);
     // These new blocks do not have their CRC set, we need to just write empty blocks to them to set the crc.
     let mut empty_data: [u8; 512] = [0_u8; 512];
     // CRC that sucker
@@ -250,7 +257,10 @@ fn write_empty_crc(blocks: &[u16], disk: u16) -> Result<(), DriveError> {
         };
 
         CachedBlockIO::update_block(&empty_raw_block)?;
+        NotifyTui::complete_task_step(&handle);
     }
+
+    NotifyTui::finish_task(handle);
 
     // All of the blocks now have a empty block with a crc on it.
     Ok(())
@@ -258,6 +268,7 @@ fn write_empty_crc(blocks: &[u16], disk: u16) -> Result<(), DriveError> {
 
 fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, DriveError> {
     debug!("Deallocating some blocks from the pool...");
+    let handle = NotifyTui::start_task(TaskType::DiskDeallocateBlocks(blocks.len() as u16), blocks.len() as u64);
     // We assume the blocks are pre-sorted to reduce disk seeking, but even
     // if they aren't, the cache will re-sort them on write.
 
@@ -282,6 +293,7 @@ fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, DriveError> {
         };
         // Zero em out with the cache.
         CachedBlockIO::update_block(&empty)?;
+        NotifyTui::complete_task_step(&handle);
     }
     
     // Now go to and free the blocks from the allocation table.
@@ -325,6 +337,7 @@ fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, DriveError> {
 
     // Return the number of blocks freed.
     debug!("Done. {blocks_freed} pool blocks freed.");
+    NotifyTui::finish_task(handle);
     Ok(blocks_freed)
     
 }

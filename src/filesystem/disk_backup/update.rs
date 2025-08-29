@@ -23,7 +23,7 @@ pub(crate) fn update_backup(block: &RawBlock) {
     let backup_file = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(disk_path).expect("Fluster needs to use its backup files.");
 
     // Write in that block
-    backup_file.write_all_at(&block.data, (block.block_origin.block*512).into()).expect("Updating backups must work.");
+    backup_file.write_all_at(&block.data, (block.block_origin.block as u64 * 512)).expect("Updating backups must work.");
 }
 
 pub(crate) fn large_update_backup(start: DiskPointer, data: &[u8]) {
@@ -38,5 +38,5 @@ pub(crate) fn large_update_backup(start: DiskPointer, data: &[u8]) {
     let backup_file = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(disk_path).expect("Fluster needs to use its backup files.");
 
     // Write in that block
-    backup_file.write_all_at(data, (start.block*512).into()).expect("Updating backups must work.");
+    backup_file.write_all_at(data, (start.block as u64 * 512)).expect("Updating backups must work.");
 }

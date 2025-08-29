@@ -24,7 +24,7 @@ use crate::{error_types::drive::DriveError, pool::{
             },
     },
     pool_actions::pool_struct::Pool,
-}};
+}, tui::{notify::NotifyTui, tasks::TaskType}};
 
 impl DirectoryBlock {
     /// Add a new item to this block, extending this block if needed.
@@ -207,6 +207,7 @@ fn go_add_item(
     directory: &mut DirectoryBlock,
     item: &DirectoryItem,
 ) -> Result<(), DriveError> {
+    let handle = NotifyTui::start_task(TaskType::CreateDirectoryItem, 2);
     debug!("Adding new item to directory...");
 
     // Added items must have their flag set.
@@ -245,10 +246,14 @@ fn go_add_item(
         continue;
     }
 
+    NotifyTui::complete_task_step(&handle);
+    
     // Now that the loop has ended, we need to write the block that we just updated.
     // We assume the block has already been reserved, we are simply updating it.
     let to_write: RawBlock = current_directory.to_block();
     CachedBlockIO::update_block(&to_write)?;
+    NotifyTui::complete_task_step(&handle);
+    NotifyTui::finish_task(handle);
 
     debug!("Item added.");
     // Done!

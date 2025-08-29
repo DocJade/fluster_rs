@@ -65,7 +65,7 @@ use crate::{
             }
         },
         standard_disk::standard_disk_struct::StandardDisk
-    }, tui::notify::NotifyTui
+    }, tui::{notify::NotifyTui, tasks::TaskType}
 };
 
 //
@@ -449,6 +449,8 @@ fn go_add_or_update_item_cache(block: CachedBlock) -> Result<(), DriveError> {
     // It wasn't in any of the tiers, so we will add it to tier 0.
     
     // Make sure we have room first
+    // Hold onto the size of the tier
+    let tier_0_size = cache.tier_0.size;
     if cache.tier_0.is_full() {
         debug!("Tried adding new block to cache, but cache is full. Cleaning up tier 0...");
         // We don't have room, so we need to flush out tier 0 of the cache.
@@ -457,7 +459,9 @@ fn go_add_or_update_item_cache(block: CachedBlock) -> Result<(), DriveError> {
         if BlockCache::cleanup_tier(0).is_none() {
             // Nothing to cleanup, need to write data. Try the current disk first.
             debug!("Cleanup wasn't enough, flushing current disk...");
-            if BlockCache::flush_a_disk(FloppyDrive::currently_inserted_disk_number())? == 0 {
+            // We want to flush at least a quarter of the cache teir, otherwise we start thrashing
+            // the cache, wasting time.
+            if BlockCache::flush_a_disk(FloppyDrive::currently_inserted_disk_number())? < tier_0_size as u64 / 4 {
                 // There wasn't anything to flush for the current disk either!
                 debug!("Nothing to flush for the current disk, doing full cache flush...");
                 BlockCache::flush(0)?;
@@ -472,6 +476,9 @@ fn go_add_or_update_item_cache(block: CachedBlock) -> Result<(), DriveError> {
 
     // Put it in
     cache.tier_0.add_item(block);
+
+    // Update the hit rate
+    NotifyTui::set_cache_hit_rate(BlockCache::get_hit_rate());
     Ok(())
 }
 
@@ -618,12 +625,14 @@ fn go_get_tier_worst(tier: &mut TieredCache) -> Option<CachedBlock> {
 
 fn go_flush_tier(tier_number: usize) -> Result<(), DriveError> {
     debug!("Flushing tier {tier_number} of the cache...");
+    let handle = NotifyTui::start_task(TaskType::FlushTier, 2);
     // We will be flushing all data from this tier of the cache to disk.
     // This can be used on any tier, but will usually be called on tier 0.
 
     // Run tier cleanup first to remove anything that doesn't need to be written.
     // Don't care how many blocks are cleaned up.
     let _ = go_cleanup_tier(tier_number);
+    NotifyTui::complete_task_step(&handle);
     
     // We will extract all of the cache items at once, leaving the tier empty.
     let items_map_to_flush: HashMap<DiskPointer, CachedBlock>;
@@ -661,6 +670,7 @@ fn go_flush_tier(tier_number: usize) -> Result<(), DriveError> {
     let _ = items_order_to_flush;
     
     // Cache is now unlocked
+    NotifyTui::complete_task_step(&handle);
     
     // first we grab all of the items and sort them by disk, low to high, and also sort the blocks
     // within those disks to be in order. Since if the blocks are in order, the head doesn't have to move around
@@ -730,34 +740,44 @@ fn go_flush_tier(tier_number: usize) -> Result<(), DriveError> {
     
     // Now we can chunk together the blocks into larger continuous writes for speed.
     // First chunk by disk
-    let chunked_by_disk = items.chunk_by(|a,b| a.block_origin.disk == b.block_origin.disk);
+    let chunked_by_disk: Vec<Vec<CachedBlock>> = items
+        .chunk_by(|a, b| b.block_origin.disk == a.block_origin.disk)
+        .map(|block| block.to_vec()).collect();
+    
+    NotifyTui::add_steps_to_task(&handle, chunked_by_disk.len() as u64);
     
     // Now we can loop over the disks
     for disk_chunk in chunked_by_disk {
         // open the disk
         let mut current_disk: StandardDisk = disk_load_header_invalidation(disk_chunk[0].block_origin.disk)?;
-
+        
         // Now chunk together the blocks.
         // Comparison adds instead of subtracts to prevent overflow.
-        let chunked_by_block = disk_chunk.chunk_by(|a, b| b.block_origin.block == a.block_origin.block + 1);
-
+        let chunked_by_block: Vec<Vec<CachedBlock>> = disk_chunk
+        .chunk_by(|a, b| b.block_origin.block == a.block_origin.block + 1)
+        .map(|block| block.to_vec()).collect();
+    
+    
+        NotifyTui::add_steps_to_task(&handle, chunked_by_block.len() as u64);
         // Now loop over those.
         for block_chunk in chunked_by_block {
             // If this chunk only has one item in it, do a normal write.
             if block_chunk.len() == 1 {
                 // Unchecked due to cached headers.
                 current_disk.unchecked_write_block(&block_chunk[0].clone().into_raw())?;
+                NotifyTui::complete_task_step(&handle);
                 continue;
             }
-
+            
             // There are multiple blocks in a row to update, we need to stitch their bytes together.
             let bytes_to_write: Vec<u8> = block_chunk.iter().flat_map(|block| block.data.clone()).collect();
-
+            
             // Now do the large write.
             // Unchecked since the headers for the disk may still be in the cache.
             current_disk.unchecked_write_large(bytes_to_write, block_chunk[0].block_origin)?;
+            NotifyTui::complete_task_step(&handle);
         }
-
+        NotifyTui::complete_task_step(&handle);
     }
     
     // All done, don't need to do any cleanup for previously stated reasons
@@ -765,6 +785,7 @@ fn go_flush_tier(tier_number: usize) -> Result<(), DriveError> {
 
     // Let the TUI know
     NotifyTui::cache_flushed();
+    NotifyTui::finish_task(handle);
     
     Ok(())
 }
@@ -840,6 +861,7 @@ fn go_cleanup_tier(tier_number: usize) -> Option<u64> {
 /// flush the cache.
 fn go_flush_disk_from_cache(disk_number: u16) -> Result<u64, DriveError> {
     // Pull out the tier items we need.
+    let task_handle = NotifyTui::start_task(TaskType::FlushCurrentDisk, 1);
     debug!("Flushing cached content of disk {disk_number}...");
     
     // Get the block cache
@@ -864,7 +886,7 @@ fn go_flush_disk_from_cache(disk_number: u16) -> Result<u64, DriveError> {
 
     // Split that into pointers and blocks
     let pointers_to_discard: Vec<DiskPointer> = to_flush.keys().cloned().collect();
-    let blocks_to_flush: Vec<CachedBlock> = to_flush.into_values().collect();
+    let mut blocks_to_flush: Vec<CachedBlock> = to_flush.into_values().collect();
 
     
     // Then discard all of the sorting information about those blocks
@@ -882,29 +904,39 @@ fn go_flush_disk_from_cache(disk_number: u16) -> Result<u64, DriveError> {
 
     // Debug how many blocks we're about to flush
     debug!("Writing {} blocks to disk...", blocks_to_flush.len());
+
+    // Sort the blocks
+    blocks_to_flush.sort_unstable_by_key(|block| block.block_origin.block);
     
     // Chunk the blocks for faster writes
-    let chunked_blocks = blocks_to_flush.chunk_by(|a, b| b.block_origin.block == a.block_origin.block + 1);
+    let chunked_blocks: Vec<Vec<CachedBlock>> = blocks_to_flush
+        .chunk_by(|a, b| b.block_origin.block == a.block_origin.block + 1)
+        .map(|block| block.to_vec()).collect();
 
     // open the disk we're writing to
     let mut disk: StandardDisk = disk_load_header_invalidation(disk_number)?;
 
     // Now loop over those.
+
+    NotifyTui::add_steps_to_task(&task_handle, chunked_blocks.len() as u64);
     for block_chunk in chunked_blocks {
         // If this chunk only has one item in it, do a normal write.
         if block_chunk.len() == 1 {
             disk.unchecked_write_block(&block_chunk[0].clone().into_raw())?;
+            NotifyTui::complete_task_step(&task_handle);
             continue;
         }
-    
+        
         // There are multiple blocks in a row to update, we need to stitch their bytes together.
         let bytes_to_write: Vec<u8> = block_chunk.iter().flat_map(|block| block.data.clone()).collect();
         
         // Now do the large write.
         // Unchecked since the headers for the disk may still be in the cache.
         disk.unchecked_write_large(bytes_to_write, block_chunk[0].block_origin)?;
+        NotifyTui::complete_task_step(&task_handle);
     }
     debug!("Flushing disk from cache complete.");
+    NotifyTui::finish_task(task_handle);
 
     // Now that the writes are done, actually remove the blocks from the cache. If we removed them earlier
     // and any of these operations failed, we would lose data.

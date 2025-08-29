@@ -2,6 +2,8 @@
 
 use std::{fmt, path::Path, time::Instant};
 
+use crate::tui::notify::NotifyTui;
+
 
 /// Progress of events.
 /// 
@@ -40,13 +42,59 @@ pub(super) struct TaskInfo {
 #[derive(Clone)]
 pub(crate) enum TaskType {
     DiskWriteBlock,
+    DiskWriteLarge,
+    WaitingForDriveSpinUp,
     DiskReadBlock,
     /// Includes the name of the file.
     FilesystemReadFile(String), // man strings are annoying, no more copy
     /// Includes the name of the file.
     FilesystemWriteFile(String),
     /// Includes the name of the file.
+    FilesystemOpenFile(String),
+    /// Includes the name of the file.
     FilesystemTruncateFile(String),
+    /// Includes name of new file duh
+    FilesystemCreateFile(String),
+    /// Includes the name of the new directory.
+    FilesystemMakeDirectory(String),
+    /// Includes the name of directory to list.
+    FilesystemReadDirectory(String),
+    /// Includes the name of the directory that is about to be removed.
+    FilesystemRemoveDirectory(String),
+    /// Includes the name of the file that is kill.
+    FilesystemDeleteFile(String),
+    /// Includes the name of the file / folder.
+    GetMetadata(String),
+    GetSize,
+    WipeDisk,
+    FlushCurrentDisk,
+    FlushTier,
+    /// Includes number of requested blocks.
+    PoolAllocateBlocks(u16),
+    /// Includes number of blocks being deallocated.
+    DiskDeallocateBlocks(u16),
+    CreateNewDisk,
+    WriteCRC,
+    /// Includes the name of the directory we're trying to open
+    ChangingDirectory(String),
+    ListingDirectory,
+    /// Includes the name of the item we're looking for
+    FindItemInDirectory(String),
+    CreateDirectoryItem,
+}
+
+/// When we start a task, we are promising to finish it. We need a way to know
+/// if the task never finished. Thus we hand out a little struct that you need to
+/// hold onto. If the struct gets dropped, we assume the lowest task in the chain
+/// was canceled, or has finished.
+/// 
+/// DO NOT implement clone or copy.
+pub(crate) struct TaskHandle {
+    /// This is set if the the task this handle was dispatched for
+    /// completed _or_ was canceled, indicating that cleanup is not needed.
+    /// 
+    /// Defaults to false
+    pub(super) task_was_finished_or_canceled: bool,
 }
 
 
@@ -54,6 +102,31 @@ pub(crate) enum TaskType {
 //
 // Implementations
 //
+
+impl Drop for TaskHandle {
+    fn drop(&mut self) {
+        // Are we done?
+        if self.task_was_finished_or_canceled {
+            // Cool! Don't need to do anything.
+        } else {
+            // The task was never finished or canceled, we must cancel it ourselves
+            // We cant actual use ourselves here, since we need to pass in an owned
+            // value that will be dropped. So we just make a new one. weird, i know
+            NotifyTui::force_cancel_task()
+        }
+    }
+}
+
+impl TaskHandle {
+    pub(super) fn new() -> Self {
+        Self {
+            task_was_finished_or_canceled: false,
+        }
+    }
+}
+
+
+
 
 impl TaskInfo {
     // yeah
@@ -69,17 +142,60 @@ impl TaskInfo {
     /// Get the string name of this task
     pub(super) fn name(&self) -> String {
         match &self.task_type {
+            TaskType::WaitingForDriveSpinUp => "Waiting for floppy drive to spin up...".to_string(),
             TaskType::DiskWriteBlock => "Writing a block...".to_string(),
             TaskType::DiskReadBlock => "Reading a block...".to_string(),
+            TaskType::WipeDisk => "Wiping disk...".to_string(),
+            TaskType::DiskWriteLarge => "Writing several blocks...".to_string(),
+            TaskType::CreateNewDisk => "Creating new disk...".to_string(),
+            TaskType::WriteCRC => "Writing CRC to block...".to_string(),
+            TaskType::GetSize => "Getting the size of an item...".to_string(),
+            TaskType::ListingDirectory => "Listing a directory...".to_string(),
+            TaskType::CreateDirectoryItem => "Creating new directory item...".to_string(),
+            TaskType::FlushCurrentDisk => "Flushing current disk...".to_string(),
+            TaskType::FlushTier => "Flushing a tier of cache...".to_string(),
             TaskType::FilesystemReadFile(name) => {
-                        format!("Reading from file \"{name}\"...")
-                    },
+                format!("Reading from file \"{name}\"...")
+            },
             TaskType::FilesystemWriteFile(name) => {
-                        format!("Writing to file \"{name}\"...")
-                    },
+                format!("Writing to file \"{name}\"...")
+            },
             TaskType::FilesystemTruncateFile(name) => {
-                        format!("Truncating \"{name}\"...")
-                    },
+                format!("Truncating \"{name}\"...")
+            },
+            TaskType::PoolAllocateBlocks(number) => {
+                format!("Allocating {number} blocks across disk pool...")
+            },
+            TaskType::DiskDeallocateBlocks(number) => {
+                format!("Freeing {number} blocks from current disk...")
+            },
+            TaskType::GetMetadata(name) => {
+                format!("Getting {name}'s metadata...")
+            },
+            TaskType::ChangingDirectory(name) => {
+                format!("Trying to open directory {name}...")
+            },
+            TaskType::FindItemInDirectory(name) => {
+                format!("Looking for {name} in current directory...")
+            },
+            TaskType::FilesystemMakeDirectory(name) => {
+                format!("Making new directory {name}...")
+            },
+            TaskType::FilesystemOpenFile(name) => {
+                format!("Opening file {name}...")
+            },
+            TaskType::FilesystemCreateFile(name) => {
+                format!("Creating file {name}...")
+            },
+            TaskType::FilesystemReadDirectory(name) => {
+                format!("Reading directory {name}...")
+            },
+            TaskType::FilesystemRemoveDirectory(name) => {
+                format!("Removing directory {name}...")
+            },
+            TaskType::FilesystemDeleteFile(name) => {
+                format!("Deleting file {name}...")
+            },
         }
     }
 
@@ -99,7 +215,7 @@ impl ProgressableTask {
     /// Create a new task.
     /// 
     /// New tasks cannot have a sub task pre-attached.
-    pub(crate) fn new(task_type: TaskType, steps: u64) -> ProgressableTask {
+    pub(super) fn new(task_type: TaskType, steps: u64) -> ProgressableTask {
         ProgressableTask {
             task: TaskInfo::new(task_type, steps),
             sub_task: None,
@@ -121,13 +237,13 @@ impl ProgressableTask {
     /// Indicate that a step has been completed.
     /// 
     /// You can only finish one step at a time.
-    pub(super) fn finish_step(&mut self) {
+    pub(super) fn finish_steps(&mut self, steps: u64) {
         // Recurse if there are sub-tasks
         if let Some(sub_task) = &mut self.sub_task {
-            return sub_task.finish_step()
+            return sub_task.finish_steps(steps)
         }
 
-        self.task.steps_finished += 1;
+        self.task.steps_finished += steps;
         // You cannot finish more steps than you need to complete.
         assert!(self.task.steps_finished <= self.task.steps);
     }
