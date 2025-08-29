@@ -14,3 +14,4 @@ pub mod filesystem;
 mod helpers;
 mod error_types;
 mod pool;
+pub mod tui;

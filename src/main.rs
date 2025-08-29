@@ -1,13 +1,13 @@
 use std::{
-    ffi::OsStr,
-    path::PathBuf
+    ffi::OsStr, path::PathBuf, sync::{atomic::{AtomicBool, Ordering}, Arc}, thread, time::Duration
 };
 
 use clap::Parser;
-use fluster_fs::filesystem::filesystem_struct::{FilesystemOptions, FlusterFS};
+use fluster_fs::{filesystem::filesystem_struct::{FilesystemOptions, FlusterFS}, tui::notify::TUI_MANAGER};
 
 // Logging
 use env_logger::Env;
+use ratatui::{crossterm::{execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}}, prelude::CrosstermBackend, Terminal};
 
 #[derive(Parser)]
 struct Cli {
@@ -24,14 +24,25 @@ struct Cli {
     /// leave this on unless you are doing testing or don't care that much about your data.
     #[arg(long)]
     enable_disk_backup: Option<bool>,
+    /// Disable the TUI interface.
+    #[arg(long)]
+    disable_tui: Option<bool>,
 }
 
 fn main() {
-    // Start the logger
-    env_logger::Builder::from_env(Env::default().default_filter_or("error")).init();
-
-    // Get the block device that the user specifies is their floppy drive
+    // Get cli arguments
     let cli = Cli::parse();
+
+    // Start the logger
+    // If we are using the tui, we need to use the TUI logger instead of env.
+    if cli.disable_tui.unwrap_or(false) {
+        // use the tui
+        tui_logger::init_logger(log::LevelFilter::Debug).unwrap();
+        tui_logger::set_default_level(log::LevelFilter::Error);
+    } else {
+        // normal logger
+        env_logger::Builder::from_env(Env::default().default_filter_or("error")).init();
+    }
 
     // get the mount point
     let mount_point = PathBuf::from(cli.mount_point);
@@ -51,9 +62,53 @@ fn main() {
     // Assemble the options
     let use_virtual_disks: Option<PathBuf> = cli.use_virtual_disks.map(PathBuf::from);
     let backup: Option<bool> = cli.enable_disk_backup;
+    let enable_tui = !cli.disable_tui.unwrap_or(false);
 
     let options: FilesystemOptions =
-        FilesystemOptions::new(use_virtual_disks, cli.block_device_path.into(), backup);
+        FilesystemOptions::new(use_virtual_disks, cli.block_device_path.into(), backup, enable_tui);
+
+
+    // Now before starting the filesystem, we need to start the TUI if needed.
+
+    // We also need to be able to tell the TUI to shut down when we unmount.
+    let shutdown_tui = Arc::new(AtomicBool::new(false));
+
+
+    let tui_thread_handle = if enable_tui {
+        let signal = Arc::clone(&shutdown_tui);
+        // Spawn a thread that handles the TUI
+        Some(thread::spawn(move || {
+            // Set up the terminal window
+            let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stdout())).unwrap();
+            // Swap to another screen to preserve old terminal content
+            execute!(terminal.backend_mut(), EnterAlternateScreen).unwrap();
+            // Raw mode for tui stuff
+            enable_raw_mode().unwrap();
+
+            // Wait a bit for Fluster! to start up and initialize things
+            thread::sleep(Duration::from_millis(100));
+
+            // Rendering loop, we do terminal cleanup when told to.
+            while !signal.load(Ordering::Relaxed) {
+                // Try and lock the TUI, if we cant, we'll just skip this frame.
+                if let Ok(mut tui) = TUI_MANAGER.try_lock() {
+                    // Draw it!
+                    // We ignore if the drawing fails, we'll just try it again.
+                    let _ = terminal.draw(|frame| tui.draw(frame));
+                }
+                // Now wait before drawing the next frame.
+                thread::sleep(Duration::from_millis(16)); // just above 60fps
+            }
+
+            // We've broken from the loop, time to shut down the TUI.
+            execute!(terminal.backend_mut(), LeaveAlternateScreen).unwrap();
+            disable_raw_mode().unwrap();
+        }))
+    } else {
+        None
+    };
+
+
 
     let filesystem: FlusterFS = FlusterFS::start(&options);
 
@@ -69,8 +124,6 @@ fn main() {
         OsStr::new("-oallow_other"), // Allow other users to open the mount point (ie windows outisde of WSL)
         OsStr::new("-ofsname=fluster"), // Set the name of the fuse mount
     ];
-
-    // todo!("fuse mount options for limiting read/write sizes and disabling async");
 
     // Mount it
 
@@ -90,4 +143,11 @@ fn main() {
             println!("Fluster is dead and you killed them. {err:#?}");
         },
     }
+
+    // Clean up the TUI.
+    if let Some(handle) = tui_thread_handle {
+        shutdown_tui.store(true, Ordering::Relaxed);
+        handle.join().expect("TUI rendering thread failed to join on shutdown! But Fluster otherwise shut down successfully.");
+    }
+
 }

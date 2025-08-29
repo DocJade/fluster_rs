@@ -35,6 +35,8 @@ use crate::filesystem::filesystem_struct::FLOPPY_PATH;
 use crate::filesystem::filesystem_struct::USE_VIRTUAL_DISKS;
 use crate::pool::disk::unknown_disk::unknown_disk_struct::UnknownDisk;
 use crate::pool::pool_actions::pool_struct::GLOBAL_POOL;
+use crate::tui::notify::NotifyTui;
+use crate::tui::prompts::TuiPrompt;
 
 use super::drive_struct::DiskType;
 use super::drive_struct::FloppyDrive;
@@ -296,7 +298,11 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, DriveError> {
         // no disk number.
         if let DiskType::Blank(_) = disk {
             // what
-            println!("Wrong disk. This disk is blank. Try again.");
+            TuiPrompt::prompt_enter(
+                "Wrong disk".to_string(),
+                "This disk is blank. Try again.".to_string(),
+                false
+            );
             continue;
         }
 
@@ -308,6 +314,10 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, DriveError> {
 
         if new_disk_number != previous_disk {
             // We have swapped disks.
+
+            // Inform the TUI
+            NotifyTui::disk_swapped();
+
             CURRENT_DISK_IN_DRIVE.store(new_disk_number, Ordering::Relaxed);
             // Update the swap count
             trace!("Locking GLOBAL_POOL, updating disk swap count.");
@@ -345,9 +355,12 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, DriveError> {
         } else {
             is_user_an_idiot = true;
         }
-        let _ = rprompt::prompt_reply(format!(
-            "Please insert disk {disk_number}, then press enter."
-        ));
+
+        TuiPrompt::prompt_enter(
+            "Please swap disks.".to_string(),
+            format!("Please insert disk {disk_number}, then press enter."),
+            true
+        );
     }
 }
 
@@ -362,16 +375,20 @@ fn prompt_for_blank_disk(disk_number: u16) -> Result<BlankDisk, DriveError> {
         .expect("Fluster is single threaded.")
         .is_some()
     {
-        let _ = rprompt::prompt_reply(
+        TuiPrompt::prompt_enter(
+            "New disk.".to_string(),
             format!("Creating a new disk, please insert a blank disk that will become disk {disk_number}, then hit enter."),
-        ).expect("Prompts should not fail.");
+            true
+        );
     }
 
     loop {
         if try_again {
-            let action = rprompt::prompt_reply(
-                "That disk is not blank. Please insert a blank disk, then hit enter. Or type \"wipe\" to forcibly wipe this disk.",
-            ).expect("Prompts should not fail.");
+            let action = TuiPrompt::prompt_input(
+                "Disk is not blank.".to_string(),
+                "That disk is not blank. Please insert a blank disk, then hit enter. Or type \"wipe\" to forcibly wipe this disk.".to_string(),
+                false
+            );
 
             if action.contains("wipe") {
                 // go wipe that disk
@@ -403,28 +420,23 @@ fn prompt_for_blank_disk(disk_number: u16) -> Result<BlankDisk, DriveError> {
 pub fn display_info_and_ask_wipe(disk: &mut DiskType) -> Result<(), DriveError> {
     // This isn't a very friendly interface, but it'll do for now.
 
-    loop {
-        // Display the disk type
-        println!("The disk inserted is not blank. It is of type `{disk:?}`.");
-        println!("Would you like to wipe this disk?");
-        let answer = rprompt::prompt_reply("y/n: ").expect("Prompts should not fail.")
-            .to_ascii_lowercase()
-            .contains('y');
-        if answer {
-            // Make absolutely sure!
-            if rprompt::prompt_reply("Are you really sure? (Type \"Do as I say!\"): ").expect("Prompts should not fail.")
-            .contains("Do as I say!") {
-                // Wipe time!
-                destroy_disk(disk.disk_file_mut()).expect("Prompts should not fail.");
-                return Ok(());
-            }
-            println!("You've chickened out.");
-            continue;
-        } else {
-            // No wipe.
-            print!("Okay, this disk will not be wiped.");
-            let _ = rprompt::prompt_reply("Please insert a different disk, then hit return.").expect("Prompts should not fail.");
-            return Ok(());
-        }
+    // Display the disk type
+    let answer = TuiPrompt::prompt_input(
+        "Disk is not blank.".to_string(),
+        format!("The disk inserted is not blank. It is of type `{disk:?}`.\nWould you like to wipe this disk?\n\"yes\"/\"no\":"),
+        false
+    ).to_ascii_lowercase().contains("yes");
+
+    if answer {
+        // Wipe time!
+        destroy_disk(disk.disk_file_mut()).expect("Prompts should not fail.");
+    } else {
+        // No wipe.
+        TuiPrompt::prompt_enter(
+            "Wipe canceled.".to_string(),
+            "Okay, this disk will not be wiped.".to_string(),
+            false
+        );
     }
+    Ok(())
 }

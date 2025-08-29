@@ -23,7 +23,7 @@ use crate::{
             WrappedIOError
         }
     },
-    pool::disk::generic::generic_structs::pointer_struct::DiskPointer
+    pool::disk::generic::generic_structs::pointer_struct::DiskPointer, tui::{notify::NotifyTui, tasks::TaskType}
 };
 
 use super::super::block::block_structs::RawBlock;
@@ -49,6 +49,7 @@ pub(crate) fn read_block_direct(
     block_index: u16,
     ignore_crc: bool,
 ) -> Result<RawBlock, DriveError> {
+    let handle = NotifyTui::start_task(TaskType::DiskReadBlock, 1);
     // Bounds checking
     if block_index >= 2880 {
         // This block is impossible to access.
@@ -110,11 +111,16 @@ pub(crate) fn read_block_direct(
         }
 
         // Read successful.
+        NotifyTui::complete_task_step(&handle);
         // send it.
         let block_origin: DiskPointer = DiskPointer {
             disk: originating_disk,
             block: block_index,
         };
+
+        // Inform TUI
+        NotifyTui::finish_task(handle);
+        NotifyTui::block_read();
 
         return Ok(RawBlock {
             block_origin,

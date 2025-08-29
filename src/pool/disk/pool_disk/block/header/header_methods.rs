@@ -21,6 +21,7 @@ use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 use crate::pool::disk::generic::io::wipe::destroy_disk;
 use crate::pool::disk::pool_disk::block::header::header_struct::PoolHeaderFlags;
 use crate::pool::disk::pool_disk::pool_disk_struct::PoolDisk;
+use crate::tui::prompts::TuiPrompt;
 use super::header_struct::PoolDiskHeader;
 
 // Implementations
@@ -66,11 +67,12 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, DriveError> {
             .is_some()
         {
             // Not using virtual disks, prompt the user...
-            let result =
-                rprompt::prompt_reply("Please insert the pool root disk (Disk 0), then press enter. Or type \"wipe\" to enter disk wiper mode: ").expect(
-                    "prompting should not fail."
-                );
-
+            let result = TuiPrompt::prompt_input(
+                "Insert pool disk.".to_string(),
+                "Please insert the pool root disk (Disk 0), then press enter. Or type \"wipe\" to enter disk wiper mode.".to_string(),
+                false
+            );
+            
             // This is the only chance the user gets to enter disk wiping mode.
             // Why are we doing this in pool/header_methods ? idk.
 
@@ -132,16 +134,15 @@ fn prompt_for_new_pool(disk: BlankDisk) -> Result<(), DriveError> {
     }
 
     // Ask the user if they want to create a new pool starting on this disk (hereafer disk 0 / root disk)
-    println!("This disk is blank. Do you wish to create a new pool?");
-    loop {
-        let reply = rprompt::prompt_reply("y/n: ").expect("prompts should not fail");
-        if reply.to_lowercase().starts_with('y') {
-            break;
-        } else if reply.to_lowercase().starts_with('n') {
-            // They dont wanna make a new one.
-            return Ok(());
-        }
-        println!("Try again.")
+    let reply = TuiPrompt::prompt_input(
+        "Create new pool?".to_string(),
+        "This disk is blank.\nDo you wish to create a new pool?\n\"yes\"/\"no\"".to_string(),
+        false
+    );
+
+    if !reply.to_lowercase().contains("yes") {
+        // They dont wanna make a new one.
+        return Ok(());
     }
 
     // User said yes. Make the disk.
@@ -363,9 +364,14 @@ fn disk_wiper_mode() -> ! {
     // Time to wipe some disks!
     println!("Welcome to disk wiper mode!");
     loop {
-        let are_we_done_yet =
-            rprompt::prompt_reply("Please insert the next disk you would like to wipe, then hit enter. Or type `exit`.").expect("STDIO moment, should not fail");
-        if are_we_done_yet.contains("exit") {
+
+        let are_we_done_yet = TuiPrompt::prompt_input(
+            "Wipe finished.".to_string(),
+            "Please insert the next disk you would like to wipe, then hit enter. Or type \"exit\".".to_string(),
+            true
+        ).contains("exit");
+
+        if are_we_done_yet {
             // User is bored.
             break;
         }

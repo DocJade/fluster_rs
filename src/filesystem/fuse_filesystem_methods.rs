@@ -8,7 +8,7 @@
 //
 //
 
-use std::{path::Path, time::Duration};
+use std::{ffi::OsStr, path::Path, time::Duration};
 
 use fuse_mt::{DirectoryEntry, FileAttr, FileType, FilesystemMT};
 use log::{debug, error, info, warn};
@@ -22,13 +22,11 @@ use crate::{
         generic::io::cache::cache_io::CachedBlockIO,
         standard_disk::block::{
             directory::directory_struct::{
-                DirectoryBlock,
-                DirectoryItemFlags,
-                DirectoryItem
+                DirectoryBlock, DirectoryItem, DirectoryItemFlags
             },
             io::directory::types::NamedItem
         }
-    }, pool_actions::pool_struct::Pool}
+    }, pool_actions::pool_struct::Pool}, tui::{notify::NotifyTui, prompts::TuiPrompt, tasks::TaskType}
 };
 
 use super::file_handle::file_handle_struct::FileHandle;
@@ -80,6 +78,11 @@ impl FilesystemMT for FlusterFS {
 
     // Called when filesystem is unmounted. Should flush all data to disk.
     fn destroy(&self) {
+        // Inform user the filesystem is shutting down
+        TuiPrompt::prompt_enter("Fluster! is shutting down.".to_string(),
+            "Cache will now be flushed to disk".to_string(),
+            true
+        );
         info!("Shutting down filesystem...");
         // Flush all of the tiers of cache.
         info!("Flushing cache...");
@@ -174,6 +177,12 @@ impl FilesystemMT for FlusterFS {
         size: u64,
     ) -> fuse_mt::ResultEmpty {
         debug!("Truncating `{}` to be `{}` bytes long...", path.display(), size);
+        let task_handle = NotifyTui::start_task(
+            TaskType::FilesystemTruncateFile(
+                path.file_name().unwrap_or(OsStr::new("?")).display().to_string()
+            ),
+            2
+        );
         // Get a file handle
         let handle: FileHandle = if let Some(exists) = fh {
             debug!("File handle was passed in, using that...");
@@ -194,11 +203,14 @@ impl FilesystemMT for FlusterFS {
         // Go load the file to truncate.
         // Will return properly if item does not exist.
         let found_item = handle.get_directory_item()?;
-
+        NotifyTui::complete_task_step(&task_handle);
+        
         // Now with the directory item, we can run the truncation.
         debug!("Starting truncation...");
         found_item.truncate(size)?;
+        NotifyTui::complete_task_step(&task_handle);
         debug!("Truncation finished.");
+        NotifyTui::finish_task(task_handle);
         // All done.
         Ok(())
     }
@@ -257,6 +269,7 @@ impl FilesystemMT for FlusterFS {
         _mode: u32, // Permission bit related. Do not need.
     ) -> fuse_mt::ResultEntry {
         debug!("Creating new directory in `{}` named `{}`.", parent.display(), name.display());
+        let handle = NotifyTui::start_task(TaskType::FilesystemMakeDirectory(name.display().to_string()), 3);
         // Make sure the name isn't too long
         if name.len() > 255 {
             debug!("Name is too long.");
@@ -269,30 +282,36 @@ impl FilesystemMT for FlusterFS {
 
         // Open parent
         if let Some(mut parent) = DirectoryBlock::try_find_directory(Some(parent))? {
+            NotifyTui::complete_task_step(&handle);
             debug!("Checking if directory exists...");
             if parent.find_item(&NamedItem::Directory(the_name.clone()))?.is_some() {
                 // Directory already exists.
                 debug!("Directory already exists.");
+                NotifyTui::cancel_task(handle);
                 return Err(ITEM_ALREADY_EXISTS)
             }
             
             // Make the directory
             debug!("It did not, creating directory...");
             new_dir = parent.make_directory(the_name)?;
+            NotifyTui::complete_task_step(&handle);
             debug!("Directory created.");
         } else {
             // No such parent
             debug!("Parent did not exist.");
+            NotifyTui::cancel_task(handle);
             return Err(NO_SUCH_ITEM);
         }
-
+        
         // Now we need attribute information about it.
         debug!("Getting attribute info...");
         let attributes: FileAttr = new_dir.try_into()?;
+        NotifyTui::complete_task_step(&handle);
         debug!("Done.");
-
+        
         // All done!
         debug!("Directory created successfully.");
+        NotifyTui::finish_task(handle);
         Ok(
             (
                 HANDLE_TIME_TO_LIVE,
@@ -310,6 +329,8 @@ impl FilesystemMT for FlusterFS {
     ) -> fuse_mt::ResultEmpty {
         debug!("Deleting file `{}` from directory `{}`...", name.display(), parent.display());
 
+        let handle = NotifyTui::start_task(TaskType::FilesystemDeleteFile(name.display().to_string()), 3);
+
         // Make a fake handle to lookup the file we are looking for
         let temp_handle: FileHandle = FileHandle {
             path: parent.join(name).into(),
@@ -318,26 +339,32 @@ impl FilesystemMT for FlusterFS {
 
         // This will return properly if the item did not exist.
         let file = temp_handle.get_directory_item()?;
-
+        NotifyTui::complete_task_step(&handle);
+        
         // Make sure it's a file
         if file.flags.contains(DirectoryItemFlags::IsDirectory) {
             // Cannot unlink directories.
             debug!("A directory was provided, not a file.");
+            NotifyTui::cancel_task(handle);
             return Err(NOT_A_DIRECTORY);
         };
-
+        
         // Now we need the parent directory block to perform the removal
         debug!("Looking for file...");
         if let Some(mut parent_dir) = DirectoryBlock::try_find_directory(Some(parent))? {
+            NotifyTui::complete_task_step(&handle);
             // Delete the file
             if parent_dir.delete_file(file.into())?.is_some() {
+                NotifyTui::complete_task_step(&handle);
                 // All done.
                 debug!("File deleted.");
+                NotifyTui::finish_task(handle);
                 Ok(())
             } else {
                 // Weird, we checked that the directory was there, but when we went to delete it, it wasnt???
                 warn!("We found the directory to delete, but when we tried to delete it, it was missing.");
                 // this should not happen lmao, but whatever.
+                NotifyTui::cancel_task(handle);
                 Err(NO_SUCH_ITEM)
             }
         } else {
@@ -345,6 +372,7 @@ impl FilesystemMT for FlusterFS {
             // a few lines ago.
             // But we'll still gracefully handle it just in case.
             debug!("Parent folder does not exist.");
+            NotifyTui::cancel_task(handle);
             Err(NO_SUCH_ITEM)
         }
     }
@@ -359,45 +387,56 @@ impl FilesystemMT for FlusterFS {
     ) -> fuse_mt::ResultEmpty {
         debug!("Attempting to remove directory `{}` from `{}`...", name.display(), parent.display());
 
+        let handle = NotifyTui::start_task(TaskType::FilesystemRemoveDirectory(name.display().to_string()), 4);
+
         let string_name: String = name.to_str().expect("Should be valid utf8").to_string();
 
         // Open the parent directory
         if let Some(parent_dir) = DirectoryBlock::try_find_directory(Some(parent))? {
+            NotifyTui::complete_task_step(&handle);
             // Parent exists, get the child
             if let Some(child_dir) = parent_dir.find_item(&NamedItem::Directory(string_name))? {
+                NotifyTui::complete_task_step(&handle);
                 // Directory exists.
-
+                
                 // Make sure this is actually a directory
                 if !child_dir.flags.contains(DirectoryItemFlags::IsDirectory) {
                     // Not a dir
                     debug!("Provided item is not a directory.");
+                    NotifyTui::cancel_task(handle);
                     return Err(NOT_A_DIRECTORY);
                 }
-
+                
                 // Get the block
                 let block_to_delete = child_dir.get_directory_block()?;
-
+                NotifyTui::complete_task_step(&handle);
+                
                 // Make sure it's empty
                 if !block_to_delete.is_empty()? {
                     // Nope.
                     debug!("Directory is not empty, cannot delete.");
+                    NotifyTui::cancel_task(handle);
                     return Err(DIRECTORY_NOT_EMPTY);
                 }
-
+                
                 // Run the deletion.
                 debug!("Deleting directory...");
                 block_to_delete.delete_self(child_dir)?;
+                NotifyTui::complete_task_step(&handle);
+                NotifyTui::finish_task(handle);
                 debug!("Done.");
                 Ok(())
                 
             } else {
                 // child directory did not exist.
                 debug!("The directory we wanted to delete does not exist.");
+                NotifyTui::cancel_task(handle);
                 Err(NO_SUCH_ITEM)
             }
         } else {
             // parent dir went to get milk
             debug!("Parent directory does not exist.");
+            NotifyTui::cancel_task(handle);
             Err(NO_SUCH_ITEM)
         }
     }
@@ -1036,6 +1075,9 @@ impl FilesystemMT for FlusterFS {
         flags: u32,
     ) -> fuse_mt::ResultOpen {
         debug!("Opening item at path `{}`...", path.display());
+        let task_handle = NotifyTui::start_task(TaskType::FilesystemOpenFile(
+            path.file_name().unwrap_or(OsStr::new("?")).display().to_string()
+        ), 4);
         // Deduce the open permissions.
         debug!("Deducing flags...");
         let converted_flag: ItemFlag = ItemFlag::deduce_flag(flags)?;
@@ -1061,16 +1103,17 @@ impl FilesystemMT for FlusterFS {
         if handle.name().len() > 255 {
             warn!("File name is too long.");
             // File name was too long.
+            NotifyTui::cancel_task(task_handle);
             return Err(FILE_NAME_TOO_LONG)
         }
-
+        
         // If this is the dot directory, we need to go up a level to read ourselves.
         if handle.name() == "." {
             // Go up a path.
             // If this returns none, all is well
             handle.path = handle.path.parent().unwrap_or(Path::new("")).into();
         }
-
+        
         // Load in info about where the file should be.
         // This will bail if a low level floppy issue happens.
         debug!("Attempting to load in the parent directory...");
@@ -1079,33 +1122,36 @@ impl FilesystemMT for FlusterFS {
             None => {
                 // Cannot load files from directories that do not exist.
                 warn!("Directory that the item was supposed to be contained within does not exist.");
+                NotifyTui::cancel_task(task_handle);
                 return Err(NO_SUCH_ITEM)
             },
         };
         debug!("Directory loaded.");
+        NotifyTui::complete_task_step(&task_handle);
         
         // At this point. We need to know if we are looking for a directory or a file.
         debug!("Deducing request item type...");
         let extracted_name = handle.name();
-
+        
         let item_to_find: NamedItem = match handle.get_named_item()? {
             Some(item) => item,
             None => {
                 // No such item exists.
+                NotifyTui::cancel_task(task_handle);
                 return Err(NO_SUCH_ITEM);
             },
         };
-
+        
         if item_to_find.is_file() {
             debug!("Looking for a file...");
         } else {
             debug!("Looking for a directory...");
         }
         debug!("Named `{extracted_name}`.");
-
+        
         // Hold onto the item until we need it
         let found_item: DirectoryItem;
-
+        
         // Now load in the directory item.
         debug!("Attempting to find the item...");
         if let Some(exists) = containing_dir_block.find_item(&item_to_find)? {
@@ -1114,11 +1160,13 @@ impl FilesystemMT for FlusterFS {
         } else {
             // No item
             debug!("Item does not exist.");
+            NotifyTui::cancel_task(task_handle);
             return Err(NO_SUCH_ITEM);
         }
-
+        NotifyTui::complete_task_step(&task_handle);
+        
         // We have now loaded in the directory item, or bailed out if needed.
-
+        
         // Assert that this is a directory if required.
         // In theory we could check this earlier, but it's good to ensure that the underlying
         // item agrees.
@@ -1126,14 +1174,17 @@ impl FilesystemMT for FlusterFS {
             debug!("Caller wants to ensure they are opening a directory.");
             if !found_item.flags.contains(DirectoryItemFlags::IsDirectory) {
                 debug!("This is not a directory.");
+                NotifyTui::cancel_task(task_handle);
                 return Err(NOT_A_DIRECTORY)
             }
             debug!("This is a directory.");
         }
-
+        
         // We are done creating/loading the file, its time to get a handle.
         debug!("Getting a handle on things...");
         let new_handle: u64 = handle.allocate();
+
+        NotifyTui::complete_task_step(&task_handle);
         
         // Done!
         debug!("Opening finished.");
@@ -1158,6 +1209,14 @@ impl FilesystemMT for FlusterFS {
     ) -> fuse_mt::CallbackResult {
         debug!("Reading `{}` bytes from file `{}`", size, path.display());
 
+        let task_handle = NotifyTui::start_task(
+            TaskType::FilesystemReadFile(
+                path.file_name()
+                .unwrap_or(OsStr::new("?")).display().to_string()
+            ),
+            3
+        );
+
         // Open the file handle
         let got_handle = FileHandle::read(fh);
 
@@ -1167,25 +1226,28 @@ impl FilesystemMT for FlusterFS {
             error!("readdir() tried to read a path, but provided a handle to a different path.");
             error!("fh: `{}` | path: `{}`", got_handle.path.display(), path.display());
             error!("Not sure what to do here, giving up.");
+            NotifyTui::cancel_task(task_handle);
             return callback(Err(GENERIC_FAILURE));
         }
-
+        
         // Try finding the directory item
         let file = match got_handle.get_directory_item() {
             Ok(ok) => ok,
             Err(err) => {
                 // Getting the item failed, maybe it wasn't there.
+                NotifyTui::cancel_task(task_handle);
                 return callback(Err(err))
             },
         };
-
+        NotifyTui::complete_task_step(&task_handle);
+        
         // Make sure that it's a file.
         if file.flags.contains(DirectoryItemFlags::IsDirectory) {
             // Can't read a directory!
             warn!("Tried to read a directory as a file. Ignoring...");
             return callback(Err(IS_A_DIRECTORY));
         }
-
+        
         // Found a file!
         // We need to bound our read by the size of the file, since the read() filesystem call can
         // try to read past the end.
@@ -1193,11 +1255,14 @@ impl FilesystemMT for FlusterFS {
             Ok(ok) => ok,
             Err(error) => {
                 // Lower level error
+                NotifyTui::cancel_task(task_handle);
                 warn!("Failed to get size of file! Giving up...");
                 return callback(Err(error.into()))
             },
         };
 
+        NotifyTui::complete_task_step(&task_handle);
+        
         // Subtract the offset to idk man why am i explaining this im sure you understand.
         // Reads are limited to 4GB long, which should be way above our max read size anyways.
         let bounded_read_length:u32 = std::cmp::min(size as u64, file_size - offset).try_into().expect("Reads should not be >4GB.");
@@ -1214,10 +1279,13 @@ impl FilesystemMT for FlusterFS {
             Err(error) => {
                 // Lower level error
                 warn!("Failed while reading the file! Giving up...");
+                NotifyTui::cancel_task(task_handle);
                 return callback(Err(error.into()))
             },
         };
+        NotifyTui::complete_task_step(&task_handle);
         debug!("Read finished.");
+        NotifyTui::finish_task(task_handle);
 
         // All done!
         callback(Ok(&read_buffer))
@@ -1234,6 +1302,13 @@ impl FilesystemMT for FlusterFS {
         _flags: u32, // hehe
     ) -> fuse_mt::ResultWrite {
         debug!("Writing `{}` bytes to file `{}`...", data.len(), path.display());
+        let task_handle = NotifyTui::start_task(
+            TaskType::FilesystemWriteFile(
+                path.file_name()
+                .unwrap_or(OsStr::new("?")).display().to_string()
+            ),
+            2
+        );
 
         // Open the file handle
         let got_handle = FileHandle::read(fh);
@@ -1244,11 +1319,13 @@ impl FilesystemMT for FlusterFS {
             error!("readdir() tried to read a path, but provided a handle to a different path.");
             error!("fh: `{}` | path: `{}`", got_handle.path.display(), path.display());
             error!("Not sure what to do here, giving up.");
+            NotifyTui::cancel_task(task_handle);
             return Err(GENERIC_FAILURE);
         }
 
         // Try finding the directory item
         let file = got_handle.get_directory_item()?;
+        NotifyTui::complete_task_step(&task_handle);
         
         // man page:
         // If count is zero and fd refers to a regular file, then write() may
@@ -1262,6 +1339,7 @@ impl FilesystemMT for FlusterFS {
         if data.is_empty() {
             // uh ok then
             debug!("Caller wanted to write 0 bytes. Skipping write.");
+            NotifyTui::cancel_task(task_handle);
             return Ok(0);
         }
 
@@ -1271,12 +1349,14 @@ impl FilesystemMT for FlusterFS {
         // Now write to the file!
         debug!("Starting write...");
         let bytes_written = file.write_file(&data, offset)?;
+        NotifyTui::complete_task_step(&task_handle);
         debug!("Write completed.");
 
         // Make sure it all got written
         assert_eq!(bytes_written, data.len().try_into().expect("Should be less than a u32"));
 
         // Return the number of bytes written.
+        NotifyTui::finish_task(task_handle);
         Ok(bytes_written)
     }
 
@@ -1354,6 +1434,12 @@ impl FilesystemMT for FlusterFS {
     ) -> fuse_mt::ResultReaddir {
         debug!("Getting contents of directory `{}`...", path.display());
 
+        let task_handle = NotifyTui::start_task(TaskType::FilesystemReadDirectory(
+            path.file_name().unwrap_or(OsStr::new("?")).display().to_string()
+            ), 
+            4
+        );
+
         // Make sure the file handle and the incoming path are the same. I assume they should be, but
         // cant hurt to check.
         let got_handle = FileHandle::read(fh);
@@ -1363,9 +1449,10 @@ impl FilesystemMT for FlusterFS {
             error!("readdir() tried to read a path, but provided a handle to a different path.");
             error!("fh: `{}` | path: `{}`", got_handle.path.display(), path.display());
             error!("Not sure what to do here, giving up.");
+            NotifyTui::cancel_task(task_handle);
             return Err(GENERIC_FAILURE);
         }
-
+        
         // Since we have a handle, getting the directory is easy.
         debug!("Getting the directory item from handle...");
         let dir_item: DirectoryItem = if let Ok(exists) = got_handle.get_directory_item() {
@@ -1374,26 +1461,32 @@ impl FilesystemMT for FlusterFS {
         } else {
             // Tried to read in a directory item that did not exist, yet we have a handle to it?
             // Guess the handle must be stale?
-
+            
             // Yes, get_directory_item() returns its own error, but we should get rid of the invalid handle.
 
             warn!("Tried to read in a directory item from a handle, but the item was not there. Returning stale.");
+            NotifyTui::cancel_task(task_handle);
             return Err(STALE_HANDLE)
         };
+
+        NotifyTui::complete_task_step(&task_handle);
         
         // Double check that this is a file.
         if !dir_item.flags.contains(DirectoryItemFlags::IsDirectory) {
             // No.
             warn!("Tried to call readdir on a file!");
+            NotifyTui::cancel_task(task_handle);
             return Err(NOT_A_DIRECTORY);
         }
         
         debug!("Getting directory block...");
         let dir_block = dir_item.get_directory_block()?;
-
+        NotifyTui::complete_task_step(&task_handle);
+        
         // List the files off
         debug!("Listing items...");
         let items = dir_block.list()?;
+        NotifyTui::complete_task_step(&task_handle);
         
         // Now pull out the names and types
         let mut listed_items: Vec<DirectoryEntry> = items.iter().map(|item| {
@@ -1408,7 +1501,8 @@ impl FilesystemMT for FlusterFS {
                 kind,
             }
         }).collect();
-
+        NotifyTui::complete_task_step(&task_handle);
+        
         // Now add the unix `.` item.
         listed_items.push(
             DirectoryEntry {
@@ -1417,7 +1511,7 @@ impl FilesystemMT for FlusterFS {
             }
         );
 
-
+        NotifyTui::finish_task(task_handle);
         
         // All done!
         debug!("Done. Directory contained `{}` items.", listed_items.len());
@@ -1519,6 +1613,8 @@ impl FilesystemMT for FlusterFS {
     ) -> fuse_mt::ResultCreate {
         debug!("Creating new file named `{}` in `{}`...", name.display(), parent.display());
 
+        let task_handle = NotifyTui::start_task(TaskType::FilesystemCreateFile(name.display().to_string()), 5);
+
         // Extract the flags
         // Will bail if needed.
         let deduced_flags: ItemFlag = ItemFlag::deduce_flag(flags)?;
@@ -1526,9 +1622,10 @@ impl FilesystemMT for FlusterFS {
         // Is the name too long?
         if name.len() > 255 {
             debug!("File name is too long. Bailing.");
+            NotifyTui::cancel_task(task_handle);
             return Err(FILE_NAME_TOO_LONG)
         }
-
+        
         // Try and load in the parent directory
         // This will bail if a low level floppy issue happens.
         debug!("Attempting to load in the parent directory...");
@@ -1537,21 +1634,25 @@ impl FilesystemMT for FlusterFS {
             None => {
                 // Nope, no parent.
                 warn!("Cannot create files in directories that do not exist.");
+                NotifyTui::cancel_task(task_handle);
                 return Err(NO_SUCH_ITEM)
             },
         };
         debug!("Directory loaded.");
+        NotifyTui::complete_task_step(&task_handle);
         
         // Make sure the file does not already exist.
         debug!("Checking if file already exists...");
         let converted_name: String = name.to_str().expect("Should be valid UTF8.").to_string();
         // Will bail if needed.
         if let Some(exists) = containing_dir_block.find_item(&NamedItem::File(converted_name.clone()))? {
+            NotifyTui::complete_task_step(&task_handle);
             debug!("File already exists.");
             // But do we care?
             if deduced_flags.contains(ItemFlag::CREATE_EXCLUSIVE) {
                 // Yes we do, this is a failure.
                 debug!("Caller wanted to create this file, not open it. Bailing.");
+                NotifyTui::cancel_task(task_handle);
                 return Err(ITEM_ALREADY_EXISTS)
             }
             
@@ -1563,9 +1664,11 @@ impl FilesystemMT for FlusterFS {
             
             // Dont care about the returned flags, they wont change anyways.
             let (file_handle, _): (u64, u32) = self.open(req, constructed_path, flags)?;
+            NotifyTui::complete_task_step(&task_handle);
             
             // Get the innards of the handle
             let handle_inner: FileHandle = FileHandle::read(file_handle);
+            NotifyTui::complete_task_step(&task_handle);
 
             // Truncate if needed (open(2) syscall)
             // Must be a file
@@ -1576,11 +1679,13 @@ impl FilesystemMT for FlusterFS {
             // Get the metadata from that
             debug!("Getting file attributes...");
             let facebook_data: FileAttr = handle_inner.try_into()?;
+            NotifyTui::complete_task_step(&task_handle);
             
             // Put it all together
             // No idea what the TTL should be set to. I'm assuming that's how long the handles last?
             // I will never drop handles on my side, the OS has to drop em.
             debug!("Done reading in file, returning.");
+            NotifyTui::finish_task(task_handle);
             return Ok(CreatedEntry {
                 ttl: HANDLE_TIME_TO_LIVE,
                 attr: facebook_data,
@@ -1589,10 +1694,13 @@ impl FilesystemMT for FlusterFS {
                         // Is that a bad idea? No idea. TODO: is this safe?
             })
         }
+
+        NotifyTui::complete_task_step(&task_handle);
         
         // File did not exist, actually creating it...
         debug!("Creating file...");
         let resulting_item: DirectoryItem = containing_dir_block.new_file(converted_name)?;
+        NotifyTui::complete_task_step(&task_handle);
         debug!("Created file.");
 
         // Full item path
@@ -1606,11 +1714,14 @@ impl FilesystemMT for FlusterFS {
 
         // We can get attributes directly from the directory item we just made
         let attributes: FileAttr = resulting_item.try_into()?;
+        NotifyTui::complete_task_step(&task_handle);
 
         // Allocate the handle for it
         let handle_num: u64 = new_handle.allocate();
+        NotifyTui::complete_task_step(&task_handle);
 
         // Assemble it, and we're done!
+        NotifyTui::finish_task(task_handle);
         debug!("Done creating file.");
         Ok(CreatedEntry {
             ttl: HANDLE_TIME_TO_LIVE,

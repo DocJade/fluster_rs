@@ -16,6 +16,8 @@ use crate::error_types::critical::{CriticalError, RetryCapError};
 use crate::error_types::drive::{DriveError, DriveIOError, WrappedIOError};
 use crate::filesystem::filesystem_struct::WRITE_BACKUPS;
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+use crate::tui::notify::NotifyTui;
+use crate::tui::tasks::TaskType;
 
 use super::super::block::block_structs::RawBlock;
 use std::ops::Rem;
@@ -29,6 +31,7 @@ use std::{
 /// Write a block to the currently inserted disk in the floppy drive
 /// ONLY FOR LOWER LEVEL USE, USE CHECKED_WRITE()!
 pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(), DriveError> {
+    let handle = NotifyTui::start_task(TaskType::DiskWriteBlock, 1);
     trace!(
         "Directly writing block {} to currently inserted disk...",
         block.block_origin.block
@@ -75,6 +78,7 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
         }
 
         // Writing worked! all done.
+        NotifyTui::complete_task_step(&handle);
         trace!("Block written successfully.");
 
         // Attempt to sync the write, we only do this if backups are turned on, since we dont
@@ -85,6 +89,10 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
                 let _ = disk_file.sync_all();
             }
         }
+
+        // Notify the TUI
+        NotifyTui::block_written(1);
+        NotifyTui::finish_task(handle);
 
         return Ok(());
     };
@@ -101,6 +109,7 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
 /// Write a vec of bytes starting at offset to the currently inserted disk in the floppy drive.
 /// ONLY FOR LOWER LEVEL USE, USE CHECKED_WRITE()!
 pub(crate) fn write_large_direct(disk_file: &File, data: &Vec<u8>, start_block: DiskPointer) -> Result<(), DriveError> {
+    let handle = NotifyTui::start_task(TaskType::DiskWriteLarge, 1);
     // Bounds checking
     if start_block.block >= 2880 {
         // This block is impossible to access.
@@ -166,6 +175,7 @@ pub(crate) fn write_large_direct(disk_file: &File, data: &Vec<u8>, start_block: 
 
         // Writing worked! all done.
         trace!("Several blocks written successfully.");
+        NotifyTui::complete_task_step(&handle);
 
         // Attempt to sync the write, we only do this if backups are turned on, since we dont
         // wanna slow down tests.
@@ -175,6 +185,10 @@ pub(crate) fn write_large_direct(disk_file: &File, data: &Vec<u8>, start_block: 
                 let _ = disk_file.sync_all();
             }
         }
+
+        // Notify the TUI
+        NotifyTui::finish_task(handle);
+        NotifyTui::block_written((data.len()/512) as u16);
 
         return Ok(());
     };

@@ -26,7 +26,7 @@ use crate::{error_types::{block::BlockManipulationError, drive::DriveError}, poo
             InodeTimestamp
         },
     }
-}};
+}, tui::{notify::NotifyTui, tasks::TaskType}};
 
 // We can convert from a raw block to a directory bock, but not the other way around.
 impl From<RawBlock> for DirectoryBlock {
@@ -346,6 +346,7 @@ impl DirectoryItem {
 
     /// Get the size of the item. Regardless of type.
     pub(crate) fn get_size(&self) -> Result<u64, DriveError> {
+        let handle = NotifyTui::start_task(TaskType::GetSize, 1);
         debug!("Getting size of `{}`...", self.name);
         // Grab the inode to work with
         let inode: Inode = self.get_inode()?;
@@ -353,22 +354,33 @@ impl DirectoryItem {
         // If this is a file, it's easy
         if let Some(file) = inode.extract_file() {
             debug!("Item is a file, getting size directly...");
+            NotifyTui::complete_task_step(&handle);
+            NotifyTui::finish_task(handle);
             return Ok(file.get_size())
         }
+        
+        // More work to do
+        NotifyTui::add_steps_to_task(&handle, 2);
         
         // Otherwise, this must be a directory, so we need the directory block
         debug!("Item is a directory...");
         let inode_directory: InodeDirectory = inode.extract_directory().expect("Guard.");
+        NotifyTui::complete_task_step(&handle);
         
         // Load the block
         debug!("Getting origin block...");
         let raw_block: RawBlock = CachedBlockIO::read_block(inode_directory.pointer)?;
         
         let directory: DirectoryBlock = DirectoryBlock::from_block(&raw_block);
+        NotifyTui::complete_task_step(&handle);
         
         // Now we can call the size method.
         debug!("Calling `get_size` on loaded DirectoryBlock...");
-        directory.get_size()
+        let found_size = directory.get_size()?;
+        NotifyTui::complete_task_step(&handle);
+        NotifyTui::finish_task(handle);
+        Ok(found_size)
+
     }
 
     /// Get when the inode / item was created.

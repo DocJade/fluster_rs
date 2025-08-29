@@ -6,6 +6,7 @@
 
 use std::io::ErrorKind;
 use std::process::exit;
+use std::time::Duration;
 use log::debug;
 use log::error;
 
@@ -17,6 +18,8 @@ use crate::error_types::drive::DriveIOError;
 use crate::error_types::drive::InvalidDriveReason;
 use crate::error_types::drive::WrappedIOError;
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
+use crate::tui::notify::NotifyTui;
+use crate::tui::tasks::TaskType;
 
 
 
@@ -46,10 +49,8 @@ impl TryFrom<DriveIOError> for DriveError {
     fn try_from(value: DriveIOError) -> Result<Self, Self::Error> {
         match value {
             DriveIOError::DriveEmpty => {
-                // This can be cast upwards.
-                // Lower level callers can't do anything
-                // about an empty drive.
-                Ok(DriveError::DriveEmpty)
+                // This is never constructed.
+                unreachable!("Drive empty error????")
             },
             DriveIOError::Retry => {
                 // Operation must be retried, cant cast that upwards.
@@ -80,6 +81,10 @@ impl TryFrom<WrappedIOError> for DriveIOError {
     type Error = CannotConvertError;
 
     fn try_from(value: WrappedIOError) -> Result<Self, Self::Error> {
+
+        // Sleep for a tad just in case we're doing a retry
+        std::thread::sleep(Duration::from_secs(1));
+
         match value.io_error.kind() {
             ErrorKind::NotFound => {
                 // The floppy drive path is not there.
@@ -259,7 +264,15 @@ impl TryFrom<WrappedIOError> for DriveIOError {
                     debug!("Is no disk inserted?");
                     // Just keep retrying, if there is an issue with the floppy drive, we need to
                     // eventually end up in the panic handler.
-                    return Ok(DriveIOError::DriveEmpty)
+
+                    // Show user that we're waiting for the drive to spin up
+                    let handle = NotifyTui::start_task(TaskType::WaitingForDriveSpinUp, 10*10);
+                    for _ in 0..10*10 {
+                        NotifyTui::complete_task_step(&handle);
+                        std::thread::sleep(Duration::from_millis(100));
+                    }
+                    NotifyTui::finish_task(handle);
+                    return Err(CannotConvertError::MustRetry)
                 }
 
                 // Well, we'll just pretend we can retry any unknown error...

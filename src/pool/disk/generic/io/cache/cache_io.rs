@@ -19,7 +19,7 @@ use crate::{
             cached_allocation::CachedAllocationDisk
         }
     }, standard_disk::standard_disk_struct::StandardDisk
-}};
+}, tui::notify::NotifyTui};
 
 //
 // =========
@@ -62,7 +62,21 @@ impl CachedBlockIO {
     pub fn try_read(block_origin: DiskPointer) -> Option<RawBlock> {
         if let Some(cached) = BlockCache::try_find(block_origin) {
             // Was there!
+            // Tell the TUI
+            NotifyTui::read_cached();
             return Some(cached.into_raw())
+        }
+        // Missing.
+        None
+    }
+
+    
+    /// Check if a block is in the cache, and if it is dirty or not.
+    /// 
+    /// Returns Some(true) if the block is dirty, false if clean, or None if the block is absent.
+    pub fn status_of_cached_block(block_origin: DiskPointer) -> Option<bool> {
+        if let Some(cached) = BlockCache::try_find(block_origin) {
+            return Some(cached.requires_flush)
         }
         // Missing.
         None
@@ -96,7 +110,7 @@ impl CachedBlockIO {
     }
 
     /// Get the hit-rate of the underlying cache
-    pub fn get_hit_rate() -> f32 {
+    pub fn get_hit_rate() -> f64 {
         BlockCache::get_hit_rate()
     }
 
@@ -139,20 +153,29 @@ fn go_read_cached_block(block_location: DiskPointer) -> Result<RawBlock, DriveEr
         assert!(is_allocated);
     }
     
+    let disk_in_drive = FloppyDrive::currently_inserted_disk_number();
     
     if let Some(found_block) = BlockCache::try_find(block_location) {
         // It was in the cache! Return the block...
+
+        // Notify the TUI
+        NotifyTui::read_cached();
+
+        // If we would've swapped disks, also increment that
+        if disk_in_drive != block_location.disk {
+            NotifyTui::swap_saved();
+        }
+
         return Ok(found_block.into_raw());
     }
 
+    
     // The block was not in the cache, we need to go get it old-school style.
-
     // If we are about to swap disks, we will flush tier 0 of the disk.
-    let current = FloppyDrive::currently_inserted_disk_number();
-    if current != block_location.disk {
+    if disk_in_drive != block_location.disk {
         // About to swap, do the flush.
         // Dont care how many blocks this flushes.
-        let _ = BlockCache::flush_a_disk(current)?;
+        let _ = BlockCache::flush_a_disk(disk_in_drive)?;
     };
 
     // Now that the cache was flushed (if needed), do the read.
@@ -181,6 +204,10 @@ fn go_write_cached_block(raw_block: &RawBlock) -> Result<(), DriveError> {
     BlockCache::add_or_update_item(CachedBlock::from_raw(raw_block, true))?;
 
     // We don't need to write, since the cache will do it for us.
+
+    // Notify the TUI
+    NotifyTui::write_cached();
+
     Ok(())
 }
 
@@ -200,6 +227,9 @@ fn go_update_cached_block(raw_block: &RawBlock) -> Result<(), DriveError> {
     // Update the cache with the updated block.
     // This is an update, so it must be flushed, since the block has changed.
     BlockCache::add_or_update_item(CachedBlock::from_raw(raw_block, true))?;
+
+    // Notify the TUI
+    NotifyTui::write_cached();
 
     // We don't need to write, since the cache will do it for us on flush.
     Ok(())

@@ -283,9 +283,21 @@ fn update_block(block: DiskPointer, bytes: &[u8], offset: u16) -> Result<usize, 
     // Why panic? It won't if you fix the caller! :D
     assert_ne!(bytes_to_write, 0, "Tried to write 0 bytes to a block!");
 
+    // Now, if we are about to completely fill a block (ie every byte in the block will change)
+    // we dont need to actually "update" the block, we can just replace it entirely.
 
-    // load the block
-    let mut block_copy: RawBlock = CachedBlockIO::read_block(block)?;
+    let mut block_copy = if bytes_to_write == data_capacity && offset == 0 {
+        // Full block replacement, make fake block.
+
+        // The flag byte never ended up being used, so we dont have to worry about it.
+        RawBlock {
+            block_origin: block,
+            data: [0u8; 512], // Start with a blank slate
+        }
+    } else {
+        // Partial update, still need to read in the old block.
+        CachedBlockIO::read_block(block)?
+    };
     
     // Modify that sucker
     // Skip the first byte with the flag

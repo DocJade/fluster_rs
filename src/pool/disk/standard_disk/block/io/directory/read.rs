@@ -17,7 +17,7 @@ use crate::{error_types::drive::DriveError, pool::{
         }
     },
     pool_actions::pool_struct::Pool
-}};
+}, tui::{notify::NotifyTui, tasks::TaskType}};
 
 impl DirectoryBlock {
     /// Check if this directory contains an item with the provided name and type.
@@ -45,19 +45,26 @@ impl DirectoryBlock {
                 return Ok(Some(Pool::get_root_directory_item()));
             }
         }
-
-
+        
+        // No need to have a task if its the root dir, since that's nearly instant.
+        let handle = NotifyTui::start_task(TaskType::FindItemInDirectory(extracted_debug.1.to_string()), 2);
+        
         // Get items
         let items: Vec<DirectoryItem> = self.list()?;
-
+        NotifyTui::complete_task_step(&handle);
+        
         // Look for the requested item in the new vec, the index into this vec will be the same
         // as the index into the og items vec
         if let Some(item) = item_to_find.find_in(&items) {
             // It's in there!
+            NotifyTui::complete_task_step(&handle);
+            NotifyTui::finish_task(handle);
             debug!("Yes it did.");
             Ok(Some(item))
         } else {
             // The item wasn't in there.
+            NotifyTui::complete_task_step(&handle);
+            NotifyTui::finish_task(handle);
             debug!("No it didn't.");
             Ok(None)
         }
@@ -310,6 +317,7 @@ impl DirectoryBlock {
 fn go_list_directory(
     block: &DirectoryBlock,
 ) -> Result<Vec<DirectoryItem>, DriveError> {
+    let handle = NotifyTui::start_task(TaskType::ListingDirectory, 2);
     debug!("Listing a directory...");
     // We need to iterate over the entire directory and get every single item.
     // We assume we are handed the first directory in the chain.
@@ -318,18 +326,21 @@ fn go_list_directory(
     debug!("Getting blocks...");
     let blocks = get_blocks(block.block_origin)?;
     debug!("This directory is made of {} blocks.", blocks.len());
+    NotifyTui::complete_task_step(&handle);
     
     // Get the items out of them
     debug!("Getting items...");
     let mut items_found: Vec<DirectoryItem> = blocks.into_iter().flat_map(move |block| {
         block.get_items()
     }).collect();
+    NotifyTui::complete_task_step(&handle);
     
     
     // Sort all of the items by name, not sure what internal order it is, but it will be
     // sorted by whatever comparison function String uses.
     debug!("Sorting...");
     items_found.sort_by_key(|item| item.name.to_lowercase());
+    NotifyTui::finish_task(handle);
     
     debug!("Directory listing finished.");
     Ok(items_found)
