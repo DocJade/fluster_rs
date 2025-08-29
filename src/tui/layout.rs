@@ -26,13 +26,13 @@ impl FlusterTUI<'_> {
     /// Takes in a frame from the terminal.
     pub fn draw(&mut self, frame: &mut Frame) {
         // Split the window into sections
-        let layout = Layout::default().margin(1).direction(Direction::Vertical).constraints([
+        let layout = Layout::default().margin(0).direction(Direction::Vertical).constraints([
             // Progress bars
-            Constraint::Ratio(1, 3),
+            Constraint::Ratio(3, 6),
             // Statistics
-            Constraint::Ratio(1, 3),
+            Constraint::Ratio(2, 6),
             // Logging
-            Constraint::Ratio(1, 3),
+            Constraint::Ratio(1, 6),
         ]).split(frame.area());
 
         // Draw the progress bars if needed.
@@ -124,7 +124,7 @@ impl FlusterTUI<'_> {
         let stat_box_size = &stat_box.inner(statistics_area);
 
         // Split it in half
-        let stat_layout = Layout::default().margin(1).direction(Direction::Horizontal).constraints([
+        let stat_layout = Layout::default().margin(0).direction(Direction::Horizontal).constraints([
             // Left
             Constraint::Ratio(1, 2),
             // Right
@@ -169,7 +169,7 @@ impl FlusterTUI<'_> {
         // visualize the current cache hit rate.
 
         // So we split our space again.
-        let cache_split = Layout::default().margin(1).direction(Direction::Vertical).constraints([
+        let cache_split = Layout::default().margin(0).direction(Direction::Vertical).constraints([
             // Gauge only needs 3 lines
             Constraint::Min(3),
             // The rest of the room is for other stats.
@@ -182,7 +182,7 @@ impl FlusterTUI<'_> {
         let hit_gauge: Gauge = Gauge::default()
         .block(Block::bordered()
         .title("Cache hit rate:"))
-        .ratio(self.state.cache_hit_rate.into());
+        .ratio(self.state.cache_hit_rate);
         
         // Render it in
         frame.render_widget(hit_gauge, gauge_space);
