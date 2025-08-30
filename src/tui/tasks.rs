@@ -223,7 +223,7 @@ impl TaskInfo {
             // div zero moment, just return all nines lmao
             return "[99:99:99]".to_string();
         };
-        estimated_seconds.saturating_sub(elapsed_seconds);
+        estimated_seconds = estimated_seconds.saturating_sub(elapsed_seconds);
         format!("[{:0>2}:{:0>2}:{:0>2}]", estimated_seconds/60*60, estimated_seconds/60, estimated_seconds%60)
     }
 }

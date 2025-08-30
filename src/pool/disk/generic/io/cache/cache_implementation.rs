@@ -75,7 +75,7 @@ use crate::{
 //
 
 // The maximum amount of blocks all caches can store
-const CACHE_SIZE: usize = 2880 * 2;
+const CACHE_SIZE: usize = 2880 * 8;
 
 // The actual cached data
 lazy_static! {
