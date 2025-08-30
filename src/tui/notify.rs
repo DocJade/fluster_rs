@@ -88,6 +88,12 @@ impl NotifyTui {
         TUI_MANAGER.lock().expect("Single thread, kinda.").state.cache_hit_rate = rate;
     }
 
+    /// Update the cache pressure
+    pub(crate) fn set_cache_pressure(pressure: f64) {
+        skip_if_tui_disabled!();
+        TUI_MANAGER.lock().expect("Single thread, kinda.").state.cache_pressure = pressure;
+    }
+
     //
     // Task
     //

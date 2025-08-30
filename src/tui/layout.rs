@@ -95,7 +95,7 @@ impl FlusterTUI<'_> {
                         )
                         .title(task.name())
                         // Add a note for how long this has been running
-                        .title_bottom(task.time_passed())
+                        .title_bottom(format!("{} | Guesstimated time remaining: {}",task.time_passed(), task.time_remaining()))
                     )
                     // Make it blue because blue is cool
                     .gauge_style(Style::default().fg(Color::LightBlue))
@@ -170,22 +170,31 @@ impl FlusterTUI<'_> {
 
         // So we split our space again.
         let cache_split = Layout::default().margin(0).direction(Direction::Vertical).constraints([
-            // Gauge only needs 3 lines
+            // 3 lines for each gauge
+            Constraint::Min(3),
             Constraint::Min(3),
             // The rest of the room is for other stats.
-            Constraint::Fill(1),
+            Constraint::Percentage(100),
         ]).split(cache_box_size);
-        let gauge_space = cache_split[0];
-        let cache_text = cache_split[1];
+        let hit_gauge_space = cache_split[0];
+        let pressure_gauge_space = cache_split[1];
+        let cache_text = cache_split[2];
 
-        // Make the gauge
+        // Make the hit gauge
         let hit_gauge: Gauge = Gauge::default()
         .block(Block::bordered()
         .title("Cache hit rate:"))
         .ratio(self.state.cache_hit_rate);
         
         // Render it in
-        frame.render_widget(hit_gauge, gauge_space);
+        frame.render_widget(hit_gauge, hit_gauge_space);
+
+        // Make the pressure gauge
+        let hit_gauge: Gauge = Gauge::default()
+        .block(Block::bordered()
+        .title("Cache pressure:"))
+        .ratio(self.state.cache_pressure);
+        frame.render_widget(hit_gauge, pressure_gauge_space);
 
         // Now for the boring text.
 

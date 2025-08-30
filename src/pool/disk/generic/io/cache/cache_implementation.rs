@@ -171,9 +171,16 @@ impl BlockCache {
         go_add_or_update_item_cache(item)
     }
 
-    /// get the hit-rate of the cache
+    /// Get the hit-rate of the cache
     pub(super) fn get_hit_rate() -> f64 {
         BlockCacheStatistics::get_hit_rate()
+    }
+
+    /// Get the pressure of tier 0.
+    /// 
+    /// Must drop cache before calling.
+    pub(super) fn get_pressure() -> f64 {
+        go_get_cache_pressure()
     }
 
     // Promotes a tier 0 cache item upwards.
@@ -230,6 +237,21 @@ impl BlockCache {
     /// Caller must drop all references to the cache before calling this.
     pub(super) fn flush_a_disk(disk_number: u16) -> Result<u64, DriveError> {
         go_flush_disk_from_cache(disk_number)
+    }
+
+    /// Find what disk is the most common in the lowest cache tier.
+    /// 
+    /// Returns the disk with the most blocks on it (or picks the first one if it is a tie) and how many
+    /// blocks are from that disk. (disk, blocks)
+    /// 
+    /// Panics if the tier is empty.
+    /// 
+    /// You should clean-up the cache before calling this, as to get a count of only
+    /// dirty blocks.
+    /// 
+    /// Caller must drop all references to the cache before calling this.
+    pub(super) fn most_common_disk() -> (u16, u16) {
+        go_find_most_common_disk()
     }
 }
 
@@ -461,24 +483,39 @@ fn go_add_or_update_item_cache(block: CachedBlock) -> Result<(), DriveError> {
             debug!("Cleanup wasn't enough, flushing current disk...");
             // We want to flush at least a quarter of the cache teir, otherwise we start thrashing
             // the cache, wasting time.
-            if BlockCache::flush_a_disk(FloppyDrive::currently_inserted_disk_number())? < tier_0_size as u64 / 4 {
-                // There wasn't anything to flush for the current disk either!
-                debug!("Nothing to flush for the current disk, doing full cache flush...");
-                BlockCache::flush(0)?;
+            let blocks_required = tier_0_size as u64 / 4;
+            let blocks_freed = BlockCache::flush_a_disk(FloppyDrive::currently_inserted_disk_number())?;
+            if blocks_freed < blocks_required {
+                // Didn't flush enough from the first disk, pick the best disk and flush that next.
+                let (most_common_disk, blocks_for_common) = BlockCache::most_common_disk();
+
+                // Would that free enough space?
+                if blocks_for_common as u64 + blocks_freed < blocks_required {
+                    // That still wouldn't be enough. Do a full flush.
+                    BlockCache::flush(0)?;
+                } else {
+                    // That will make enough room, flush that common disk.
+                    let _ = BlockCache::flush_a_disk(most_common_disk)?;
+                }
             }
         }
 
 
         let cache: &mut std::sync::MutexGuard<'_, BlockCache> = &mut CASHEW.try_lock().expect("Single threaded.");
         cache.tier_0.add_item(block);
+
+        
         return Ok(());
     }
-
+    
     // Put it in
     cache.tier_0.add_item(block);
-
+    drop(cache);
+    
     // Update the hit rate
     NotifyTui::set_cache_hit_rate(BlockCache::get_hit_rate());
+    // Update the cache pressure
+    NotifyTui::set_cache_pressure(BlockCache::get_pressure());
     Ok(())
 }
 
@@ -954,6 +991,37 @@ fn go_flush_disk_from_cache(disk_number: u16) -> Result<u64, DriveError> {
 
 fn go_check_tier_full(tier: &TieredCache) -> bool {
     tier.order.len() == tier.size
+}
+
+fn go_find_most_common_disk() -> (u16, u16) {
+    // Hash map to make counting the disks easier, since there can be holes
+    let mut disks: HashMap<u16, u16> = HashMap::new();
+
+    // Get the block cache
+    let cache = CASHEW.try_lock().expect("Single threaded.");
+    
+    // get tier 0
+    let tier_0: &TieredCache = &cache.tier_0;
+
+    // Tally up the blocks
+    for i in &tier_0.order {
+        if let Some(block_count) = disks.get_mut(&i.disk) {
+            // Increment
+            *block_count += 1;
+        } else {
+            // disk is not in hashmap yet
+            let _ = disks.insert(i.disk, 1);
+        }
+    }
+
+    // Now get the best disk
+    disks.drain().max_by_key(|pair| pair.1).expect("Tier should have items.")
+}
+
+fn go_get_cache_pressure() -> f64 {
+    // Get the block cache
+    let cache = CASHEW.try_lock().expect("Single threaded.");
+    cache.tier_0.order.len() as f64 / cache.tier_0.size as f64
 }
 
 /// Function for handling the possibility of cached disk headers.

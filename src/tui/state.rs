@@ -27,6 +27,8 @@ pub(super) struct FlusterTUIState {
     /// The current hit rate of the cache (Only needs to be updated on
     /// disk swap.)
     pub(super) cache_hit_rate: f64,
+    /// The current pressure of the cache, aka how full tier 0 is.
+    pub(super) cache_pressure: f64,
     /// Number of times we went to read a block, but got it from
     /// the cache instead of hitting the disk
     pub(super) cache_blocks_read: u64,
@@ -54,6 +56,7 @@ impl FlusterTUIState {
             disk_blocks_read: 0,
             disk_blocks_written: 0,
             cache_hit_rate: 0.0,
+            cache_pressure: 0.0,
             cache_blocks_read: 0,
             cache_blocks_written: 0,
             cache_flushes: 0,

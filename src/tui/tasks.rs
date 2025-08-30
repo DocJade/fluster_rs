@@ -205,10 +205,26 @@ impl TaskInfo {
         self.steps_finished as f64 / self.steps as f64
     }
 
-    /// Returns a string `[mm:ss]` of how long the task has been running
+    /// Returns a string `[hh:mm:ss]` of how long the task has been running
     pub(super) fn time_passed(&self) -> String {
         let elapsed_seconds = self.start_time.elapsed().as_secs();
-        format!("[{:0>2}:{:0>2}]", elapsed_seconds/60, elapsed_seconds%60)
+        format!("[{:0>2}:{:0>2}:{:0>2}]", elapsed_seconds/60*60, elapsed_seconds/60, elapsed_seconds%60)
+    }
+    
+    /// Returns a string `[hh:mm:ss]` which guesstimates how long the task is going to take
+    /// 
+    /// Barely useful, but fun!
+    pub(super) fn time_remaining(&self) -> String {
+        let elapsed_seconds = self.start_time.elapsed().as_secs();
+        // Now based on how far we've come, estimate how much longer it'll take
+        let mut estimated_seconds = if self.steps_finished > 0 {
+            (elapsed_seconds as f64 * (self.steps as f64 / self.steps_finished as f64)) as u64
+        } else {
+            // div zero moment, just return all nines lmao
+            return "[99:99:99]".to_string();
+        };
+        estimated_seconds.saturating_sub(elapsed_seconds);
+        format!("[{:0>2}:{:0>2}:{:0>2}]", estimated_seconds/60*60, estimated_seconds/60, estimated_seconds%60)
     }
 }
 
