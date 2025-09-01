@@ -70,9 +70,30 @@ const HANDLE_TIME_TO_LIVE: Duration = Duration::from_secs(365*24*60*60);
 impl FilesystemMT for FlusterFS {
     // The most British function in Fluster
     fn init(&self, _req: fuse_mt::RequestInfo) -> fuse_mt::ResultEmpty {
-        // In the old crate, we could do stuff like set the max write size to the filesystem here.
-        // We need to figure out how to do that elsewhere.
-        // TODO: Set max write size to one megabyte, and disable kernel lookahead if possible.
+        // To speed up reads / reduce swaps, we will read the entire directory tree structure into memory
+        // on startup.
+
+        // So we will list the root directory.
+        // None means we get the root
+        let root = DirectoryBlock::try_find_directory(None).expect("There should be a root directory before init").expect("ditto");
+
+        // Keep listing each subdirectory until we're done, and if its not a directory, get the size of the file to
+        // load in its info as well.
+
+        let mut all_items: Vec<DirectoryItem> = root.list().expect("should be there");
+
+        while let Some(item) = all_items.pop() {
+            if item.flags.contains(DirectoryItemFlags::IsDirectory) {
+                let block = item.get_directory_block().expect("If this doesn't work we're cooked anyways");
+                all_items.extend(block.list().expect("Ditto").into_iter());
+            } else {
+                // This is a file, just get the size
+                // We do this twice to make sure it get promoted.
+                let _ = item.get_size().expect("cooked");
+                let _ = item.get_size().expect("cooked");
+            }
+        }
+
         Ok(())
     }
 
