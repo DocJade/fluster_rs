@@ -28,8 +28,7 @@
 
 
 <p align="center">
-	PLACEHOLDER IMAGE
-	<img src="https://ralfvanveen.com/wp-content/uploads/2021/06/Placeholder-_-Glossary.svg" alt="Fluster" width="256">
+	<img src="https://github.com/DocJade/fluster_rs/blob/master/img/WindowsTerminal_7J9iESbHvl.png?raw=true"alt="Fluster playing \"Bad Apple\"" width="720">
 </p>
 
 ## Features
