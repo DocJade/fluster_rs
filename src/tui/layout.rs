@@ -84,6 +84,21 @@ impl FlusterTUI<'_> {
             // them into their constraints.
             // Man, UI logic is confusing.
             // Zipping so i can iterate in pairs
+
+            // Also for fun factor, each bar will have a different color.
+            // We'll cycle through them.
+            // Would do rainbow, but orange is missing!
+
+            let colors: Vec<ratatui::style::Color> = vec![
+                Color::LightRed,
+                Color::LightYellow,
+                Color::LightCyan,
+                Color::LightGreen,
+                Color::LightMagenta
+            ];
+            let mut color_index = 0;
+
+
             for (task, area) in visible_tasks.iter().zip(bar_layout.iter()) {
                 // Make the gauge
                 let gauge = Gauge::default()
@@ -97,19 +112,23 @@ impl FlusterTUI<'_> {
                         // Add a note for how long this has been running
                         .title_bottom(format!("{} | Guesstimated time remaining: {}",task.time_passed(), task.time_remaining()))
                     )
-                    // Make it blue because blue is cool
-                    .gauge_style(Style::default().fg(Color::LightBlue))
+                    // Cycling colors
+                    .gauge_style(Style::default().fg(colors[color_index]))
                     // Add the percentage
                     .ratio(task.progress());
 
                 // Render the gauge into its area
                 frame.render_widget(gauge, *area);
+
+                // Increment color, looping around
+                color_index = (color_index + 1) % colors.len();
             }
         } else {
             // No tasks to display.
             let container_block: Block = Block::bordered().title("Idle, waiting for tasks...");
             frame.render_widget(&container_block, progress_area);
-        }// Done with progress bars
+        }
+        // Done with progress bars
 
         // Now for the statistics.
         let statistics_area = layout[1];
@@ -149,6 +168,10 @@ impl FlusterTUI<'_> {
         disk_strings.push(format!("Disks swapped: {}", self.state.disk_swap_count));
         disk_strings.push(format!("Blocks read: {}", self.state.disk_blocks_read));
         disk_strings.push(format!("Blocks written: {}", self.state.disk_blocks_written));
+        // Now a newline for spacing
+        disk_strings.push("".to_string());
+        // And the current disk in the drive
+        disk_strings.push(format!("Current disk in drive: {}", self.state.current_disk_in_drive));
 
         // Listify it.
         // We'll also surround it with our block

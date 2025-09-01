@@ -19,6 +19,8 @@ pub(super) struct FlusterTUIState {
     pub(super) disk_blocks_read: u64,
     /// The total number of blocks that have been written to the physical disk.
     pub(super) disk_blocks_written: u64,
+    /// What disk is currently in the drive, is updated _after_ disk switches.
+    pub(super) current_disk_in_drive: u16,
 
     //
     // Cache stats
@@ -62,6 +64,7 @@ impl FlusterTUIState {
             cache_flushes: 0,
             cache_swaps_saved: 0,
             task: None,
+            current_disk_in_drive: 420, // no idea yet.
         }
     }
 }

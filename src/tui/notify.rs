@@ -36,10 +36,11 @@ impl NotifyTui {
     // Disk
     //
 
-    /// A _real_ disk swap has occurred.
-    pub(crate) fn disk_swapped() {
+    /// A _real_ disk swap has occurred, you must provide the disk that is now in the drive.
+    pub(crate) fn disk_swapped(new_disk: u16) {
         skip_if_tui_disabled!();
         TUI_MANAGER.lock().expect("Single thread, kinda.").state.disk_swap_count += 1;
+        TUI_MANAGER.lock().expect("Single thread, kinda.").state.current_disk_in_drive = new_disk;
     }
 
     /// A block has been read from disk.

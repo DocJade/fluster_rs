@@ -316,7 +316,7 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, DriveError> {
             // We have swapped disks.
 
             // Inform the TUI
-            NotifyTui::disk_swapped();
+            NotifyTui::disk_swapped(new_disk_number);
 
             CURRENT_DISK_IN_DRIVE.store(new_disk_number, Ordering::Relaxed);
             // Update the swap count
@@ -358,7 +358,7 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, DriveError> {
 
         TuiPrompt::prompt_enter(
             "Please swap disks.".to_string(),
-            format!("Please insert disk {disk_number}, then press enter."),
+            format!("Please remove disk {previous_disk}, and insert disk {disk_number}, then press enter."),
             true
         );
     }
