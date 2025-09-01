@@ -99,6 +99,11 @@ fusermount -u ~/fluster_mount_point
 - [The Rippingtons](https://www.rippingtons.com/), who kept me from going insane while writing this.
 - [Femtanyl](https://femtanyl.bandcamp.com/), who helped me go insane while writing this.
 
+## Notes:
+Originally I planned to keep an up-to-date implementation spec of Fluster! in `./filesystem_design`, but this slowly became more and more out of date, as is now very un-representative of the final product. Some information in there such as Inode blocks and how they are constructed should be mostly up to date. Dense disks aren't real, and they cannot hurt you.
+
+If you're wondering "Where is the EXE so I can just run it myself!" Please understand that there isn't one, and for good reason. If you don't know how to build and run this project yourself, chances are you would use it improperly, and possibly wipe your C: drive.
+
 ## See Fluster! in action
 
 [YouTube link to fluster factorio run will go here.](https://example.com/)
