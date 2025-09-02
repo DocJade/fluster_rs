@@ -23,6 +23,10 @@ pub trait GenericDiskMethods {
     /// Cannot bypass CRC.
     fn unchecked_read_block(&self, block_number: u16) -> Result<RawBlock, DriveError>;
 
+    /// Read multiple blocks
+    /// Does not check CRC!
+    fn unchecked_read_multiple_blocks(&self, block_number: u16, num_block_to_read: u16) -> Result<Vec<RawBlock>, DriveError>;
+
     /// Write a block.
     fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), DriveError>;
 

@@ -181,6 +181,47 @@ fn go_read_cached_block(block_location: DiskPointer) -> Result<RawBlock, DriveEr
     // Now that the cache was flushed (if needed), do the read.
     let disk: StandardDisk = super::cache_implementation::disk_load_header_invalidation(block_location.disk)?;
 
+    // We prefer to read at least 96 blocks, if the extra blocks dont fit, we just discard them.
+    // If that fails somehow, we will try just a standard single block read as a fallback.
+    // We also check to make sure we got something back, otherwise we have to fall back to the other read style
+    if let Ok(blocks) = disk.unchecked_read_multiple_blocks(block_location.block, 96) && !blocks.is_empty() {
+        // Multiple blocks read, add them all to the cache if they fit, otherwise just add as
+        // many as we can.
+        let free_space = BlockCache::get_tier_space(0);
+
+        // If there isnt any space, we just add the first one as usual, which will do cleanup.
+        if free_space == 0 {
+            BlockCache::add_or_update_item(CachedBlock::from_raw(&blocks[0], false))?;
+            // Immediately read it back out, silly i know.
+            // We need to read it silently so we dont promote it for no reason.
+            let silly = BlockCache::try_find_silent(blocks[0].block_origin).expect("Just added it!");
+            return Ok(silly.into_raw())
+        }
+        
+        for (index, block) in blocks.iter().enumerate() {
+            // Are we out of room?
+            if free_space - (index + 1) == 0 {
+                break
+            }
+
+            // If the block is already in the cache, we skip adding it, since
+            // it may have been updated already.
+            // Silent, or we would be randomly promoting blocks.
+            if BlockCache::try_find_silent(block.block_origin).is_some() {
+                // Skip
+                continue;
+            }
+
+            // Add it to the cache.
+            BlockCache::add_or_update_item(CachedBlock::from_raw(block, false))?;
+        }
+
+        // Now return the one block the caller actually wanted.
+        // We need to read it silently so we dont promote it for no reason.
+        let silly = BlockCache::try_find_silent(blocks[0].block_origin).expect("Just added it!");
+        return Ok(silly.into_raw())
+    }
+    // Need to do a singular read.
     // Already checked if it was allocated.
     let read_block = disk.unchecked_read_block(block_location.block)?;
     

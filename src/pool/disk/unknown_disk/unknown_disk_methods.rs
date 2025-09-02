@@ -61,6 +61,12 @@ impl GenericDiskMethods for UnknownDisk {
     fn unchecked_write_large(&mut self, _data: Vec<u8>, _start_block: DiskPointer) -> Result<(), DriveError> {
         panic!("Cannot do large writes to unknown disks!");
     }
+    
+    #[doc = " Read multiple blocks"]
+    #[doc = " Does not check CRC!"]
+    fn unchecked_read_multiple_blocks(&self, _block_number: u16, _num_block_to_read: u16) -> Result<Vec<RawBlock>,DriveError> {
+        panic!("Cannot do large reads from unknown disks!");
+    }
 }
 
 impl UnknownDisk {

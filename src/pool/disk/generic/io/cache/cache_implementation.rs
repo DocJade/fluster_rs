@@ -60,8 +60,7 @@ use crate::{
                     cache_io::CachedBlockIO,
                     cached_allocation::CachedAllocationDisk,
                     statistics::BlockCacheStatistics
-                },
-                checked_io::CheckedIO
+                }
             }
         },
         standard_disk::standard_disk_struct::StandardDisk
@@ -159,7 +158,12 @@ impl BlockCache {
     /// 
     /// Updates the underlying caches to promote the read item.
     pub(super) fn try_find(pointer: DiskPointer) -> Option<CachedBlock> {
-        go_try_find_cache(pointer)
+        go_try_find_cache(pointer, false)
+    }
+
+    /// Retrieves an item from the cache if it exists, but does not promote the item.
+    pub(super) fn try_find_silent(pointer: DiskPointer) -> Option<CachedBlock> {
+        go_try_find_cache(pointer, true)
     }
 
     /// Add an item to the cache, or update it if the item is already present.
@@ -253,6 +257,13 @@ impl BlockCache {
     pub(super) fn most_common_disk() -> (u16, u16) {
         go_find_most_common_disk()
     }
+
+    /// Find out how much free space is in a tier
+    /// 
+    /// Returns number of empty spaces in the tier
+    pub(super) fn get_tier_space(tier_number: usize) -> usize {
+        go_get_tier_free_space(tier_number)
+    }
 }
 
 // Cache tiers
@@ -274,13 +285,13 @@ impl TieredCache {
     }
     /// Retrieves an item from this tier at the given index.
     /// 
-    /// Will promote the item within this tier.
+    /// Will promote the item within this tier if not silent.
     /// 
     /// Updates tier order.
     /// 
     /// Returns None if there is no item at the index.
-    fn get_item(&mut self, index: usize) -> Option<&CachedBlock> {
-        go_get_tier_item(self, index)
+    fn get_item(&mut self, index: usize, silent: bool) -> Option<&CachedBlock> {
+        go_get_tier_item(self, index, silent)
     }
     /// Extracts an item at an index, removing it from the tier.
     /// 
@@ -347,7 +358,7 @@ impl CachedBlock {
 // =========
 //
 
-fn go_try_find_cache(pointer: DiskPointer) -> Option<CachedBlock> {
+fn go_try_find_cache(pointer: DiskPointer, silent: bool) -> Option<CachedBlock> {
 
     // Make sure this is a valid disk pointer, otherwise something is horribly wrong.
     assert!(!pointer.no_destination());
@@ -362,7 +373,7 @@ fn go_try_find_cache(pointer: DiskPointer) -> Option<CachedBlock> {
         // In the highest rank!
         BlockCacheStatistics::record_hit();
         // Grab it, which will also update the order.
-        return cache.tier_2.get_item(found).cloned()
+        return cache.tier_2.get_item(found, silent).cloned()
     }
 
     // Tier 1
@@ -370,23 +381,29 @@ fn go_try_find_cache(pointer: DiskPointer) -> Option<CachedBlock> {
         // Somewhat common it seems.
         BlockCacheStatistics::record_hit();
         // Grab it, which will also update the order.
-        return cache.tier_1.get_item(found).cloned()
+        return cache.tier_1.get_item(found, silent).cloned()
     }
 
     // Tier 0
     if let Some(found) = cache.tier_0.find_item(&pointer) {
         // Scraping the barrel, but at least it was there!
         BlockCacheStatistics::record_hit();
-        // Since this is the lowest tier, we need to immediately promote this
-        let item = cache.tier_0.extract_item(found).expect("Just checked.");
-        cache.promote_item(item.clone());
-
-        // Promotion done, return the item we got.
-        return Some(item)
+        // Since this is the lowest tier, we need to immediately promote this if needed.
+        if !silent {
+            let item = cache.tier_0.extract_item(found).expect("Just checked.");
+            cache.promote_item(item.clone());
+            return Some(item);
+        } else {
+            // Dont need to promote.
+            let read = cache.tier_0.items_map.get(&pointer).expect("Already checked");
+            return Some(read.clone());
+        }
     }
 
-    // It wasn't in the cache. Record the miss.
-    BlockCacheStatistics::record_miss();
+    // It wasn't in the cache. Record the miss if needed.
+    if !silent {
+        BlockCacheStatistics::record_miss();
+    }
 
     // All done.
     None
@@ -580,7 +597,7 @@ fn go_find_tier_item(tier: &TieredCache, pointer: &DiskPointer) -> Option<usize>
     tier.order.iter().position(|x| x == pointer)
 }
 
-fn go_get_tier_item(tier: &mut TieredCache, index: usize) -> Option<&CachedBlock> {
+fn go_get_tier_item(tier: &mut TieredCache, index: usize, silent: bool) -> Option<&CachedBlock> {
     // Updates order
 
     // Find what item the index refers to
@@ -589,8 +606,11 @@ fn go_get_tier_item(tier: &mut TieredCache, index: usize) -> Option<&CachedBlock
     // Now get that item
     let the_block = tier.items_map.get(&wanted_block_pointer)?;
 
-    // Now move the item to the front of the tier, since we have read it
-    tier.order.push_front(wanted_block_pointer);
+    // Now move the item to the front of the tier, since we have read it, only
+    // if its not a silent read
+    if !silent {
+        tier.order.push_front(wanted_block_pointer);
+    }
 
     Some(the_block)
 }
@@ -1022,6 +1042,19 @@ fn go_get_cache_pressure() -> f64 {
     // Get the block cache
     let cache = CASHEW.try_lock().expect("Single threaded.");
     cache.tier_0.order.len() as f64 / cache.tier_0.size as f64
+}
+
+fn go_get_tier_free_space(tier_number: usize) -> usize {
+    // Open that tier
+    let cache = CASHEW.try_lock().expect("Single threaded.");
+    let tier_to_check: &TieredCache = match tier_number {
+        0 => &cache.tier_0,
+        1 => &cache.tier_1,
+        2 => &cache.tier_2,
+        _ => panic!("Bro there are only 3 cache tiers"),
+    };
+
+    tier_to_check.size - tier_to_check.items_map.len()
 }
 
 /// Function for handling the possibility of cached disk headers.

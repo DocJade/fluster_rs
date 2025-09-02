@@ -186,7 +186,7 @@ fn go_read_file(file: &InodeFile, seek_point: u64, size: u32) -> Result<Vec<u8>,
 
     // Since we will be writing into this vec, we need to pre-fill it with zeros to allow for indexing.
     // Doing it like this also avoids needing to grow the vec with additional data.
-    let mut collected_bytes: Vec<u8> = vec![0_u8; size.try_into().expect("Why are you running on a 16 bit system?")];
+    let mut collected_bytes: Vec<u8> = vec![0_u8; size as usize];
 
     // We dont need to deal with the disk at all at this level, we will use
     // the cache for all IO

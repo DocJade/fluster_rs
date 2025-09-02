@@ -63,6 +63,12 @@ impl GenericDiskMethods for BlankDisk {
     fn unchecked_write_large(&mut self, _data: Vec<u8>, _start_block: DiskPointer) -> Result<(), DriveError> {
         panic!("Large writes are not allowed on blank disks!");
     }
+    
+    #[doc = " Read multiple blocks"]
+    #[doc = " Does not check CRC!"]
+    fn unchecked_read_multiple_blocks(&self,block_number:u16,num_block_to_read:u16) -> Result<Vec<RawBlock>,DriveError> {
+        panic!("Large reads are not allowed on blank disks!");
+    }
 }
 
 // Occasionally we need a new blank disk

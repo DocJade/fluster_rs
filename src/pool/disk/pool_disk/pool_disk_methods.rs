@@ -116,4 +116,10 @@ impl GenericDiskMethods for PoolDisk {
         // Man the pool disk really ended up useless didn't it?
         panic!("No large writes on pool disks.");
     }
+    
+    #[doc = " Read multiple blocks"]
+    #[doc = " Does not check CRC!"]
+    fn unchecked_read_multiple_blocks(&self, _block_number: u16, _num_block_to_read: u16) -> Result<Vec<RawBlock>,DriveError> {
+        panic!("No large reads on pool disks.");
+    }
 }

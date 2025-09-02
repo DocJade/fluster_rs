@@ -19,7 +19,7 @@ use crate::{error_types::drive::DriveError, pool::{
             generic_structs::pointer_struct::DiskPointer,
             io::{
                 cache::cache_io::CachedBlockIO,
-                read::read_block_direct,
+                read::{read_block_direct, read_multiple_blocks_direct},
                 write::{
                     write_block_direct,
                     write_large_direct
@@ -315,6 +315,12 @@ impl GenericDiskMethods for StandardDisk {
     fn flush(&mut self) -> Result<(), DriveError> {
         // Not really to disk, but if nobody is looking...
         CachedBlockIO::update_block(&self.header.to_block())
+    }
+    
+    #[doc = " Read multiple blocks"]
+    #[doc = " Does not check CRC!"]
+    fn unchecked_read_multiple_blocks(&self, block_number: u16, num_block_to_read: u16) -> Result<Vec<RawBlock>, DriveError> {
+        read_multiple_blocks_direct(&self.disk_file, self.number, block_number, num_block_to_read)
     }
 
 }

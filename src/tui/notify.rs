@@ -43,10 +43,10 @@ impl NotifyTui {
         TUI_MANAGER.lock().expect("Single thread, kinda.").state.current_disk_in_drive = new_disk;
     }
 
-    /// A block has been read from disk.
-    pub(crate) fn block_read() {
+    /// A block, or multiple blocks have been read from disk.
+    pub(crate) fn block_read(number: u16) {
         skip_if_tui_disabled!();
-        TUI_MANAGER.lock().expect("Single thread, kinda.").state.disk_blocks_read += 1;
+        TUI_MANAGER.lock().expect("Single thread, kinda.").state.disk_blocks_read += number as u64;
     }
 
     /// Block(s) has been written to disk.
