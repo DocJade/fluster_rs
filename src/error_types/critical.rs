@@ -261,14 +261,17 @@ fn troubleshooter() -> bool {
             "Troubleshooting: Try again?".to_string(),
             "Check disk is still failing.\n
             This is our last troubleshooting step before completely giving up.\n
+            You can also forcibly restore a disk if needed.\n
             Would you like to try re-mounting again, or throw in the towel?\n
-            (Y)es/(G)ive up".to_string(),
+            (Y)es/(D)isk restore/(G)ive up".to_string(),
             true
         );
 
         if prompted.to_ascii_lowercase().contains('g') {
             // user gives up.
             break
+        } else if prompted.to_ascii_lowercase().contains('d') {
+            do_disk_restore();
         }
     }
 

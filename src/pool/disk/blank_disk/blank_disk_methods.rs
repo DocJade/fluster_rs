@@ -60,13 +60,13 @@ impl GenericDiskMethods for BlankDisk {
     }
     
     #[doc = " Write chunked data, starting at a block."]
-    fn unchecked_write_large(&mut self, _data: Vec<u8>, _start_block: DiskPointer) -> Result<(), DriveError> {
-        panic!("Large writes are not allowed on blank disks!");
+    fn unchecked_write_large(&mut self, data:Vec<u8>, start_block:DiskPointer) -> Result<(), DriveError> {
+        crate::pool::disk::generic::io::write::write_large_direct(&self.disk_file, &data, start_block)
     }
     
     #[doc = " Read multiple blocks"]
     #[doc = " Does not check CRC!"]
-    fn unchecked_read_multiple_blocks(&self,block_number:u16,num_block_to_read:u16) -> Result<Vec<RawBlock>,DriveError> {
+    fn unchecked_read_multiple_blocks(&self, _block_number: u16, _num_block_to_read: u16) -> Result<Vec<RawBlock>,DriveError> {
         panic!("Large reads are not allowed on blank disks!");
     }
 }
