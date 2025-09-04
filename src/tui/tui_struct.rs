@@ -2,7 +2,10 @@
 
 use std::time::Instant;
 
-use crate::tui::{layout::FlusterTUI, state::FlusterTUIState, tasks::ProgressableTask};
+use crate::tui::{
+    layout::FlusterTUI,
+    state::FlusterTUIState
+};
 
 impl FlusterTUI<'_> {
     /// Brand new state, only for initialization.
@@ -10,6 +13,7 @@ impl FlusterTUI<'_> {
         Self {
             state: FlusterTUIState::new(),
             last_update: Instant::now(),
+            started: Instant::now(),
             user_prompt: None,
         }
     }

@@ -66,6 +66,9 @@ fn main() {
         env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
     }
 
+    // Log panics
+    log_panics::Config::default().backtrace_mode(log_panics::BacktraceMode::Resolved).install_panic_hook();
+
     // Set up Ctrl+C handler
     ctrlc::set_handler(move || {
         println!("Fluster cannot be closed with ctrl+c. You need to unmount the filesystem with `fusermount -u (path)`.");

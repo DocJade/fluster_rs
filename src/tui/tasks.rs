@@ -70,6 +70,8 @@ pub(crate) enum TaskType {
     WipeDisk,
     FlushCurrentDisk,
     FlushTier,
+    FileReadBytes,
+    FileWriteBytes,
     /// Includes number of requested blocks.
     PoolAllocateBlocks(u16),
     /// Includes number of blocks being deallocated.
@@ -197,6 +199,8 @@ impl TaskInfo {
             TaskType::FilesystemDeleteFile(name) => {
                 format!("Deleting file {name}...")
             },
+            TaskType::FileReadBytes => "Reading bytes from file...".to_string(),
+            TaskType::FileWriteBytes => "Writing bytes to file...".to_string(),
         }
     }
 

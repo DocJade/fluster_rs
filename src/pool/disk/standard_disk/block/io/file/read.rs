@@ -25,7 +25,7 @@ use crate::{error_types::drive::DriveError, pool::disk::{
                 InodeFile
             }
         }
-}};
+}, tui::{notify::NotifyTui, tasks::TaskType}};
 
 impl InodeFile {
     // Local functions
@@ -170,6 +170,7 @@ fn go_get_root_block(file: &InodeFile) -> Result<FileExtentBlock, DriveError> {
 
 
 fn go_read_file(file: &InodeFile, seek_point: u64, size: u32) -> Result<Vec<u8>, DriveError> {
+    let handle = NotifyTui::start_task(TaskType::FileReadBytes, size.into());
     // Make sure the file is big enough
     assert!(file.get_size()>= seek_point + size as u64);
 
@@ -209,11 +210,14 @@ fn go_read_file(file: &InodeFile, seek_point: u64, size: u32) -> Result<Vec<u8>,
 
         // Update how many bytes we've read
         bytes_remaining -= bytes_read as u32;
+        NotifyTui::complete_multiple_task_steps(&handle, bytes_read.into());
 
         // Keep going!
         current_block += 1;
         continue;
     }
+
+    NotifyTui::finish_task(handle);
 
     // All done!
     Ok(collected_bytes)

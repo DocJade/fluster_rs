@@ -14,6 +14,8 @@ pub struct FlusterTUI<'a> {
     pub(super) state: FlusterTUIState,
     /// The last time the interface was updated
     pub(super) last_update: Instant,
+    /// When fluster was first launched.
+    pub(super) started: Instant,
     /// User prompt, if any.
     pub(super) user_prompt: Option<TuiPrompt<'a>>,
 }
@@ -172,6 +174,12 @@ impl FlusterTUI<'_> {
         disk_strings.push("".to_string());
         // And the current disk in the drive
         disk_strings.push(format!("Current disk in drive: {}", self.state.current_disk_in_drive));
+        disk_strings.push("".to_string());
+        // How long fluster has been running
+        let seconds =  self.started.elapsed().as_secs();
+        let minutes = seconds / 60;
+        let hours = minutes / 60;
+        disk_strings.push(format!("Uptime: [{:0>2}:{:0>2}:{:0>2}]", hours, minutes%60, seconds%60));
 
         // Listify it.
         // We'll also surround it with our block

@@ -74,7 +74,7 @@ use crate::{
 //
 
 // The maximum amount of blocks all caches can store
-const CACHE_SIZE: usize = 2880 * 8;
+const CACHE_SIZE: usize = 2880 * 16;
 
 // The actual cached data
 lazy_static! {
@@ -598,21 +598,24 @@ fn go_find_tier_item(tier: &TieredCache, pointer: &DiskPointer) -> Option<usize>
 }
 
 fn go_get_tier_item(tier: &mut TieredCache, index: usize, silent: bool) -> Option<&CachedBlock> {
-    // Updates order
-
-    // Find what item the index refers to
-    let wanted_block_pointer: DiskPointer = tier.order.remove(index)?;
-
-    // Now get that item
-    let the_block = tier.items_map.get(&wanted_block_pointer)?;
-
-    // Now move the item to the front of the tier, since we have read it, only
-    // if its not a silent read
+    // Updates order if non-silent
     if !silent {
-        tier.order.push_front(wanted_block_pointer);
-    }
+        // Find what item the index refers to
+        let wanted_block_pointer: DiskPointer = tier.order.remove(index)?;
 
-    Some(the_block)
+        // Now get that item
+        let the_block = tier.items_map.get(&wanted_block_pointer)?;
+
+        // Now move the item to the front of the tier
+        tier.order.push_front(wanted_block_pointer);
+
+        Some(the_block)
+    } else {
+        // Silent operation, we just need to read it.
+        let wanted_pointer = tier.order.get(index)?;
+        let wanted_block = tier.items_map.get(wanted_pointer)?;
+        Some(wanted_block)
+    }
 }
 
 fn go_extract_tier_item(tier: &mut TieredCache, index: usize) -> Option<CachedBlock> {

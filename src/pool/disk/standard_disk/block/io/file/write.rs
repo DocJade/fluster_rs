@@ -40,7 +40,7 @@ use crate::{error_types::drive::DriveError, pool::{
             }
     },
     pool_actions::pool_struct::Pool
-}};
+}, tui::{notify::NotifyTui, tasks::TaskType}};
 
 impl InodeFile {
     /// Update the contents of a file starting at the provided seek point.
@@ -174,6 +174,7 @@ impl DirectoryItem {
 }
 
 fn go_write(inode_file: &mut InodeFile, bytes: &[u8], seek_point: u64) -> Result<u32, DriveError> {
+    let handle = NotifyTui::start_task(TaskType::FileWriteBytes, bytes.len() as u64);
     // Decompose the file into its pointers
     // No return location, we don't care where this puts us.
     let mut blocks = inode_file.to_pointers()?;
@@ -242,6 +243,7 @@ fn go_write(inode_file: &mut InodeFile, bytes: &[u8], seek_point: u64) -> Result
         byte_write_index = 0;
         // Update how many bytes we've written
         bytes_written += written;
+        NotifyTui::complete_multiple_task_steps(&handle, written as u64);
         // Keep going!
         continue;
     }
@@ -252,6 +254,8 @@ fn go_write(inode_file: &mut InodeFile, bytes: &[u8], seek_point: u64) -> Result
     if write_end > inode_file.get_size() {
         inode_file.set_size(write_end);
     }
+
+    NotifyTui::finish_task(handle);
 
     // Return how many bytes we wrote!
     Ok(bytes_written as u32)
