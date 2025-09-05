@@ -106,7 +106,7 @@ fn go_allocate_or_free_blocks<T: BlockAllocation + ?Sized>(
     // If the user provides a vec with a duplicate item, we will panic from double free / double allocate
     // Vec ordering does not matter, as we calculate the offset from each item
     // The user must allocate/free at least one block, and that block cannot be past the end of the table.
-    assert!(*blocks.last().expect("Should allocate at least 1 block.") < 2880);
+    assert!(*blocks.last().expect("Should allocate at least 1 block.") < 2880, "Tried to free a block past the end of the disk!");
 
     // Table to edit
     // 2880 blocks / 8 blocks per bit = 360

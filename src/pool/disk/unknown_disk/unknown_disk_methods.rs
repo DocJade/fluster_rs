@@ -21,29 +21,30 @@ impl GenericDiskMethods for UnknownDisk {
     #[doc = " Cannot bypass CRC."]
     fn unchecked_read_block(&self, _block_number: u16) -> Result<RawBlock, DriveError> {
         // We cant read from generic disks.
-        unreachable!()
+        panic!("Attempted to read blocks from a disk we know nothing about, we cannot do that.");
     }
-
+    
     #[doc = " Write a block"]
     fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), DriveError> {
         write_block_direct(&self.disk_file, block)
     }
-
+    
     #[doc = " Get the inner file used for IO operations"]
     fn disk_file(self) -> File {
         self.disk_file
     }
-
+    
     #[doc = " Get the number of the floppy disk."]
     fn get_disk_number(&self) -> u16 {
         // Unknown disks have no number.
-        unreachable!()
+        panic!("Attempted to get the disk number of a disk we know nothing about! Not allowed!");
     }
-
+    
     #[doc = " Set the number of this disk."]
-    fn set_disk_number(&mut self, _disk_number: u16) -> () {
+    fn set_disk_number(&mut self, _disk_number: u16) {
         // You cannot set the disk number of an unknown disk.
-        unreachable!()
+        panic!("Attempted to set the disk number of a disk we know nothing about! Not allowed!");
+
     }
 
     #[doc = " Get the inner file used for write operations"]
@@ -54,7 +55,8 @@ impl GenericDiskMethods for UnknownDisk {
     #[doc = " Sync all in-memory information to disk"]
     fn flush(&mut self) -> Result<(), DriveError> {
         // There is no in-memory information for this disk.
-        unreachable!()
+        // So just don't do anything.
+        Ok(())
     }
     
     #[doc = " Write chunked data, starting at a block."]
@@ -78,11 +80,13 @@ impl UnknownDisk {
 impl BlockAllocation for UnknownDisk {
     #[doc = " Get the block allocation table"]
     fn get_allocation_table(&self) ->  &[u8] {
-        panic!("Why are we getting the allocation table for an unknown disk?");
+        panic!("Unknown disks do not support allocations.");
+
     }
     
     #[doc = " Update and flush the allocation table to disk."]
     fn set_allocation_table(&mut self, _new_table: &[u8]) -> Result<(), DriveError> {
-        panic!("Why are we getting the allocation table for an unknown disk?");
+        panic!("Unknown disks do not support allocations.");
+
     }
 }

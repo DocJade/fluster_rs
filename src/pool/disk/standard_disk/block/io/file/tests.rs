@@ -1,11 +1,10 @@
 // Files, direct to thee.
 // Unwrapping is okay here, since we want unexpected outcomes to fail tests.
 #![allow(clippy::unwrap_used)]
-use log::info;
 use rand::{rngs::ThreadRng, Rng, RngCore};
 use test_log::test;
 
-use crate::pool::{disk::{generic::io::cache::cache_io::CachedBlockIO, standard_disk::block::{directory::directory_struct::DirectoryItem, io::directory::{tests::get_filesystem, types::NamedItem}}}, pool_actions::pool_struct::Pool}; // We want to see logs while testing.
+use crate::pool::{disk::{standard_disk::block::{directory::directory_struct::DirectoryItem, io::directory::{tests::get_filesystem, types::NamedItem}}}, pool_actions::pool_struct::Pool}; // We want to see logs while testing.
 
 /// Can we make a new file?
 #[test]
@@ -95,7 +94,6 @@ fn make_lots_of_filled_files() {
     let _fs = get_filesystem();
     let mut current_filename_number: usize = 0;
     let mut random: ThreadRng = rand::rng();
-    let mut total_bytes_written: u64 = 0;
     for _ in 0..1000 {
         let mut root_block = Pool::get_root_directory().unwrap();
         let new_name: String = format!("{current_filename_number}.txt");
@@ -114,8 +112,6 @@ fn make_lots_of_filled_files() {
 
         // Make sure we actually wrote all the bytes
         assert_eq!(bytes_written, bytes.len() as u32);
-        // Keep track in case we need to debug
-        total_bytes_written += bytes_written as u64;
         current_filename_number += 1;
     }
 }
@@ -204,10 +200,9 @@ fn write_and_read_large() {
 #[test]
 #[ignore = "Very slow."]
 fn read_and_write_random_files() {
-    let fs = get_filesystem();
+    let _ = get_filesystem();
     let mut current_filename_number: usize = 0;
     let mut random: ThreadRng = rand::rng();
-    let mut total_bytes_written: u64 = 0;
     let mut random_files: Vec<Vec<u8>> = Vec::new();
     const TEST_LENGTH: usize = 1000;
     const MAX_FILE_SIZE: usize = 1024 * 1024; // Currently one meg
@@ -232,17 +227,8 @@ fn read_and_write_random_files() {
         
         // Make sure we actually wrote all the bytes
         assert_eq!(bytes_written, bytes.len() as u32);
-        // Keep track in case we need to debug
-        total_bytes_written += bytes_written as u64;
         current_filename_number += 1;
     }
-    let stats = fs.pool.lock().unwrap();
-    let cache_hit_rate = CachedBlockIO::get_hit_rate();
-    let write_hit: String = format!("Write hit rate: {cache_hit_rate}");
-    let write_swap_count: u64 = stats.statistics.swaps;
-    let write_swaps: String = format!("Write disk swaps: {write_swap_count}");
-    let _ = cache_hit_rate;
-    drop(stats);
 
     // Now we need to read all of the files back out
     let mut current_file: usize = 0;
@@ -261,24 +247,6 @@ fn read_and_write_random_files() {
         // Next
         current_file += 1;
     }
-    let stats = fs.pool.lock().unwrap();
-    let cache_hit_rate = CachedBlockIO::get_hit_rate();
-    let read_hit: String = format!("Read hit rate: {cache_hit_rate}");
-    let read_swap_count: u64 = stats.statistics.swaps;
-    let read_swaps: String = format!("Read disk swaps: {}", read_swap_count - write_swap_count);
-    let _ = cache_hit_rate;
-    drop(stats);
-    info!("Test stats:");
-    let mut byte_total: u128 = 0;
-    random_files.iter().for_each(|f|{
-        byte_total += f.len() as u128;
-    });
-    info!("Total bytes written, then read: {byte_total} Bytes, or {} MB.", byte_total/1024/1024);
-    info!("{write_hit}");
-    info!("{write_swaps}");
-    info!("{read_hit}");
-    info!("{read_swaps}");
-    info!("===============");
 }
 
 

@@ -319,7 +319,7 @@ impl DirectoryItem {
         index += 1;
 
         // Make sure the flag is set
-        assert!(flags.contains(DirectoryItemFlags::MarkerBit));
+        assert!(flags.contains(DirectoryItemFlags::MarkerBit), "Directory items must have the marker bit set.");
 
         // Item name length
         let name_length: u8 = bytes[index];
@@ -364,7 +364,7 @@ impl DirectoryItem {
         
         // Otherwise, this must be a directory, so we need the directory block
         debug!("Item is a directory...");
-        let inode_directory: InodeDirectory = inode.extract_directory().expect("Guard.");
+        let inode_directory: InodeDirectory = inode.extract_directory().expect("Not a file, so its a directory.");
         NotifyTui::complete_task_step(&handle);
         
         // Load the block

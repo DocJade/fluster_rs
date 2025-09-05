@@ -4,7 +4,6 @@
 
 use super::pool_struct::GLOBAL_POOL;
 use super::pool_struct::Pool;
-use super::pool_struct::PoolStatistics;
 use crate::error_types::drive::DriveError;
 use crate::pool::disk::blank_disk::blank_disk_struct::BlankDisk;
 use crate::pool::disk::drive_struct::DiskBootstrap;
@@ -23,7 +22,6 @@ use crate::tui::notify::NotifyTui;
 use crate::tui::tasks::TaskType;
 use log::debug;
 use log::error;
-use std::process::exit;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -60,29 +58,22 @@ impl Pool {
     }
 }
 
-impl PoolStatistics {
-    fn new() -> Self {
-        PoolStatistics {
-            swaps: 0,
-            data_bytes_read: 0,
-            total_bytes_read: 0,
-            data_bytes_written: 0,
-            total_bytes_written: 0,
-        }
-    }
-}
-
 /// Sync information about the pool to disk
 pub(super) fn flush_pool() -> Result<(), DriveError> {
     debug!("Flushing pool info to disk...");
     
     // Grab the pool
-    debug!("Locking GLOBAL_POOL...");
-    let pool_header:PoolDiskHeader  = GLOBAL_POOL
+    let global_pool = GLOBAL_POOL
         .get()
-        .expect("single threaded")
-        .try_lock()
-        .expect("single threaded")
+        .expect("The pool has to exist, otherwise we couldn't shut it down.");
+
+    // Now, since we're flushing info, if we're shutting down after a panic, we need to be able to
+    // flush the pool even if it got poisoned.
+    global_pool.clear_poison();
+
+    let pool_header:PoolDiskHeader = 
+        global_pool.try_lock()
+        .expect("Single threaded, already cleared poison.")
         .header;
 
     // Now write that back to disk.
@@ -124,35 +115,43 @@ pub(super) fn load() -> Arc<Mutex<Pool>> {
     } else {
         // Failed to load in the disk header.
         error!("Failed to acquire pool header after 10 tries! Giving up!");
-        println!("Fluster has failed to load the pool header.");
-        println!("Fluster will now exit.");
-        exit(-1);
+        error!("Fluster has failed to load the pool header.");
+        error!("Fluster will now exit.");
+        panic!("Failed to get pool header!");
     };
     
 
     let pool = Pool {
         header,
-        statistics: PoolStatistics::new(),
     };
 
     // Wrap it for sharing.
     let shared_pool = Arc::new(Mutex::new(pool));
 
     // Set the global static. This will only work the first time.
-    GLOBAL_POOL
-        .set(shared_pool.clone())
-        .expect("Pool already loaded");
-
+    // Since this is only called on fluster startup, this should only ever be called once.
+    // If we somehow hit here again, we'll just exit
+    
+    if GLOBAL_POOL.set(shared_pool.clone()).is_err() {
+        // wow!
+        panic!("Somehow we've loaded the pool twice!");
+    }
+    
     // All operations after this point use the global pool.
-
-    debug!("Locking GLOBAL_POOL...");
-    let highest_known: u16 = GLOBAL_POOL
-        .get()
-        .expect("single threaded")
-        .try_lock()
-        .expect("single threaded")
-        .header
-        .highest_known_disk;
+    
+    // We're the only place that could possibly have access to the pool right now.
+    // So if this lock fails, cooked.
+    
+    let highest_known: u16 = if let Some(global_pool) = GLOBAL_POOL.get() {
+        if let Ok(innards) = global_pool.try_lock() {
+            innards.header.highest_known_disk
+        } else {
+            panic!("Locking the global pool immediately after creation failed!");
+        }
+    } else {
+        // ??????????
+        panic!("The global pool does not exist, even though we JUST made it?");
+    };
 
     // Check if this is a brand new pool
     if highest_known == 0 {
@@ -161,11 +160,10 @@ pub(super) fn load() -> Arc<Mutex<Pool>> {
             Ok(ok) => ok,
             Err(error) => {
                 // Initializing the pool failed. This cannot continue.
-                error!("Failed to initalize pool! {error}");
-                println!("Failed to load the pool.");
-                println!("Reason: {error}");
-                println!("Fluster will now exit.");
-                exit(-1);
+                error!("Failed to load the pool.");
+                error!("Reason: {error}");
+                error!("Fluster will now exit.");
+                panic!("Failed to initalize pool! {error}");
             }
         };
     };
@@ -184,10 +182,7 @@ fn initalize_pool() -> Result<(), DriveError> {
     // Lets get that second disk going
     // First we need to make a standard disk
     debug!("Creating the standard disk (disk 1)...");
-    let standard_disk = add_disk::<StandardDisk>()?;
-
-    // Make sure that disk is disk 1, otherwise we are cooked.
-    assert_eq!(standard_disk.number, 1);
+    let _ = add_disk::<StandardDisk>()?;
 
     // The root directory is set up on the disk side, so we're done.
     debug!("Finished first time pool setup.");
@@ -203,12 +198,13 @@ fn add_disk<T: DiskBootstrap>() -> Result<T, DriveError> {
         "Attempting to add new disk to the pool of type: {}",
         std::any::type_name::<T>()
     );
-    debug!("Locking GLOBAL_POOL...");
+
+
     let highest_known: u16 = GLOBAL_POOL
         .get()
-        .expect("single threaded")
+        .expect("Pool must exist at to add disks to it.")
         .try_lock()
-        .expect("single threaded")
+        .expect("Cannot add disks to poisoned pool. Also single threaded, so should not block.")
         .header
         .highest_known_disk;
     let next_open_disk = highest_known + 1;
@@ -229,7 +225,8 @@ fn add_disk<T: DiskBootstrap>() -> Result<T, DriveError> {
         // We need that blank mf.
         if tries == 10 {
             // shiet
-            panic!("Couldnt get a blank disk! cooked!")
+            error!("Couldnt get a blank disk! cooked!");
+            return Err(DriveError::DriveEmpty); // I mean, good enough.
         }
         tries += 1;
     }
@@ -243,14 +240,16 @@ fn add_disk<T: DiskBootstrap>() -> Result<T, DriveError> {
     NotifyTui::complete_task_step(&handle);
     
     // The disk has now bootstrapped itself, we are done here.
-    debug!("Locking GLOBAL_POOL...");
-    GLOBAL_POOL
-        .get()
-        .expect("single threaded")
-        .try_lock()
-        .expect("single threaded")
-        .header
-        .highest_known_disk += 1;
+    // We already locked earlier, so this can't be poisoned, unless maybe making the disks also panicked?
+    if let Ok(mut inner) = GLOBAL_POOL.get().expect("Pool has to be set up before we can make disks.").try_lock() {
+        inner.header.highest_known_disk += 1;
+    } else {
+        // Poisoned again! We're probably in really bad shape. Just give up.
+        // In theory this cant even get poisoned at this point due to bootstrapping happening
+        // in the same thread but whatever, compiler doesn't know ig.
+        panic!("Poisoned on disk bootstrapping!");
+    }
+    
 
     debug!("Done adding new disk.");
     NotifyTui::finish_task(handle);

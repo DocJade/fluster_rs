@@ -8,24 +8,46 @@
 
 use log::trace;
 
-use crate::{error_types::{block::BlockManipulationError, drive::DriveError}, pool::{
-    disk::{
-        generic::{
-            block::block_structs::RawBlock,
-            generic_structs::pointer_struct::DiskPointer,
-            io::cache::cache_io::CachedBlockIO,
-        },
-        standard_disk::block::inode::inode_struct::{
-                Inode,
-                InodeBlock,
-                InodeLocation
+use crate::{
+    error_types::{
+        block::BlockManipulationError,
+        drive::DriveError
+    },
+    pool::{
+        disk::{
+            generic::{
+                block::block_structs::RawBlock,
+                generic_structs::pointer_struct::DiskPointer,
+                io::cache::cache_io::CachedBlockIO,
             },
-    },
-    pool_actions::pool_struct::{
-        Pool,
-        GLOBAL_POOL
-    },
-}};
+            standard_disk::block::inode::inode_struct::{
+                    Inode,
+                    InodeBlock,
+                    InodeLocation
+                },
+        },
+        pool_actions::pool_struct::{
+            Pool,
+            GLOBAL_POOL
+        },
+    }
+};
+
+
+// The pool MUST exist for inodes to be created.
+macro_rules! get_pool {
+    () => {
+        if let Ok(innards) = GLOBAL_POOL.get().expect("There has to be a global pool at this point.").try_lock() {
+            innards
+        } else {
+            // Cannot do inode stuff with dying pool, dying pools need to just shut down immediately.
+            panic!("A poisoned pool cannot have inode operations performed against it!");
+        }
+    };
+}
+
+
+
 
 // For the pool implementations, we do not use Self, as we might try to double mut it if the inode
 // addition routine adds a new disk.
@@ -43,14 +65,7 @@ impl Pool {
     pub fn fast_add_inode(inode: Inode) -> Result<InodeLocation, DriveError> {
         trace!("Fast adding inode...");
         // Get the pool's latest inode disk
-        trace!("Locking GLOBAL_POOL...");
-        let start_pointer: DiskPointer = GLOBAL_POOL
-            .get()
-            .expect("Single thread")
-            .try_lock()
-            .expect("Single thread")
-            .header
-            .latest_inode_write;
+        let start_pointer: DiskPointer = get_pool!().header.latest_inode_write;
 
         // load in that block
         let da_reader: RawBlock = CachedBlockIO::read_block(start_pointer)?;
@@ -61,14 +76,10 @@ impl Pool {
         let success_write_pointer: DiskPointer = result.pointer;
 
         // Update the pool with new successful write.
-        trace!("Locking GLOBAL_POOL...");
-        GLOBAL_POOL
-            .get()
-            .expect("Single thread")
-            .try_lock()
-            .expect("Single thread")
-            .header
-            .latest_inode_write = success_write_pointer;
+        {
+            let mut pool = get_pool!();
+            pool.header.latest_inode_write = success_write_pointer;
+        }
 
         // all done
         Ok(result)
@@ -98,14 +109,10 @@ impl Pool {
         let success_write_pointer: DiskPointer = result.pointer;
 
         // Update the pool with new successful write.
-        trace!("Locking GLOBAL_POOL...");
-        GLOBAL_POOL
-            .get()
-            .expect("Single thread")
-            .try_lock()
-            .expect("Single thread")
-            .header
-            .latest_inode_write = success_write_pointer;
+        {
+            let mut pool = get_pool!();
+            pool.header.latest_inode_write = success_write_pointer;
+        }
 
         // all done
         Ok(result)
@@ -134,16 +141,17 @@ fn go_add_inode(inode: Inode, start_block: InodeBlock) -> Result<InodeLocation, 
             }
             Err(error) => match error {
                 BlockManipulationError::OutOfRoom => {
-                                // Not enough room on this block, go fish.
-                            }
+                    // Not enough room on this block, go fish.
+                }
                 BlockManipulationError::Impossible => {
-                                // Impossible offsets should never happen.
-                                unreachable!("Impossible inode offset. {inode:#?}")
-                            },
+                    // Impossible offsets should never happen.
+                    // Cant keep going with logic errors.
+                    panic!("Impossible inode offset. {inode:#?}");
+                },
                 BlockManipulationError::NotFinalBlockInChain | BlockManipulationError::NotPresent => {
                     // Not possible here, inodes dont care about being the final block,
                     // and adding doesnt check if an item is present.
-                    unreachable!()
+                    panic!("Apparently inodes DO care!");
                 },
             },
         }
@@ -206,10 +214,10 @@ fn make_new_inode_block() -> Result<DiskPointer, DriveError> {
     // No need for crc since we'll be overwriting it immediately.
     let ask_nicely = Pool::find_and_allocate_pool_blocks(1, false)?;
     // And you shall receive.
-    let new_block_location = ask_nicely.first().expect("Asked for 1.");
+    let new_block_location = ask_nicely[0];
 
     // New block to throw there
-    let new_block: InodeBlock = InodeBlock::new(*new_block_location);
+    let new_block: InodeBlock = InodeBlock::new(new_block_location);
     let but_raw: RawBlock = new_block.to_block();
 
     // Write it Ralph!
@@ -218,5 +226,5 @@ fn make_new_inode_block() -> Result<DiskPointer, DriveError> {
     CachedBlockIO::update_block(&but_raw)?;
 
     // Now throw it back, I mean the pointer
-    Ok(*new_block_location)
+    Ok(new_block_location)
 }

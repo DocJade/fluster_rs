@@ -30,7 +30,7 @@ pub(super) trait CheckedIO: BlockAllocation + GenericDiskMethods {
     fn checked_read(&self, block_number: u16) -> Result<RawBlock, DriveError> {
         trace!("Performing checked read on block {block_number}...",);
         // Block must be allocated
-        assert!(self.is_block_allocated(block_number));
+        assert!(self.is_block_allocated(block_number), "Tried to read an unallocated block!");
         // This unchecked read is safe, because we've now checked it.
         let result = self.unchecked_read_block(block_number)?;
         trace!("Block read successfully.");
@@ -45,24 +45,25 @@ pub(super) trait CheckedIO: BlockAllocation + GenericDiskMethods {
     fn checked_write(&mut self, block: &RawBlock) -> Result<(), DriveError> {
         trace!("Performing checked write on block {}...", block.block_origin.block);
         // Make sure block is free
-        assert!(!self.is_block_allocated(block.block_origin.block));
+        assert!(!self.is_block_allocated(block.block_origin.block), "Tried to write to an non-free block!");
         trace!("Block was not already allocated, writing...");
         self.unchecked_write_block(block)?;
         // Now mark the block as allocated.
         trace!("Marking block as allocated...");
         let blocks_allocated = self.allocate_blocks(&[block.block_origin.block].to_vec())?;
         // Make sure it was actually allocated.
-        assert_eq!(blocks_allocated, 1);
+        assert_eq!(blocks_allocated, 1, "Failed to mark the block as allocated after write!");
         // Now decrement the pool header
         trace!("Updating the pool's free block count...");
         trace!("Locking GLOBAL_POOL...");
-        GLOBAL_POOL
-            .get()
-            .expect("single threaded")
-            .try_lock()
-            .expect("single threaded")
-            .header
-            .pool_standard_blocks_free -= 1;
+
+        // If the pool is shutting down, this may be poisoned. If it is, we just have to ignore it since
+        // we dont want to panic during a panic-caused shutdown.
+
+        if let Ok(mut update) = GLOBAL_POOL.get().expect("Pool must exist for CheckedIO to be performed.").try_lock() {
+            update.header.pool_standard_blocks_free -= 1;
+        };
+
         trace!("Block written successfully.");
         Ok(())
     }
@@ -76,7 +77,7 @@ pub(super) trait CheckedIO: BlockAllocation + GenericDiskMethods {
             block.block_origin.block
         );
         // Make sure block is allocated already
-        assert!(self.is_block_allocated(block.block_origin.block));
+        assert!(self.is_block_allocated(block.block_origin.block), "Tried to update an unallocated block.");
         self.unchecked_write_block(block)?;
         trace!("Block updated successfully.");
         Ok(())
@@ -92,7 +93,7 @@ pub(super) trait CheckedIO: BlockAllocation + GenericDiskMethods {
         );
         // Make sure all of the blocks this refers to are already allocated.
         for block in start_block.block..start_block.block + data.len().div_ceil(512) as u16 {
-            assert!(self.is_block_allocated(block));
+            assert!(self.is_block_allocated(block), "One of the blocks in a large write was not allocated!");
         }
         self.unchecked_write_large(data, start_block)?;
         trace!("Blocks updated successfully.");

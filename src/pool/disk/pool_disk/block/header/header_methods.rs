@@ -130,7 +130,7 @@ fn prompt_for_new_pool(disk: BlankDisk) -> Result<(), DriveError> {
     } else {
         // If we are running a test, we should never be asking for user input, thus we should always
         // be using virtual disks.
-        assert!(!cfg!(test));
+        assert!(!cfg!(test), "Asked for user input during a test!");
     }
 
     // Ask the user if they want to create a new pool starting on this disk (hereafer disk 0 / root disk)
@@ -189,23 +189,23 @@ fn pool_header_from_raw_block(block: &RawBlock) -> Result<PoolDiskHeader, Header
 
     // Highest disk
     let highest_known_disk: u16 =
-        u16::from_le_bytes(block.data[offset..offset + 2].try_into().expect("Impossible"));
+        u16::from_le_bytes(block.data[offset..offset + 2].try_into().expect("2 bytes = 2 bytes"));
 
     offset += 2;
 
     // Disk with next free block
     let disk_with_next_free_block: u16 =
-        u16::from_le_bytes(block.data[offset..offset + 2].try_into().expect("Impossible"));
+        u16::from_le_bytes(block.data[offset..offset + 2].try_into().expect("2 bytes = 2 bytes"));
 
     offset += 2;
 
     // Blocks free in pool
     let pool_standard_blocks_free: u32 =
-        u32::from_le_bytes(block.data[offset..offset + 4].try_into().expect("Impossible"));
+        u32::from_le_bytes(block.data[offset..offset + 4].try_into().expect("2 bytes = 2 bytes"));
 
     // Block allocation map
     // Stop using the offset since this is always at the end.
-    let block_usage_map: [u8; 360] = block.data[148..148 + 360].try_into().expect("Impossible");
+    let block_usage_map: [u8; 360] = block.data[148..148 + 360].try_into().expect("2 bytes = 2 bytes");
 
     // The latest inode write is not persisted between launches, so we point at the root inode.
     let latest_inode_write: DiskPointer = DiskPointer { disk: 1, block: 1 };

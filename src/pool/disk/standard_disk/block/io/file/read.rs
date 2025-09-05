@@ -1,7 +1,11 @@
 // Reading a block is way easier than writing it.
 // Must use cached IO, does not touch disk directly.
 
-use log::{debug, trace};
+
+use log::{
+    debug,
+    trace
+};
 
 use crate::{error_types::drive::DriveError, pool::disk::{
     generic::{
@@ -65,7 +69,7 @@ impl DirectoryItem {
         // Is this a file?
         if self.flags.contains(DirectoryItemFlags::IsDirectory) {
             // Uh, no it isn't why did you give me a dir?
-            panic!("Tried to read a directory as a file!")
+            panic!("Tried to read a directory as a file!");
         }
 
         // Extract out the file
@@ -78,8 +82,8 @@ impl DirectoryItem {
         let inode_block: InodeBlock = InodeBlock::from_block(&raw_block);
 
         // Get the actual file
-        let inode_file = inode_block.try_read_inode(location.offset).expect("Caller guarantee.");
-        let file = inode_file.extract_file().expect("Caller guarantee.");
+        let inode_file = inode_block.try_read_inode(location.offset).expect("Already checked if it was a file.");
+        let file = inode_file.extract_file().expect("File flag means a file inode should exist.");
 
         // Now we can read in the file
         let read_bytes = file.read(seek_point, size,)?;
@@ -161,7 +165,7 @@ fn go_to_extents(
 
 fn go_get_root_block(file: &InodeFile) -> Result<FileExtentBlock, DriveError> {
     // Make sure this actually goes somewhere
-    assert!(!file.pointer.no_destination());
+    assert!(!file.pointer.no_destination(), "Pointer with no destination!");
     let raw_block: RawBlock = CachedBlockIO::read_block(file.pointer)?;
     let block = FileExtentBlock::from_block(&raw_block);
     Ok(block)
@@ -172,7 +176,7 @@ fn go_get_root_block(file: &InodeFile) -> Result<FileExtentBlock, DriveError> {
 fn go_read_file(file: &InodeFile, seek_point: u64, size: u32) -> Result<Vec<u8>, DriveError> {
     let handle = NotifyTui::start_task(TaskType::FileReadBytes, size.into());
     // Make sure the file is big enough
-    assert!(file.get_size()>= seek_point + size as u64);
+    assert!(file.get_size()>= seek_point + size as u64, "Not enough bytes in this file to satisfy the read!");
 
     // Find the start point
     let (block_index, mut byte_index) = InodeFile::byte_finder( seek_point);

@@ -23,8 +23,6 @@ pub enum DriveError {
 /// 
 /// This is only used at the lowest of levels on actual IO operations.
 pub enum DriveIOError {
-    #[error("No disk is currently inserted.")]
-    DriveEmpty,
     #[error("The operation failed for non-critical reasons, but no corruption occurred, and the operation can be retried with the same arguments.")]
     Retry,
 }

@@ -65,7 +65,7 @@ impl BlockAllocation for PoolDisk {
     fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), DriveError> {
         self.header.block_usage_map = new_table
             .try_into()
-            .expect("Incoming table should be the same as outgoing.");
+            .expect("Incoming table size should be the same as outgoing.");
         self.flush()
     }
 }
@@ -119,7 +119,7 @@ impl GenericDiskMethods for PoolDisk {
     
     #[doc = " Read multiple blocks"]
     #[doc = " Does not check CRC!"]
-    fn unchecked_read_multiple_blocks(&self, _block_number: u16, _num_block_to_read: u16) -> Result<Vec<RawBlock>,DriveError> {
+    fn unchecked_read_multiple_blocks(&self, _block_number: u16, _num_block_to_read: u16) -> Result<Vec<RawBlock>, DriveError> {
         panic!("No large reads on pool disks.");
     }
 }

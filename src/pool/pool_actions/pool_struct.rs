@@ -23,20 +23,4 @@ lazy_static! {
 #[derive(Debug)]
 pub struct Pool {
     pub(crate) header: PoolDiskHeader,
-    /// Pool statistics are not saved to disk, they exist only at runtime.
-    pub(crate) statistics: PoolStatistics,
-}
-
-#[derive(Debug)]
-pub struct PoolStatistics {
-    /// How many times we've swapped disks.
-    pub(crate) swaps: u64,
-    /// How many bytes we've read. (Requested by the OS)
-    pub(crate) data_bytes_read: u64,
-    /// Bytes we've read from the disk, including file overhead and such
-    pub(crate) total_bytes_read: u64,
-    /// How many bytes we've written. (Requested by the OS)
-    pub(crate) data_bytes_written: u64,
-    /// Bytes we've read from the disk, including file overhead and such
-    pub(crate) total_bytes_written: u64,
 }

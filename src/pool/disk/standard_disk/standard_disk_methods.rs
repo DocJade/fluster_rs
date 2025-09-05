@@ -3,52 +3,58 @@ use std::fs::File;
 
 use log::debug;
 
-use crate::{error_types::drive::DriveError, pool::{
-    disk::{
-        drive_struct::{
-            DiskBootstrap,
-            DiskType,
-            FloppyDrive
-        },
-        generic::{
-            block::{
-                allocate::block_allocation::BlockAllocation,
-                block_structs::RawBlock,
+use crate::{
+    error_types::drive::DriveError,
+    pool::{
+        disk::{
+            drive_struct::{
+                DiskBootstrap,
+                DiskType,
+                FloppyDrive
             },
-            disk_trait::GenericDiskMethods,
-            generic_structs::pointer_struct::DiskPointer,
-            io::{
-                cache::cache_io::CachedBlockIO,
-                read::{read_block_direct, read_multiple_blocks_direct},
-                write::{
-                    write_block_direct,
-                    write_large_direct
-                }
-            },
-        },
-        standard_disk::{
-            block::{
-                directory::directory_struct::DirectoryBlock,
-                header::header_struct::{
-                    StandardDiskHeader,
-                    StandardHeaderFlags
+            generic::{
+                block::{
+                    allocate::block_allocation::BlockAllocation,
+                    block_structs::RawBlock,
                 },
-                inode::inode_struct::{
-                    Inode,
-                    InodeBlock,
-                    InodeDirectory,
-                    InodeFlags,
-                    InodeTimestamp,
+                disk_trait::GenericDiskMethods,
+                generic_structs::pointer_struct::DiskPointer,
+                io::{
+                    cache::cache_io::CachedBlockIO,
+                    read::{
+                        read_block_direct,
+                        read_multiple_blocks_direct
+                    },
+                    write::{
+                        write_block_direct,
+                        write_large_direct
+                    }
                 },
             },
-            standard_disk_struct::StandardDisk,
+            standard_disk::{
+                block::{
+                    directory::directory_struct::DirectoryBlock,
+                    header::header_struct::{
+                        StandardDiskHeader,
+                        StandardHeaderFlags
+                    },
+                    inode::inode_struct::{
+                        Inode,
+                        InodeBlock,
+                        InodeDirectory,
+                        InodeFlags,
+                        InodeTimestamp,
+                    },
+                },
+                standard_disk_struct::StandardDisk,
+            },
         },
-    },
-    pool_actions::pool_struct::{
-        Pool,
-        GLOBAL_POOL
-    },
-}};
+        pool_actions::pool_struct::{
+            Pool,
+            GLOBAL_POOL
+        },
+    }
+};
 
 // Implementations
 
@@ -62,14 +68,17 @@ impl DiskBootstrap for StandardDisk {
         // New standard disks have only the header allocated.
         // 2880 - 1 = 2879
         // But, the disk setup process will automatically decrement this count for us.
-        debug!("Locking GLOBAL_POOL...");
-        GLOBAL_POOL
-            .get()
-            .expect("single threaded")
-            .try_lock()
-            .expect("single threaded")
-            .header
-            .pool_standard_blocks_free += 2880;
+        {
+            let arc = GLOBAL_POOL.get().expect("Shouldn't be allocating disks without a pool");
+            let mut pool = if let Ok(innards) = arc.try_lock() {
+                innards
+            } else {
+                // Poisoned! We can't make new disks while poisoned.
+                panic!("Attempted to bootstrap a standard disk while pool is poisoned!");
+            };
+
+            pool.header.pool_standard_blocks_free += 2880;
+        }
 
         // Make the disk
         debug!("Running create...");
@@ -135,18 +144,26 @@ impl DiskBootstrap for StandardDisk {
             modified: right_now,
         };
 
-        let inode_result = Pool::add_inode(the_actual_inode).expect("We should have room.");
-        // Make sure that actually ended up at the right spot.
-        assert_eq!(inode_result.pointer, inode_block_origin);
-        assert_eq!(inode_result.offset, 0);
+        // Adding inodes automatically makes more room if needed, and since this is disk 1, this is actually
+        // the first inode we EVER create, so not having room is preposterous!
+        let inode_result = Pool::add_inode(the_actual_inode).expect("Brand new disk is full????");
 
+        // Make sure that actually ended up at the right spot.
+        if inode_result.pointer != inode_block_origin || inode_result.offset != 0 {
+            // Making the inode block is cooked. Too much depends on this being in the correct spot.
+            panic!("Inode ended up at the wrong spot during disk creation! Cannot continue!");
+        }
+        
         // All done!
         debug!("Done bootstrapping standard disk.");
         // Since we wrote information to it, we need to read in that disk again before returning it
         #[allow(deprecated)] // We do not use the cache while bootstrapping.
         let finished_disk: StandardDisk = match FloppyDrive::open(disk_number)? {
             DiskType::Standard(standard_disk) => standard_disk,
-            _ => unreachable!("I would eat my shoes if this happened."),
+            _ => {
+                // User managed to swap out disk 1 at the exact moment we finished putting it together. Shame on them.
+                panic!("Disk 1 was replaced in the drive during bootstrapping re-load.");
+            },
         };
         Ok(finished_disk)
     }
@@ -173,9 +190,16 @@ impl BlockAllocation for StandardDisk {
     }
 
     fn set_allocation_table(&mut self, new_table: &[u8]) -> Result<(), DriveError> {
-        self.header.block_usage_map = new_table
-            .try_into()
-            .expect("Incoming table should be the same as outgoing.");
+        // Gotta use type annotations here, inline methods on the result dont seem to work on
+        // declaration/assignments.
+        let cast = if let Ok(casted) = TryInto::<[u8; 360]>::try_into(new_table) {
+            casted
+        } else {
+            // Incoming bytes were the wrong length.
+            panic!("Allocation table length is wrong!");
+        };
+
+        self.header.block_usage_map = cast;
         self.flush()
     }
 }

@@ -150,7 +150,7 @@ fn go_read_cached_block(block_location: DiskPointer) -> Result<RawBlock, DriveEr
     if block_location.block != 0 {
         // This isn't a header.
         let is_allocated = CachedAllocationDisk::open(block_location.disk)?.is_block_allocated(block_location.block);
-        assert!(is_allocated);
+        assert!(is_allocated, "Tried to use the cache to read a block that was not allocated!");
     }
     
     let disk_in_drive = FloppyDrive::currently_inserted_disk_number();
@@ -248,7 +248,7 @@ fn go_update_cached_block(raw_block: &RawBlock) -> Result<(), DriveError> {
         // This is not a header.
         // Make sure block is currently allocated.
         let is_allocated = CachedAllocationDisk::open(raw_block.block_origin.disk)?.is_block_allocated(raw_block.block_origin.block);
-        assert!(is_allocated);
+        assert!(is_allocated, "Tried to use the cache to update a block that was not allocated!");
     }
 
     // Update the cache with the updated block.

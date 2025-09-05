@@ -9,7 +9,6 @@
 //
 
 use std::path::PathBuf;
-use std::process::exit;
 
 use log::debug;
 
@@ -40,6 +39,7 @@ impl FilesystemOptions {
         // set the floppy disk path
         debug!("Setting the floppy path...");
         debug!("Locking FLOPPY_PATH...");
+        // There's no way anyone else has a lock on this or its poisoned at this point.
         *FLOPPY_PATH
             .try_lock()
             .expect("Fluster! Is single threaded.") = floppy_drive.clone();
@@ -52,8 +52,7 @@ impl FilesystemOptions {
             // Make sure this is a directory, and that the directory already exists
             if !path.is_dir() || !path.exists() {
                 // Why must you do this
-                println!("Virtual disk argument must be a valid path to a pre-existing directory.");
-                exit(-1);
+                panic!("Virtual disk argument must be a valid path to a pre-existing directory.");
             }
 
             debug!("Locking USE_VIRTUAL_DISKS...");

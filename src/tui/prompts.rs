@@ -1,10 +1,14 @@
 // Gotta talk to people sometimes.
 
+use std::process::exit;
+use log::error;
+use log::info;
 use ratatui::style::{Style, Stylize};
 use tui_textarea::TextArea;
 
 use crate::{filesystem::filesystem_struct::USE_TUI, tui::notify::TUI_MANAGER};
 
+#[derive(Debug)]
 pub(crate) struct TuiPrompt<'a> {
     /// Title of the prompt
     pub(super) title: String,
@@ -48,8 +52,15 @@ impl TuiPrompt<'_> {
             text_area: TextArea::default() // Not actually used.
         };
 
-        if !USE_TUI.get().expect("USE_TUI should be set") {
-            return legacy_prompt_enter(prompt);
+        if let Some(flag) = USE_TUI.get() {
+            if !flag {
+                // Tui is disabled.
+                return disabled_prompt_enter(prompt);
+            }
+        } else {
+            // USE_TUI is not set yet, it really should be at this point.
+            // But since it isn't, we'll just fall back to disabled mode.
+            return disabled_prompt_enter(prompt);
         }
 
         // Run the prompt
@@ -87,8 +98,15 @@ impl TuiPrompt<'_> {
             text_area,
         };
 
-        if !USE_TUI.get().expect("USE_TUI should be set") {
-            return legacy_prompt_input(prompt);
+        if let Some(flag) = USE_TUI.get() {
+            if !flag {
+                // Legacy mode
+                return disabled_prompt_input(prompt);
+            }
+        } else {
+            // USE_TUI is not set yet, it really should be at this point.
+            // But since it isn't, we'll just fall back to legacy prompting
+            return disabled_prompt_input(prompt);
         }
 
         // Run the prompt
@@ -100,16 +118,20 @@ impl TuiPrompt<'_> {
         }
 
         // Wait for a response, and return it.
-        response_rx.recv().expect("Sender should send.")
+        // If we got no response for some reason, safest bet is to return nothing.
+        response_rx.recv().unwrap_or_default()
     }
 }
 
 
-// Prompt without the TUI
-fn legacy_prompt_enter(prompt: TuiPrompt) {
-    let _ = rprompt::prompt_reply(format!("[{}]: {}", prompt.title, prompt.content));
+// User input only works with the TUI enabled.
+fn disabled_prompt_enter(prompt: TuiPrompt) {
+    info!("Skipping prompt...");
+    info!("Enter prompt: [{}]: {}", prompt.title, prompt.content);
 }
 
-fn legacy_prompt_input(prompt: TuiPrompt) -> String {
-    rprompt::prompt_reply(format!("[{}]: {}", prompt.title, prompt.content)).expect("stdin should not fail.")
+fn disabled_prompt_input(_prompt: TuiPrompt) -> String {
+    error!("You might not like TUI's, but this setting is secretly just for test cases.");
+    error!("You need to use the TUI to use fluster.");
+    exit(-1);
 }

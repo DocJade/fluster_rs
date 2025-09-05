@@ -100,7 +100,7 @@ impl DirectoryBlock {
             }
             // Get the size of this file
             let inode = item.get_inode()?;
-            let file = inode.extract_file().expect("Guarded.");
+            let file = inode.extract_file().expect("The inode the directory item points at should be a file.");
             total_size += file.get_size()
         }
 
@@ -138,80 +138,101 @@ impl DirectoryBlock {
 
         // Go find the item.
 
+        // Nice struct to make dealing with this a bit nicer
+        struct ItemFound {
+            /// The item
+            item: DirectoryItem,
+            /// This is set if the removal of that item caused the block to be fully emptied.
+            /// 
+            /// Thus, if this is set, this block needs to be deallocated, and have the block before it
+            /// set to point to this new pointer, which points to the block _after_ the block that the item was found in.
+            /// 
+            /// Slightly confusing.
+            empty_thus_new_pointer: Option<DiskPointer>,
+            /// Which block in the list we were contained within, indexed from front to back.
+            origin_index: usize,
+
+        }
+
         // Get the blocks
         let mut blocks: Vec<DirectoryBlock> = get_blocks(self.block_origin)?;
 
         // Find the item, and deduce what block it's in.
         // Index, the item, maybe pointer to the next block
-        let mut find: Option<(usize, DirectoryItem, Option<DiskPointer>)> = None;
+        let mut find: Option<ItemFound> = None;
         for (index, block) in blocks.iter_mut().enumerate() {
             // Is it in here?
             if let Some(found) = block.block_extract_item(item_to_find)? {
                 // Cool!
-                find = Some((index, found.0, found.1));
+                find = Some(ItemFound {
+                    item: found.0,
+                    empty_thus_new_pointer: found.1,
+                    origin_index: index,
+                });
                 break
             }
 
         };
 
-        // Did we find it?
-        if find.is_none() {
-            // No we didn't.
-            return Ok(None);
-        }
-
-        // We found the item!
-        // Discombobulate.
-        let (contained_in, found_item, maybe_pointer) = find.expect("Guard.");
-
-        // If we didn't get a pointer, we are done.
-        let after_this_pointer = if let Some(point) = maybe_pointer {
-            point
-        } else {
-            // No pointer, no cleanup.
-            return Ok(Some(found_item));
+        // Did we find the item?
+        let found = match find {
+            Some(ok) => ok,
+            None => {
+                // Item did not exist.
+                return Ok(None);
+            },
         };
-        
-        // We got a pointer. If we got this item from the first block in the chain (the head) we
-        // don't need to do anything.
-        if contained_in == 0 {
-            // Since this happened on the first block, we need to also update the block we got in to operate on.
-            // Due to DirectoryBlocks not supporting copy/clone, we have to do some funky stuff to get it back out
-            // of the vec.
-            // swap_remove is okay since we wont be touching blocks after this.
-            *self = blocks.swap_remove(0);
-            // No cleanup needed.
-            return Ok(Some(found_item));
+
+        // If we didn't get a pointer, there is no required cleanup, since no blocks were emptied.
+        let new_pointer = match found.empty_thus_new_pointer {
+            Some(ok) => ok,
+            None => {
+                // No cleanup required!
+                return Ok(Some(found.item));
+            },
+        };
+
+        // We got a pointer, thus a block was emptied.
+
+        // If the block that was emptied was the first one in the list, don't need to do anything.
+        // Sure, we could shuffle the head forwards, but adding things to directories searches front to back anyways, so
+        // switching the pointers around would be needlessly complicated.
+        if found.origin_index == 0 {
+            // Cool!
+            return Ok(Some(found.item));
         }
 
-        // The block is now empty, and we need to do something about that.
+        // We have emptied a block in the middle of the chain. We need to update the pointer behind us to point
+        // past us.
 
-        // We will update the block in front of us to point at the block after us (if there is one).
-        // In theory this could leave a very sparse directory block if things are removed in ways that leave
-        // a lot of blocks with 1 item in them, but since adding items to directories starts from the front, we will
-        // fill that space back up eventually.
+        // This operation is independent to the block in front of us, so no update is required there.
 
-        let previous_block = &mut blocks[contained_in - 1];
-            
-        // Set new destination
-        // If there wasn't a block in front of this, this'll just set it to DiskPointer::new_final_pointer() which is
-        // correct, since this would be the new end.
+        // If this was the last block in the chain, this will just point to the no_destination pointer, which just marks the
+        // new end of the chain.
 
-        previous_block.next_block = after_this_pointer;
-        // Write it
+        let previous_block = &mut blocks[found.origin_index - 1];
+
+        // Now update that block with the new pointer
+        previous_block.next_block = new_pointer;
+
+        // Update it.
         let raw_ed = previous_block.to_block();
         CachedBlockIO::update_block(&raw_ed)?;
 
+        // Now we will free that block that was emptied.
+
         // Now delete the block that we emptied by freeing it.
-        let release_me = blocks[contained_in].block_origin;
+        let release_me = blocks[found.origin_index].block_origin;
         let freed = Pool::free_pool_block_from_disk(&[release_me])?;
         // this should ALWAYS be 1
-        assert_eq!(freed, 1);
+        assert_eq!(freed, 1, "We should always free one block when removing an empty directory block in a chain.");
         
         // All done!
-        // Update the incoming block head
+        // Update the incoming block head, in case we changed it.
+        // Since we need to own this, we'll just pull it out of the vec.
+        // The updated block order does not matter, since we're immediately dropping this afterwards.
         *self = blocks.swap_remove(0);
-        Ok(Some(found_item))
+        Ok(Some(found.item))
     }
 
     /// Extract an item from this directory block, if it exists.
@@ -227,7 +248,7 @@ impl DirectoryBlock {
         if let Some(found) = item_to_find.find_in(&self.directory_items) {
             // Found the item!
             // Remove it from ourselves.
-            self.try_remove_item(&found).expect("Guard");
+            self.try_remove_item(&found).expect("Guard, we already know its in there.");
             // Now flush ourselves to disk
             let raw_block = self.to_block();
             CachedBlockIO::update_block(&raw_block)?;
@@ -268,7 +289,7 @@ impl DirectoryBlock {
         // We also take in the directory item instead of the named item, since you shouldn't be holding onto it after this.
 
         // Make sure the name is valid.
-        assert!(new_name.len() <= 255);
+        assert!(new_name.len() <= 255, "Name is too long.");
 
         // Get the item
         if let Some(mut exists) = self.find_and_extract_item(to_rename)? {
@@ -357,7 +378,7 @@ fn get_blocks(start_block_location: DiskPointer) -> Result<Vec<DirectoryBlock>, 
     // need to return the head block, we have to go get it ourselves.
 
     // This must be a valid block
-    assert!(!start_block_location.no_destination());
+    assert!(!start_block_location.no_destination(), "Provided head directory block does not exist!");
     
     let raw_read: RawBlock = CachedBlockIO::read_block(start_block_location)?;
     let start_block: DirectoryBlock = DirectoryBlock::from_block(&raw_read);

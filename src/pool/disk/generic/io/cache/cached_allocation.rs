@@ -1,7 +1,5 @@
 // Sidestep the disk if possible when marking a block as allocated.
 
-use std::process::exit;
-
 use log::error;
 
 use crate::{
@@ -67,7 +65,7 @@ impl BlockAllocation for CachedAllocationDisk {
     fn set_allocation_table(&mut self,new_table: &[u8]) -> Result<(), DriveError> {
         self.imitated_header.block_usage_map = new_table
             .try_into()
-            .expect("Incoming table should be the same as outgoing.");
+            .expect("Incoming table size should be the same as outgoing.");
 
         // Since the allocation table has changed, we need to now update the cached block
         // for this disk later.
@@ -103,7 +101,7 @@ impl Drop for CachedAllocationDisk {
                     error!("Well.. Shit!");
                     error!("Filesystem is in an unrecoverable state!");
                     error!("Giving up.");
-                    exit(1) // bye bye!
+                    panic!("Failed to flush CachedAllocationDisk!") // bye bye!
                 }
                 error!("{remaining_attempts} attempts remaining!")
             } else {

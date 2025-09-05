@@ -1,7 +1,8 @@
 // how da tui looks.
 
-use std::time::{Duration, Instant};
+use std::{time::{Duration, Instant}};
 
+use log::error;
 use ratatui::{crossterm, layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style, Stylize}, text::Text, widgets::{Block, Borders, Clear, Gauge, List}, Frame};
 use tui_logger::{TuiLoggerLevelOutput, TuiLoggerWidget};
 use tui_textarea::{Input, Key};
@@ -348,24 +349,36 @@ fn pop_up_handler(frame: &mut Frame, incoming_pop_up: &mut Option<TuiPrompt>) {
     // remove the prompt.
 
     // But we don't block here, we just see if a key has been pressed.
-    let event_waiting = crossterm::event::poll(Duration::from_millis(0)).expect("Polling for events should not fail.");
+    // If the polling fails, we just move on, and hope it gets hit next time.
+    let event_waiting = crossterm::event::poll(Duration::from_millis(0)).unwrap_or(false);
     if !event_waiting {
         // No events, so we're done.
         return
     }
 
     // Handle the event.
-    match crossterm::event::read().expect("Reading from terminal should not fail.").into() {
+    let read = if let Ok(event) = crossterm::event::read() {
+        event
+    } else {
+        // Tried to read, got nothing. Hopefully we'll catch this on the next time around.
+        return
+    };
+
+    match read.into() {
         Input {
             key: Key::Esc | Key::Enter,
             ..
         } => {
             // The user has exited the prompt, we're done!
-            // To respond, we need to pull out the TuiPrompt and swap a None into its place
-            let extracted = incoming_pop_up.take().expect("Guard.");
+            // To respond, we need to pull out the TuiPrompt and swap a None into its place.
+            // Higher up we already checked that the pop-up exists, so we can safely extract it.
+            let extracted = incoming_pop_up.take().expect("Guarded, already checked that the pop-up exists.");
+
             
             // We always send the string back, caller will toss it if they dont need it.
-            extracted.callback.send(extracted.text_area.into_lines().concat()).expect("Receiver should not be dropped.");
+            // It would be really strange for the caller to have died, since they should just be blocking until hearing a result, so
+            // if they dont eat the result, there's not really much we can do.
+            let _ = extracted.callback.send(extracted.text_area.into_lines().concat());
         },
         input => {
             // User typed

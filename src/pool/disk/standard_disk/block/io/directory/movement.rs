@@ -39,15 +39,18 @@ impl DirectoryBlock {
 
         let found_dir = self.find_item(&NamedItem::Directory(directory_name))?;
         NotifyTui::complete_task_step(&handle);
-        if found_dir.is_none() {
-            // The directory did not exist.
-            NotifyTui::complete_multiple_task_steps(&handle, 2);
-            NotifyTui::finish_task(handle);
-            debug!("Directory did not exist.");
-            return Ok(None)
-        }
-        debug!("Directory exists.");
-        let wanted = found_dir.expect("Just checked");
+
+        // Return if the dir did not exist, or keep goin
+        let wanted = match found_dir {
+            Some(found) => found,
+            None => {
+                // The directory did not exist.
+                NotifyTui::complete_multiple_task_steps(&handle, 2);
+                NotifyTui::finish_task(handle);
+                debug!("Directory did not exist.");
+                return Ok(None)
+            },
+        };
         
         // Directory exists, time to open that bad boy
         // Extract the location
@@ -80,7 +83,8 @@ impl DirectoryBlock {
             .directory
             .expect("Should point to a directory inode, not a file.")
             .pointer;
-        assert!(!actual_next_block.no_destination()); // Just in case...
+        // Just in case...
+        assert!(!actual_next_block.no_destination(), "Tried to open a new directory block, but pointer had no destination");
 
         // Go go go!
         let new_dir_block: DirectoryBlock =

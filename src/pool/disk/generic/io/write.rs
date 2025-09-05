@@ -119,10 +119,10 @@ pub(crate) fn write_large_direct(disk_file: &File, data: &Vec<u8>, start_block: 
     let pointer: DiskPointer = start_block;
 
     // Must write full blocks (512 byte chunks)
-    assert!(data.len().rem(512) == 0);
+    assert!(data.len().rem(512) == 0, "Large writes must be a multiple of 512!");
 
     // Make sure we don't run off the end of the disk
-    assert!(start_block.block + ((data.len().div_ceil(512) - 1) as u16) < 2880_u16);
+    assert!(start_block.block + ((data.len().div_ceil(512) - 1) as u16) < 2880_u16, "Write would go off the end of the disk!");
 
     trace!(
         "Directly writing {} blocks worth of bytes starting at block {} to currently inserted disk...",

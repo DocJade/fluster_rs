@@ -36,8 +36,8 @@ impl LoveHandles {
         let num = self.next_free();
 
         // Put it in the hashmap.
-        // We also assert that we have not already used this number
-        assert!(self.allocated.insert(num, item).is_none());
+        // We also assert that we have not already used this number.
+        assert!(self.allocated.insert(num, item).is_none(), "We already used this handle number, even though we thought it was free!");
 
         // All done.
         num

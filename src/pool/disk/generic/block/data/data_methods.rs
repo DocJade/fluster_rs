@@ -36,19 +36,18 @@ impl DataBlock {
 fn write_to_block(block: &mut DataBlock, bytes: &[u8]) -> u16 {
     // Calculate how many bytes to write
     // We can write at most 508 bytes, so try to grab that many, or as much as we can.
-    let number_of_bytes_to_write: u16 = min(508_usize, bytes.len())
-        .try_into()
-        .expect("Max is always 512");
+    let number_of_bytes_to_write = min(508_usize, bytes.len());
 
     // Copy that many bytes in
     block.data[..number_of_bytes_to_write as usize]
         .copy_from_slice(&bytes[..number_of_bytes_to_write as usize]);
 
     // Update the length with how many bytes are in the block
-    block.length = number_of_bytes_to_write;
+    // This is always at most 508, so we can safely cast.
+    block.length = number_of_bytes_to_write as u16;
 
     // All done.
-    number_of_bytes_to_write
+    number_of_bytes_to_write as u16
 }
 
 // Returns a slice of all of the written bytes on the block

@@ -1,28 +1,54 @@
 // Pool level block allocations
 
-use log::debug;
 
-use crate::{error_types::drive::DriveError, pool::{
-    disk::{
-        generic::{
-            block::{
-                allocate::block_allocation::BlockAllocation,
-                block_structs::RawBlock,
-                crc::add_crc_to_block
+use log::{debug, error};
+
+use crate::{
+    error_types::drive::DriveError, pool::{
+        disk::{
+            generic::{
+                block::{
+                    allocate::block_allocation::BlockAllocation,
+                    block_structs::RawBlock,
+                    crc::add_crc_to_block
+                },
+                generic_structs::pointer_struct::DiskPointer,
+                io::cache::{
+                    cache_io::CachedBlockIO,
+                    cached_allocation::CachedAllocationDisk
+                }
             },
-            generic_structs::pointer_struct::DiskPointer,
-            io::cache::{
-                cache_io::CachedBlockIO,
-                cached_allocation::CachedAllocationDisk
-            }
+            standard_disk::standard_disk_struct::StandardDisk,
         },
-        standard_disk::standard_disk_struct::StandardDisk,
+        pool_actions::pool_struct::{
+            Pool,
+            GLOBAL_POOL
+        },
     },
-    pool_actions::pool_struct::{
-        Pool,
-        GLOBAL_POOL
-    },
-}, tui::{notify::NotifyTui, tasks::TaskType}};
+    tui::{
+        notify::NotifyTui,
+        tasks::TaskType
+    }
+};
+
+
+// We need to be able to get at the innards of the Global Pool quite often.
+// If they dont exist at this stage, we're cooked regardless and must exit.
+macro_rules! get_pool {
+    () => {
+        if let Ok(innards) = GLOBAL_POOL.get().expect("Global pool should be created at this stage!").try_lock() {
+            innards
+        } else {
+            // Somebody peed in the pool.
+            // Usually we would try to do something about this, but the pool should be shutting down if
+            // poisoning has occurred. Which in that case, we should NOT be allocating new blocks!
+            // No recovery will be attempted.
+            panic!("A poisoned pool cannot be allocated against!");
+        }
+    };
+}
+
+
 
 impl Pool {
     /// Finds blocks across the entire pool.
@@ -71,21 +97,13 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
     let handle = NotifyTui::start_task(TaskType::PoolAllocateBlocks(blocks), blocks.into());
     debug!("Attempting to allocate {blocks} blocks across the pool...");
 
-    debug!("Locking GLOBAL_POOL...");
-    let probable_disk = GLOBAL_POOL
-        .get()
-        .expect("Single threaded")
-        .try_lock()
-        .expect("Single threaded")
-        .header
-        .disk_with_next_free_block;
-    let highest_disk = GLOBAL_POOL
-        .get()
-        .expect("Single threaded")
-        .try_lock()
-        .expect("Single threaded")
-        .header
-        .highest_known_disk;
+    // Get where we're most likely to find the next free block, and hold onto the highest
+    // known disk as well, in-case we need to grow the pool.
+    // Scoped to drop the mutex.
+    let (probable_disk, highest_disk) = {
+        let header = get_pool!().header;
+        (header.disk_with_next_free_block, header.highest_known_disk)
+    };
 
     // First we open up the disk with the most recent successful pool allocation
     let mut disk_to_check = probable_disk;
@@ -95,9 +113,16 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
     // vec.
     let mut free_blocks: Vec<DiskPointer> = Vec::with_capacity(blocks.into());
 
-    // Make sure the highest disks and disk to check are valid
-    assert_ne!(disk_to_check, u16::MAX);
-    assert!(new_highest_disk >= 1); // A new pool has at least 2 disks.
+    // Make sure the highest disks and disk to check are valid.
+    // Getting here is a bad sign, allowing this continue is a worse one.
+    // We will just give up if such an event transpires.
+    if disk_to_check == u16::MAX || new_highest_disk < 1 {
+        // Either we're trying to allocate on an invalid disk, or the pool
+        // doesnt have enough disks?
+        error!("Tried to allocate on u16::MAX or we didn't have enough disks!");
+        error!("We cannot continue!");
+        panic!("Impossible pool-level allocation!");
+    }
 
     // Now we loop until we find enough free blocks.
     loop {
@@ -136,14 +161,10 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
                 // We also need to update the global pool to say these were marked as used, otherwise we would never know.
                 // Trust me I found out the hard way.
                 debug!("Updating the pool's free block count...");
-                debug!("Locking GLOBAL_POOL...");
-                GLOBAL_POOL
-                    .get()
-                    .expect("single threaded")
-                    .try_lock()
-                    .expect("single threaded")
-                    .header
-                    .pool_standard_blocks_free -= ok.len() as u32;
+                {
+                    let mut header = get_pool!().header;
+                    header.pool_standard_blocks_free -= ok.len() as u32;
+                }
 
                 // Add crc to blocks if requested.
                 if add_crc {
@@ -164,9 +185,9 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
                     continue;
                 }
 
-                let blockie_doos = disk
-                    .find_free_blocks(amount)
-                    .expect("We already asked how much room you had.");
+                let blockie_doos = disk.find_free_blocks(amount).expect("Disk should not change its mind about how many blocks it has free");
+
+
                 free_blocks.append(&mut block_indexes_to_pointers(&blockie_doos, disk_to_check));
 
                 // Allocate those blocks if needed.
@@ -178,14 +199,10 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
                 // We also need to update the global pool to say these were marked as used, otherwise we would never know.
                 // Trust me I found out the hard way.
                 debug!("Updating the pool's free block count...");
-                debug!("Locking GLOBAL_POOL...");
-                GLOBAL_POOL
-                    .get()
-                    .expect("single threaded")
-                    .try_lock()
-                    .expect("single threaded")
-                    .header
-                    .pool_standard_blocks_free -= blockie_doos.len() as u32;
+                {
+                    let mut header = get_pool!().header;
+                    header.pool_standard_blocks_free -= blockie_doos.len() as u32;
+                }
                 
                 // Add crc to blocks if requested
                 if add_crc {
@@ -202,16 +219,11 @@ fn go_find_free_pool_blocks(blocks: u16, add_crc: bool) -> Result<Vec<DiskPointe
         }
     }
 
-    // Now that we have allocated, the most probable disk is the last disk we got blocks from
-    GLOBAL_POOL
-        .get()
-        .expect("Single threaded")
-        .try_lock()
-        .expect("Single threaded")
-        .header
-        .disk_with_next_free_block = disk_to_check;
-
-
+    // Now that we have allocated, the most probable disk is the last disk we got blocks from.
+    {
+        let header = &mut get_pool!().header;
+        header.disk_with_next_free_block = disk_to_check;
+    }
 
     // We will sort the resulting vector to make to group the disks together, this will
     // reduce swapping.
@@ -272,13 +284,22 @@ fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, DriveError> {
     // We assume the blocks are pre-sorted to reduce disk seeking, but even
     // if they aren't, the cache will re-sort them on write.
 
-    // Make sure all of the blocks came from the same disk
-    let starter: DiskPointer = *blocks.first().expect("Why are we getting 0 blocks?");
+    // We have to be fed at least one block.
+    if blocks.is_empty() {
+        // Freeing 0 blocks does nothing, so...
+        return Ok(0)
+    }
+
+    // All of the disk numbers must be the same, otherwise this is a mallformed free call.
+    let starter = blocks[0]; // Already checked if the array is empty.
+    if !blocks.iter().all(|pointer| pointer.disk == starter.disk) {
+        // At least one of the blocks is for a different disk, we can't do that.
+        panic!("Pool deallocation attempted to free blocks from multiple different disks at once! Not allowed!");
+    }
+
     let mut extracted_blocks: Vec<u16> = Vec::with_capacity(blocks.len());
     for block in blocks {
-        // Are the disk numbers the same?
-        assert_eq!(starter.disk, block.disk);
-        // Also hold onto the block number, need it for disk call.
+        // Hold onto the block number, need it for disk call.
         extracted_blocks.push(block.block);
     }
 
@@ -306,34 +327,18 @@ fn go_deallocate_pool_block(blocks: &[DiskPointer]) -> Result<u16, DriveError> {
 
     // If the current disk in the pool marked with free blocks is higher than the blocks we just freed,
     // we need to move back the search start for finding new free blocks.
+    //
+    // Then update the free count, since new blocks are available.
 
-    let probable_disk = GLOBAL_POOL
-        .get()
-        .expect("Single threaded")
-        .try_lock()
-        .expect("Single threaded")
-        .header
-        .disk_with_next_free_block;
+    {
+        let header = &mut get_pool!().header;
+        if header.disk_with_next_free_block > starter.disk {
+            // It's higher, we need to move the pool back.
+            header.disk_with_next_free_block = starter.disk;
+        }
 
-    if probable_disk > starter.disk {
-        // It's higher, we need to move the pool back.
-        GLOBAL_POOL
-            .get()
-            .expect("Single threaded")
-            .try_lock()
-            .expect("Single threaded")
-            .header
-            .disk_with_next_free_block = starter.disk;
+        header.pool_standard_blocks_free += blocks_freed as u32;
     }
-
-    // Update the free count, since new blocks are available.
-    GLOBAL_POOL
-    .get()
-    .expect("single threaded")
-    .try_lock()
-    .expect("single threaded")
-    .header
-    .pool_standard_blocks_free += blocks_freed as u32;
 
     // Return the number of blocks freed.
     debug!("Done. {blocks_freed} pool blocks freed.");

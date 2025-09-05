@@ -74,6 +74,9 @@ use crate::{
 //
 
 // The maximum amount of blocks all caches can store
+#[cfg(test)] // Small cache on test is faster.
+const CACHE_SIZE: usize = 2880 * 2;
+#[cfg(not(test))]
 const CACHE_SIZE: usize = 2880 * 16;
 
 // The actual cached data
@@ -361,7 +364,7 @@ impl CachedBlock {
 fn go_try_find_cache(pointer: DiskPointer, silent: bool) -> Option<CachedBlock> {
 
     // Make sure this is a valid disk pointer, otherwise something is horribly wrong.
-    assert!(!pointer.no_destination());
+    assert!(!pointer.no_destination(), "Tried to find the no_destination pointer in the block cache!");
 
     // To prevent callers from having to lock the global themselves, we will grab it here ourselves
     // and pass it downwards into any functions that require it.
@@ -453,7 +456,7 @@ fn go_promote_item_cache(cache: &mut BlockCache, t0_item: CachedBlock) {
 fn go_add_or_update_item_cache(block: CachedBlock) -> Result<(), DriveError> {
 
     // Make sure the block has a valid location
-    assert!(!block.block_origin.no_destination());
+    assert!(!block.block_origin.no_destination(), "Attempted to add a block to the cache with a location of no_destination !");
 
     // We don't update the cache statistics in here, since a hit while updating makes no sense.
 
@@ -630,7 +633,7 @@ fn go_extract_tier_item(tier: &mut TieredCache, index: usize) -> Option<CachedBl
 
 fn go_add_tier_item(tier: &mut TieredCache, item: CachedBlock) {
     // New tier items go at the front, since they are the freshest.
-    assert!(!tier.is_full());
+    assert!(!tier.is_full(), "Tried to add an item to a tier that is already full!");
 
     // Put the pointer into the ordering
     tier.order.push_front(item.block_origin);
@@ -639,26 +642,26 @@ fn go_add_tier_item(tier: &mut TieredCache, item: CachedBlock) {
     let already_existed = tier.items_map.insert(item.block_origin, item);
 
     // Make sure that did not already exist
-    assert!(already_existed.is_none());
+    assert!(already_existed.is_none(), "Item added to the tier was a duplicate!");
 }
 
 fn go_update_tier_item(tier: &mut TieredCache, index: usize, new_item: CachedBlock) {
     // Replace the item, IE the contents of the block have changed.
 
     // If the contents have changed, the new item MUST have the flush bool set.
-    assert!(new_item.requires_flush);
+    assert!(new_item.requires_flush, "Incoming update item for tier did not have the flush bit set!");
 
     // Updating is an access after all... so we will promote it.
 
     // Update the order
-    let to_move = tier.order.remove(index).expect("Should exist.");
+    let to_move = tier.order.remove(index).expect("Provided index into the tier should be valid.");
     tier.order.push_front(to_move);
 
     // Now replace the item in the hashmap at the index.
     let replaced = tier.items_map.insert(to_move, new_item);
     
     // Make sure we actually replaced it. Not adding here!
-    assert!(replaced.is_some());
+    assert!(replaced.is_some(), "Tier item we were trying to update wasn't there!");
 }
 
 fn go_get_tier_best(tier: &mut TieredCache) -> Option<CachedBlock> {
@@ -709,7 +712,7 @@ fn go_flush_tier(tier_number: usize) -> Result<(), DriveError> {
             0 => &mut cache.tier_0,
             1 => &mut cache.tier_1,
             2 => &mut cache.tier_2,
-            _ => panic!("Bro there are only 3 cache tiers"),
+            _ => panic!("Tried to access a non-existent cache tier!"),
         };
         
         // If the tier is empty, there's nothing to do.
@@ -865,7 +868,7 @@ fn go_cleanup_tier(tier_number: usize) -> Option<u64> {
         0 => &mut cache.tier_0,
         1 => &mut cache.tier_1,
         2 => &mut cache.tier_2,
-        _ => panic!("Bro there are only 3 cache tiers"),
+        _ => panic!("Tried to access a non-existent cache tier!"),
     };
     
     // If the tier is empty, there's nothing to do.
@@ -884,7 +887,7 @@ fn go_cleanup_tier(tier_number: usize) -> Option<u64> {
     // the blocks we dont need as we come across them.
     blocks_to_cleanup_order.retain(|pointer| {
         // Get the block from the hashmap
-        let block = blocks_to_cleanup_map.get(pointer).expect("If there's a key, there's a block.");
+        let block = blocks_to_cleanup_map.get(pointer).expect("If there's a key in, there should be a block.");
         if block.requires_flush {
             // This needs to be flushed, so we return true to hold onto this block.
             return true; // Weird that return works in here, never seen that before.
@@ -1038,7 +1041,7 @@ fn go_find_most_common_disk() -> (u16, u16) {
     }
 
     // Now get the best disk
-    disks.drain().max_by_key(|pair| pair.1).expect("Tier should have items.")
+    disks.drain().max_by_key(|pair| pair.1).expect("Should only be called on non-empty tiers.")
 }
 
 fn go_get_cache_pressure() -> f64 {
@@ -1054,7 +1057,7 @@ fn go_get_tier_free_space(tier_number: usize) -> usize {
         0 => &cache.tier_0,
         1 => &cache.tier_1,
         2 => &cache.tier_2,
-        _ => panic!("Bro there are only 3 cache tiers"),
+        _ => panic!("Tried to access a non-existent cache tier!"),
     };
 
     tier_to_check.size - tier_to_check.items_map.len()

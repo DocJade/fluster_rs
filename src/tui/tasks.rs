@@ -266,7 +266,7 @@ impl ProgressableTask {
 
         self.task.steps_finished += steps;
         // You cannot finish more steps than you need to complete.
-        assert!(self.task.steps_finished <= self.task.steps);
+        assert!(self.task.steps_finished <= self.task.steps, "Tasks cannot complete more steps than they contain!");
     }
 
     /// Add a sub-task.
@@ -300,6 +300,7 @@ impl ProgressableTask {
         }
         
         // This is the final task in the chain.
+        // Make sure we finished all of the steps we set out to do.
         assert!(self.task.steps == self.task.steps_finished, "Task was not finished! {:#?}", self.task);
 
         // Remove the task.

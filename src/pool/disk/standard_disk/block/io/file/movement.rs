@@ -54,7 +54,7 @@ impl DirectoryItem {
         let block: InodeBlock = InodeBlock::from_block(&raw_block);
         
         // return the inode
-        let inode_good = block.try_read_inode(self.location.offset).expect("Don't feed this invalid offsets! hehehe");
+        let inode_good = block.try_read_inode(self.location.offset).expect("Invalid inode offset provided!");
         debug!("Inode found.");
         Ok(inode_good)
     }

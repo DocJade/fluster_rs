@@ -3,7 +3,7 @@
 // We will take in InodeFile(s) instead of Extent related types, since we need info about how big files are so they are easier to extend.
 // Creating files is handles on the directory side, since new files just have a name and location.
 
-use std::{cmp::max, ops::{Div, Rem}};
+use std::{cmp::max, ops::{Div, Rem}, process::exit};
 
 use log::{debug, warn};
 use log::error;
@@ -81,7 +81,10 @@ impl DirectoryBlock {
     /// Panics if fed a directory. Use remove_directory() !
     pub fn delete_file(&mut self, file: NamedItem) -> Result<Option<()>, DriveError> {
         // We only handle files here
-        assert!(file.is_file());
+        if !file.is_file() {
+            // Why
+            panic!("Cannot delete_file a non-file!");
+        }
         
         // Extract the item
         let extracted_item: DirectoryItem;
@@ -120,10 +123,10 @@ impl DirectoryItem {
     /// 
     /// Optionally returns to a specified disk.
     pub fn write_file(&self, bytes: &[u8], seek_point: u64) -> Result<u32, DriveError> {
-        // Is this a file?
+        // We only handle files here
         if self.flags.contains(DirectoryItemFlags::IsDirectory) {
-            // Uh, no it isn't why did you give me a dir?
-            panic!("Tried to read a directory as a file!")
+            // Why
+            panic!("Cannot delete_file a non-file!");
         }
 
         // Extract out the file
@@ -135,9 +138,27 @@ impl DirectoryItem {
         let read: RawBlock = CachedBlockIO::read_block(the_pointer_in_question)?;
         let mut inode_block: InodeBlock = InodeBlock::from_block(&read);
 
-        // Get the actual file
-        let inode_with_file = inode_block.try_read_inode(location.offset).expect("Caller guarantee.");
-        let mut file = inode_with_file.extract_file().expect("Caller guarantee.");
+        // Get the actual file.
+        // The inode MUST exist.
+        // A smarter filesystem would return the fact that the inode is missing and either try to rebuild it or
+        // have the caller discard the item. But er, I dont have time.
+        
+        let inode_with_file = if let Ok(inode) = inode_block.try_read_inode(location.offset) {
+            inode
+        } else {
+            // No inode...
+            // Maybe some day, propagate that...
+            // If this fails in the video, I'll write it lmao.
+            panic!("No inode exists for this DirectoryItem's file. We cannot read it.");
+        };
+
+        // We already checked that this is a file.
+        let mut file = if let Some(the_file) = inode_with_file.extract_file() {
+            the_file
+        } else {
+            // ???
+            panic!("File is a file, but not a file. Nice.");
+        };
 
         // Write to the file
         // This automatically updates the underlying file with the new size.
@@ -167,8 +188,6 @@ impl DirectoryItem {
     /// 
     /// Panics if fed a directory.
     pub fn truncate(&self, new_size: u64) -> Result<(), DriveError> {
-        // Make sure this is a file
-        assert!(!self.flags.contains(DirectoryItemFlags::IsDirectory));
         truncate_or_delete_file(self, false, Some(new_size))
     }
 }
@@ -187,7 +206,10 @@ fn go_write(inode_file: &mut InodeFile, bytes: &[u8], seek_point: u64) -> Result
     byte_index -= 1;
 
     // Make sure we actually have a block at that offset. We cannot start writing from unallocated space.
-    assert!(block_index <= blocks.len());
+    if block_index > blocks.len() {
+        // Being told to write to a point we do not have.
+        panic!("Attempted to write to unallocated space!");
+    }
     
     // Now we can calculate where the final byte of this write will end up.
     // Minus 1, since we are writing to the byte we start the seek from
@@ -212,11 +234,14 @@ fn go_write(inode_file: &mut InodeFile, bytes: &[u8], seek_point: u64) -> Result
         // from u16::MAX, but we check anyways.
 
         // We hard cap it to u16 block though, just in case.
-        assert!(needed_blocks <= u16::MAX.into());
+        if needed_blocks > u16::MAX.into() {
+            // Crazy.
+            panic!("Tried to write 2^16 blocks worth of data in one go! Not allowed!");
+        }
 
         // Add that many more blocks to this file.
         // Since we know its already less than u16::MAX this cast is fine.
-        let new_pointers = expand_file(*inode_file, needed_blocks.try_into().expect("Guarded."))?;
+        let new_pointers = expand_file(*inode_file, needed_blocks as u16)?;
 
         // The new pointers are already in order for us, and we will add them onto the end of the
         // pointers we grabbed earlier from the file.
@@ -275,7 +300,9 @@ fn update_block(block: DiskPointer, bytes: &[u8], offset: u16) -> Result<usize, 
     let offset = offset as usize;
 
     // Check for impossible offsets
-    assert!(offset < data_capacity, "Tried to write outside of the capacity of a block.");
+    if offset >= data_capacity {
+        panic!("Tried to write outside of the capacity of a block.");
+    }
     
     // Calculate bytes to write based on REMAINING space.
     let remaining_space = data_capacity - offset;
@@ -284,8 +311,10 @@ fn update_block(block: DiskPointer, bytes: &[u8], offset: u16) -> Result<usize, 
     // We also don't support 0 byte writes.
     // Since that would be a failure mode of the caller, in theory could be
     // stuck in an infinite loop type shi.
-    // Why panic? It won't if you fix the caller! :D
-    assert_ne!(bytes_to_write, 0, "Tried to write 0 bytes to a block!");
+    // Why exit? It won't if you fix the caller! :D
+    if bytes_to_write == 0 {
+        panic!("Tried to write 0 bytes to a block!");
+    }
 
     // Now, if we are about to completely fill a block (ie every byte in the block will change)
     // we dont need to actually "update" the block, we can just replace it entirely.
@@ -351,17 +380,16 @@ fn expand_file(inode_file: InodeFile, blocks: u16) -> Result<Vec<DiskPointer>, D
 fn expand_extent_block(block: &mut FileExtentBlock) -> Result<(), DriveError> {
     // Get a new block from the pool.
     // No need for crc, we will immediately write over it.
-    let the_finder = Pool::find_and_allocate_pool_blocks(1, false)?;
-    let new_block_location = the_finder.last().expect("Asked for 1.");
+    let new_block_location = Pool::find_and_allocate_pool_blocks(1, false)?[0];
 
     // Put the a block there
-    let new_block: RawBlock = FileExtentBlock::new(*new_block_location).to_block();
+    let new_block: RawBlock = FileExtentBlock::new(new_block_location).to_block();
 
     // Write, since we looked for a free block, didn't reserve it yet.
     CachedBlockIO::update_block(&new_block)?;
 
     // Now update the block we came in here with
-    block.next_block = *new_block_location;
+    block.next_block = new_block_location;
 
     // Updated! All done.
     Ok(())
@@ -400,15 +428,9 @@ fn expanding_add_extents(file: InodeFile, extents: &[FileExtent]) -> Result<(), 
 
         // This is the final block.
         // Try adding extents
-        loop {
-            // Make sure we still have a extent
-            if new_extents.is_empty() {
-                // We're all done adding!
-                break
-            }
-
+        while let Some(last) = new_extents.last() {
             // Try adding a new extent.
-            let added_result = current_extent_block.add_extent(*new_extents.last().expect("Guarded."));
+            let added_result = current_extent_block.add_extent(*last);
 
             // if that worked, that means we added the extent successfully.
             if added_result.is_ok() {
@@ -485,7 +507,15 @@ fn pointers_into_extents(pointers: &[DiskPointer]) -> Vec<FileExtent> {
         }
         
         // This pointer extends the previous (or new) extent block, add one to the length.
-        new_extents.last_mut().expect("Guarded.").length += 1;
+        match new_extents.last_mut() {
+            Some(last) => {
+                last.length += 1;
+            },
+            None => {
+                // I guess we never got any pointers.
+                // Do nothing.
+            },
+        }
     }
 
     // All done!
@@ -497,15 +527,18 @@ fn go_make_new_file(directory_block: &mut DirectoryBlock, name: String) -> Resul
     // Directory blocks already have a method to add a new item to them, so we just need
     // to create that item to add.
 
-    // New files must have a filename that is <= u8::MAX
-    assert!(name.len() <= u8::MAX.into());
+    // New files must have a filename that is <= u8::MAX.
+    // Caller is in charge of checking this before giving it to us.
+    if name.len() > u8::MAX.into() {
+        panic!("File name was too long!");
+    }
 
     // Timestamp for file creation
     let right_now: InodeTimestamp = InodeTimestamp::now();
     
     // No need for CRC, we will be writing over it.
     let in_progress = Pool::find_and_allocate_pool_blocks(1, false)?;
-    let reserved_block: DiskPointer = *in_progress.last().expect("Only asked for one block.");
+    let reserved_block: DiskPointer = in_progress[0];
     
     // Now that we have the new block we need a FileExtentBlock to write into it.
     let new_block: FileExtentBlock = FileExtentBlock::new(reserved_block);
@@ -548,7 +581,7 @@ fn go_make_new_file(directory_block: &mut DirectoryBlock, name: String) -> Resul
     // Construct the new file
     let new_file: DirectoryItem = DirectoryItem {
         flags,
-        name_length: name.len().try_into().expect("Already checked name length."),
+        name_length: name.len() as u8,
         name,
         location: new_inode_location,
     };
@@ -567,7 +600,7 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
     // Is this a file?
     if item.flags.contains(DirectoryItemFlags::IsDirectory) {
         // Uh, no it isn't why did you give me a dir?
-        panic!("Tried to read a directory as a file!");
+        panic!("Tried to truncate or delete a directory as if it was a file!");
     }
 
     // Load the size of the directory item
@@ -581,9 +614,6 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
             // Skip
             return Ok(());
         }
-    } else {
-        // Truncation size is not set, make sure delete flag is set.
-        assert!(delete)
     }
 
     // Extract out the file
@@ -596,8 +626,19 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
     let mut inode_block: InodeBlock = InodeBlock::from_block(&read);
 
     // Get the actual file
-    let mut inode_with_file: Inode = inode_block.try_read_inode(file_inode_location.offset).expect("Caller guarantee.");
-    let mut file: InodeFile = inode_with_file.extract_file().expect("Caller guarantee.");
+    let mut inode_with_file: Inode = if let Ok(inode) = inode_block.try_read_inode(file_inode_location.offset) {
+        inode
+    } else {
+        // The inode for this file does not exist.
+        panic!("Cannot truncate or delete files that do not have an inode!");
+    };
+    // We already checked that this is a file.
+    let mut file: InodeFile = if let Some(the_file) = inode_with_file.extract_file() {
+        the_file
+    } else {
+        // ?
+        panic!("Flag for file set, but no file.");
+    };
 
     // If the truncation is just growing the file, we can do this directly on the file itself without messing with the extents.
 
@@ -608,7 +649,7 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
         // Growing is easy, we just write zeros to make it the new size.
 
         // The difference
-        let grow_size: usize = (extracted_new_size - file_size).try_into().expect("usize should be u64 anyways.");
+        let grow_size: usize = (extracted_new_size - file_size) as usize;
         
         // We need to do this in a loop, since would be consuming as much ram as the write is big, which isn't great.
         // So we will do it in 1MB chunks, but this may change in the future if its too slow.
@@ -631,7 +672,11 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
         }
         
         // Make sure the new size is correct
-        assert_eq!(extracted_new_size, item.get_size().expect("HAS to be there."));
+        let gotten_size = item.get_size()?;
+        if extracted_new_size != gotten_size {
+            // Truncation did not work properly.
+            error!("Truncated to the wrong size! Expected {extracted_new_size} got {gotten_size} !")
+        };
         
         // All done.
         return Ok(());
@@ -667,8 +712,7 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
 
         // Delete all the blocks by freeing all of them.
         for chunk in chunked {
-            let freed = Pool::free_pool_block_from_disk(chunk)?;
-            assert_eq!(freed as usize, chunk.len());
+            let _ = Pool::free_pool_block_from_disk(chunk)?;
         }
 
         // All done!
@@ -676,7 +720,8 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
     }
 
     // Since we didn't delete, we must be shrinking, since we already checked for growing
-    let new_size = new_size.expect("Size must be set if not deleting.");
+    // This should be guarded.
+    let new_size = new_size.expect("Cannot truncate a file without a size to truncate to.");
 
 
     // To truncate, several things need to happen:
@@ -744,10 +789,13 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
     // Go find the block, also keep track of what extent caused us to be full, since
     // that'll be our new final extent.
     let mut new_final_extent_block: FileExtentBlock = first_extent_block;
-    let mut pointer_to_new_final_data_block: Option<DiskPointer> = None;
-    let mut offset_in_final_extent: Option<usize> = None;
-    let mut final_extent_index: Option<usize> = None;
+    // Dummy values that will be overwritten.
+    let mut pointer_to_new_final_data_block: DiskPointer = DiskPointer::new_final_pointer();
+    let mut offset_in_final_extent: usize = 0;
+    let mut final_extent_index: usize = 0;
+
     let mut blocks_seen: usize = 0;
+    let mut done: bool = false;
 
     // At this point, we know the truncation HAS to be less than the current size of the file, thus
     // we do not need to check if we run out of blocks, since they must be there.
@@ -778,18 +826,19 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
 
                 // The number of blocks a extent can hold is at most 256, which fits into an i16 when negative.
                 let offset = pointers.len() - (blocks_seen - new_final_block_index);
-                offset_in_final_extent = Some(offset);
+                offset_in_final_extent = offset;
 
                 // Now we can get the pointer to the final data block
-                pointer_to_new_final_data_block = Some(pointers[offset]);
+                pointer_to_new_final_data_block = pointers[offset];
 
-                final_extent_index = Some(index);
+                final_extent_index = index;
+                done = true;
                 break
             }
         }
 
         // Done?
-        if final_extent_index.is_some() {
+        if done {
             break
         }
         
@@ -799,12 +848,6 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
         let next = FileExtentBlock::from_block(&read);
         new_final_extent_block = next;
     }
-
-    // At this point, we had to've found the new final block and its index.
-    // And others, looping just required an option.
-    let final_extent_index: usize = final_extent_index.expect("This has to be set, otherwise we crashed.");
-    let pointer_to_new_final_data_block = pointer_to_new_final_data_block.expect("Guard");
-    let offset_in_final_extent = offset_in_final_extent.expect("Guard");
 
     // == Update the new final data block. ==
     // == - Write zeros to the end of the block after the new file end point. ==
@@ -977,7 +1020,7 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
         // We can at least estimate it.
         // yes i know that %512 does not account for the flags and such in the data blocks,
         // but we arent counting the extent block overhead either so
-        let leak_estimate: usize = (file_size - new_size).div_ceil(512).try_into().expect("aint no way");
+        let leak_estimate: usize = (file_size - new_size).div_ceil(512) as usize;
         error!("Rough estimate: `{leak_estimate}` additional blocks leaked.");
         error!("Godspeed.");
 
@@ -1106,7 +1149,10 @@ fn truncate_cleanup(pre_collected: Vec<DiskPointer>, next_extent_block: DiskPoin
     let pre_dedup = to_free.len();
     to_free.dedup();
     let post_dedup = to_free.len();
-    assert_eq!(pre_dedup, post_dedup);
+    if pre_dedup != post_dedup {
+        // Sizes are different, cooked.
+        panic!("There was duplicate blocks during truncation cleanup. Cannot continue.");
+    }
 
     // Hold onto how many blocks we're freeing for returning.
     let amount_freed = to_free.len();
@@ -1118,8 +1164,7 @@ fn truncate_cleanup(pre_collected: Vec<DiskPointer>, next_extent_block: DiskPoin
     // This will zero out the blocks, and remove them from the cache for us.
     debug!("Freeing blocks...");
     for chunk in chunked {
-        let freed = Pool::free_pool_block_from_disk(chunk)?;
-        assert_eq!(freed as usize, chunk.len());
+        let _ = Pool::free_pool_block_from_disk(chunk)?;
     }
     debug!("Done.");
     debug!("All done cleaning up truncation.");

@@ -23,7 +23,7 @@ impl GenericDiskMethods for BlankDisk {
     #[doc = " Cannot bypass CRC."]
     fn unchecked_read_block(&self, _block_number: u16) -> Result<RawBlock, DriveError> {
         // We should NEVER read a block from a blank disk, why would we do that?
-        unreachable!()
+        unreachable!("Attempted to read a block from a blank disk! Not allowed! You need to turn it into another type first!")
     }
 
     #[doc = " Write a block"]
@@ -39,13 +39,13 @@ impl GenericDiskMethods for BlankDisk {
     #[doc = " Get the number of the floppy disk."]
     fn get_disk_number(&self) -> u16 {
         // Why are we getting the disk number of a blank floppy?
-        unreachable!()
+        unreachable!("Attempted to get the disk number of a blank disk! Not allowed!")
     }
 
     #[doc = " Set the number of this disk."]
     fn set_disk_number(&mut self, _disk_number: u16) -> () {
         // You cannot set the number of a blank disk.
-        unreachable!()
+        unreachable!("Attempted to set the disk number of a blank disk! Not allowed!")
     }
 
     #[doc = " Get the inner file used for write operations"]
@@ -56,7 +56,8 @@ impl GenericDiskMethods for BlankDisk {
     #[doc = " Sync all in-memory information to disk"]
     fn flush(&mut self) -> Result<(), DriveError> {
         // There is no in-memory information for this disk.
-        unreachable!()
+        // So we can safely ignore this.
+        Ok(())
     }
     
     #[doc = " Write chunked data, starting at a block."]
@@ -67,7 +68,7 @@ impl GenericDiskMethods for BlankDisk {
     #[doc = " Read multiple blocks"]
     #[doc = " Does not check CRC!"]
     fn unchecked_read_multiple_blocks(&self, _block_number: u16, _num_block_to_read: u16) -> Result<Vec<RawBlock>,DriveError> {
-        panic!("Large reads are not allowed on blank disks!");
+        unreachable!("Attempted to read a block from a blank disk! Not allowed! You need to turn it into another type first!")
     }
 }
 
@@ -81,12 +82,12 @@ impl BlankDisk {
 impl BlockAllocation for BlankDisk {
     #[doc = " Get the block allocation table"]
     fn get_allocation_table(&self) ->  &[u8] {
-        panic!("Why are we allocating blocks on a blank disk?")
+        unreachable!("Block allocation is not supported on blank disks.")
     }
     
     #[doc = " Update and flush the allocation table to disk."]
     fn set_allocation_table(&mut self, _new_table: &[u8]) -> Result<(), DriveError> {
-        panic!("Why are we allocating blocks on a blank disk?")
+        unreachable!("Block allocation is not supported on blank disks.")
         
     }
 }

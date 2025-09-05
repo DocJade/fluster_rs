@@ -103,9 +103,7 @@ impl DirectoryBlock {
         CachedBlockIO::update_block(&inode_block.to_block())?;
 
         // Now we can free the block that the directory occupied.
-        let freed = Pool::free_pool_block_from_disk(&[self.block_origin])?;
-        // This should obviously be one.
-        assert_eq!(freed, 1);
+        let _ = Pool::free_pool_block_from_disk(&[self.block_origin])?;
 
         // All done, directory deleted.
         drop(self); // So long
@@ -136,7 +134,7 @@ fn go_make_directory(
     debug!("Name is free.");
 
     // And make sure the name isn't too long.
-    assert!(name.len() < 256);
+    assert!(name.len() < 256, "Can't make a directory with this name, it's too long.");
 
     // Reserve a spot for the new directory
     debug!("Getting a new directory block...");
@@ -190,16 +188,15 @@ fn go_make_directory(
 fn go_make_new_directory_block() -> Result<DiskPointer, DriveError> {
     // Ask the pool for a new block
     // No crc, will overwrite.
-    let get_block = Pool::find_and_allocate_pool_blocks(1, false)?;
-    let new_directory_location = get_block.first().expect("1 = 1");
+    let new_directory_location = Pool::find_and_allocate_pool_blocks(1, false)?[0];
 
     // Open the new block and write that bastard
-    let new_directory_block: RawBlock = DirectoryBlock::new(*new_directory_location).to_block();
+    let new_directory_block: RawBlock = DirectoryBlock::new(new_directory_location).to_block();
 
     CachedBlockIO::update_block(&new_directory_block)?;
 
     // All done!
-    Ok(*new_directory_location)
+    Ok(new_directory_location)
 }
 
 // Add an item to a directory
@@ -211,10 +208,10 @@ fn go_add_item(
     debug!("Adding new item to directory...");
 
     // Added items must have their flag set.
-    assert!(item.flags.contains(DirectoryItemFlags::MarkerBit));
+    assert!(item.flags.contains(DirectoryItemFlags::MarkerBit), "New directory items must have the marker bit set.");
 
     // Added items must have a valid location
-    assert!(!item.location.pointer.no_destination());
+    assert!(!item.location.pointer.no_destination(), "New directory items must have a proper location.");
 
     // Persistent vars
     // We may load in other blocks, so these may change

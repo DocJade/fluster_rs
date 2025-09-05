@@ -189,7 +189,7 @@ fn inode_block_try_remove_inode(
     #[cfg(test)]
     {
         for i in 0..inode_to_remove_length {
-            assert_eq!(block.inodes_data[inode_offset as usize + i], 0)
+            assert_eq!(block.inodes_data[inode_offset as usize + i], 0, "Zeroed out an Inode, but it didn't end up blank!")
         }
     }
 
@@ -234,7 +234,8 @@ fn inode_block_try_add_inode(
     inode_block.bytes_free -= new_inode_length as u16;
 
     // Return that offset, we're done.
-    Ok(offset.try_into().expect("max of 501 is < u16"))
+    // Cast: max of 501 is < u16. Safe.
+    Ok(offset as u16)
 }
 
 fn new_inode_block(block_origin: DiskPointer) -> InodeBlock {
@@ -372,7 +373,7 @@ impl Inode {
         timestamp_offset += 1;
 
         // We must have the marker bit.
-        assert!(flags.contains(InodeFlags::MarkerBit));
+        assert!(flags.contains(InodeFlags::MarkerBit), "Inodes must contain the marker bit.");
 
         // File or directory
         let file: Option<InodeFile> = if flags.contains(InodeFlags::FileType) {
@@ -540,7 +541,7 @@ impl InodeLocation {
         index += 2;
 
         // Make sure this is a valid InodeLocation
-        assert!(flags.contains(PackedInodeLocationFlags::MarkerBit));
+        assert!(flags.contains(PackedInodeLocationFlags::MarkerBit), "Inodes must contain the flag bit.");
 
         
         // Disk number
@@ -639,7 +640,7 @@ impl Inode {
         if let Some(dir) = self.extract_directory() {
             dir.pointer
         } else {
-            self.extract_file().expect("Guard.").pointer
+            self.extract_file().expect("Not a directory, so it must be a file.").pointer
         }
     }
 }
@@ -656,7 +657,7 @@ impl From<InodeTimestamp> for SystemTime {
         let duration: Duration = Duration::new(value.seconds, value.nanos);
         
         // 88MPH
-        epoch.checked_add(duration).expect("This will break in 2038. Until then, hi mom!")
+        epoch.checked_add(duration).expect("This will break in 2038. Until then, hi dad!")
     }
 }
 

@@ -48,10 +48,6 @@ impl TryFrom<DriveIOError> for DriveError {
 
     fn try_from(value: DriveIOError) -> Result<Self, Self::Error> {
         match value {
-            DriveIOError::DriveEmpty => {
-                // This is never constructed.
-                unreachable!("Drive empty error????")
-            },
             DriveIOError::Retry => {
                 // Operation must be retried, cant cast that upwards.
                 Err(CannotConvertError::MustRetry)
@@ -113,17 +109,18 @@ impl TryFrom<WrappedIOError> for DriveIOError {
                 // 100% your fault
                 CriticalError::DriveInaccessible(InvalidDriveReason::Networking).handle();
                 // We cant recover from that
-                unreachable!()
+                unreachable!("Networked floppy drive??? Really??? gtfo");
             },
             ErrorKind::BrokenPipe => {
                 // What
-                error!("Broken pipe with fluster, why are you using pipes in the first place???");
                 // I doubt you could even make fluster start with pipes.
-                unreachable!()
+                unreachable!("Broken pipe with fluster, why are you using pipes in the first place???");
             },
             ErrorKind::AlreadyExists => {
-                // Fluster does not create files, it only opens them.
-                unreachable!();
+                // Fluster does not create files during IO operations, only in backups.
+                // Therefore this should not happen.
+                // Especially since we always open the backups if they already exist.
+                unreachable!("Fluster tried to create a file that already existed somehow. This should be impossible.");
             },
             ErrorKind::WouldBlock => {
                 // Fluster does not ask for blocking IO.
@@ -132,23 +129,23 @@ impl TryFrom<WrappedIOError> for DriveIOError {
             },
             ErrorKind::NotADirectory => {
                 // This should never happen, since we always try to write to a file, not a directory.
-                unreachable!()
+                unreachable!("Fluster does not open directories, this is impossible.");
             },
             ErrorKind::IsADirectory => {
                 // User has passed in a directory for the floppy disk drive instead of a file for it.
                 CriticalError::DriveInaccessible(InvalidDriveReason::NotAFile).handle();
-                // We cant recover from that
-                unreachable!()
+                // We cant recover from that, but pretend we can
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::DirectoryNotEmpty => {
                 // Fluster does not try to delete directories.
-                unreachable!()
+                unreachable!("Fluster does not delete directories, this should be impossible.");
             },
             ErrorKind::ReadOnlyFilesystem => {
                 // Cant use fluster on read-only floppy for obvious reasons.
                 CriticalError::DriveInaccessible(InvalidDriveReason::ReadOnly).handle();
-                // We cant recover from that
-                unreachable!()
+                // If it was just the write-protect notch, we can recover.
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::InvalidInput => todo!(),
             ErrorKind::InvalidData => todo!(),
@@ -175,18 +172,18 @@ impl TryFrom<WrappedIOError> for DriveIOError {
                 // We must be able to seek files to read and write from them, this is a
                 // configuration issue.
                 CriticalError::DriveInaccessible(InvalidDriveReason::NotSeekable).handle();
-                // We cant recover from that
-                unreachable!()
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::QuotaExceeded => {
                 // Not sure what other quotas other than size are possible, the man page
                 // quota(1) doesn't specify any other quota types.
                 // Plus, this shouldn't happen for raw IO, right?
-                unreachable!()
+                unreachable!("Floppy drives shouldn't have a quota.");
             },
             ErrorKind::FileTooLarge => {
                 // Fluster does not use an underlying filesystem.
-                unreachable!()
+                // Very funny since the biggest files we deal with are in the low MBs
+                unreachable!("Somehow a write was too large, even though we dont use a filesystem directly.");
             },
             ErrorKind::ResourceBusy => {
                 // Disk is busy, we can retry though.
@@ -196,7 +193,7 @@ impl TryFrom<WrappedIOError> for DriveIOError {
             ErrorKind::ExecutableFileBusy => {
                 // If you're somehow running the floppy drive as an executable,
                 // you have bigger issues.
-                unreachable!()
+                unreachable!("How are you running the floppy drive as an executable?");
             },
             ErrorKind::Deadlock => {
                 // File locking deadlock, not much we can do here except try again.
@@ -205,21 +202,21 @@ impl TryFrom<WrappedIOError> for DriveIOError {
             },
             ErrorKind::CrossesDevices => {
                 // Fluster does not do renames on the floppy disk path.
-                unreachable!()
+                unreachable!("Fluster does not support rename the file paths, this should never happen.");
             },
             ErrorKind::TooManyLinks => {
                 // We do not create links.
-                unreachable!()
+                unreachable!("Fluster does not support links, no idea how we got here.");
             },
             ErrorKind::InvalidFilename => {
                 // The path to the disk is invalid somehow.
                 CriticalError::DriveInaccessible(InvalidDriveReason::InvalidPath).handle();
-                // We cant recover from that
-                unreachable!()
+                // We cant recover from that, but in case we can, just try again.
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::ArgumentListTooLong => {
                 // Fluster does not call programs
-                unreachable!()
+                unreachable!("Fluster wasn't able to call an external program. Wait, we don't do that? Huh?");
             },
             ErrorKind::Interrupted => {
                 // "Interrupted operations can typically be retried."
@@ -230,8 +227,8 @@ impl TryFrom<WrappedIOError> for DriveIOError {
                 // Whatever operation we're trying to do, its not possible.
                 // Not really much we can do here either.
                 CriticalError::DriveInaccessible(InvalidDriveReason::UnsupportedOS).handle();
-                // We cant recover from that
-                unreachable!()
+                // We cant recover from that, so this will never be returned.
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::UnexpectedEof => {
                 // This would happen if we read past the end of the floppy disk,
@@ -244,11 +241,12 @@ impl TryFrom<WrappedIOError> for DriveIOError {
             ErrorKind::OutOfMemory => {
                 // Bro what
                 error!("Please visit https://downloadmoreram.com/ then re-run Fluster.");
-                exit(-1);
+                exit(-1); // Nothing we can really do.
             },
             ErrorKind::Other => {
                 // "This ErrorKind is not used by the standard library."
-                unreachable!()
+                // This is impossible to reach.
+                unreachable!("Somehow got an `other` error kind, this is impossible as far as i can tell.");
             },
             _ => {
                 // This error is newer than the rust version fluster was originally written for.
@@ -257,7 +255,7 @@ impl TryFrom<WrappedIOError> for DriveIOError {
                 // Is the floppy drive empty?
                 // code: 123,
                 // message: "No medium found",
-                if value.io_error.raw_os_error().expect("Should get a os error number") == 123_i32 {
+                if let Some(raw) = value.io_error.raw_os_error() && raw == 123_i32 {
                     // No disk is in the drive.
                     // This can happen even if there is a disk in the drive, so we keep
                     // trying.

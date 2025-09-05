@@ -57,7 +57,8 @@ fn go_handle_critical(error: CriticalError) {
 
     // Critical recovery is not allowed in tests.
     if cfg!(test) {
-        panic!("Tried to recover from a critical error! {error:#?}");
+        error!("Tried to recover from a critical error! {error:#?}");
+        exit(-1); // Recursed into the critical handler, there's no chance left i feel.
     }
 
     let mitgated = match error {
@@ -77,7 +78,7 @@ fn go_handle_critical(error: CriticalError) {
     println!("Critical error recovery has failed.");
     println!("{error:#?}");
     println!("Fluster! has encountered an unrecoverable error, and must shut down.\nGoodbye.");
-    exit(-1);
+    exit(-1); // Cant flush, since recovery failed, disk/drive are in unknown state.
 }
 
 
@@ -103,7 +104,7 @@ fn handle_drive_inaccessible(reason: InvalidDriveReason) -> bool {
             inform_improper_floppy_drive()
         },
         InvalidDriveReason::ReadOnly => {
-            // need to write sometimes.
+            // Did they leave the write protect notch on?
             inform_improper_floppy_drive()
         },
         InvalidDriveReason::NotSeekable => {
@@ -122,7 +123,7 @@ fn handle_drive_inaccessible(reason: InvalidDriveReason) -> bool {
             error!("I'm assuming you're using a non-standard Rust build target / OS destination.");
             error!("Obviously I cannot support that. If you really want to use Fluster (why?), you'll have to");
             error!("update Fluster to make it compatible with your system/setup. Good luck!");
-            exit(-1);
+            exit(-1); // We shouldn't've even finished a single write yet, there shouldn't be anything to flush.
         },
         InvalidDriveReason::NotFound => {
             // Maybe the drive is tweaking?
@@ -304,10 +305,16 @@ fn check_disk() -> bool {
     // to throw another critical error while handling another one.
 
     // Open the disk currently in the drive.
-    let disk_path = FLOPPY_PATH
-        .try_lock()
-        .expect("Fluster is single threaded.")
-        .clone();
+    // If we cannot lock, we obviously cant use the drive. Thus returns false.
+    let disk_path = if let Ok(guard) = FLOPPY_PATH.try_lock() {
+        guard.clone()
+    } else {
+        // The lock is poisoned, which means we died somewhere else.
+        // So since we're already in the troubleshooter, we'll just clear the lock :clueless: then
+        // return false.
+        FLOPPY_PATH.clear_poison();
+        return false
+    };
     
     // Read the entire thing in one go
     println!("Open floppy drive...");
@@ -399,7 +406,21 @@ fn update_drive_path() {
     }
 
     // Set that new path
-    *FLOPPY_PATH.try_lock().expect("Fluster is single threaded.") = new_path;
+    if let Ok(mut something) = FLOPPY_PATH.try_lock() {
+        *something = new_path;
+    } else {
+        // The lock is poisoned, we'll just uhhh... ignore that.
+        // The woes of a non-transactional filesystem.
+        // TODO: kill PastJade for not thinking that far ahead.
+        FLOPPY_PATH.clear_poison();
+        if let Ok(mut something_the_sequel) = FLOPPY_PATH.try_lock() {
+            *something_the_sequel = new_path;
+        } else {
+            // ????
+            // Already VERY cooked, might as well panic for fun!
+            panic!("Tried to clear poison on the floppy path but that didn't work! Giving up.");
+        }
+    }
 }
 
 
@@ -499,7 +520,7 @@ fn inform_improper_mount_point() -> ! {
         Please re-confirm that the mount point is valid, then re-run fluster. Good luck!".to_string(),
         true
     );
-    exit(-1)
+    exit(-1) // Exiting, no floppy drive to flush with.
 }
 
 fn inform_improper_floppy_drive() -> bool {
@@ -542,7 +563,7 @@ fn inform_improper_floppy_drive() -> bool {
         Fluster will now exit, since operating without a drive is not possible.".to_string(),
         true
     );
-    exit(-1);
+    exit(-1); // Exiting, since we cant even flush the cache due to no floppy drive.
 }
 
 // Helper just do dedupe

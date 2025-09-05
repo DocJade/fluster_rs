@@ -215,7 +215,7 @@ fn from_bytes(block: &RawBlock) -> FileExtentBlock {
 
     // Next block
     let next_block: DiskPointer =
-        DiskPointer::from_bytes(block.data[3..3 + 4].try_into().expect("4 is 4"));
+        DiskPointer::from_bytes(block.data[3..3 + 4].try_into().expect("4 = 4"));
 
     // Extract the extents in this block
     let extent_data = &block.data[7..7 + 501];

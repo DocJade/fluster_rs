@@ -107,9 +107,13 @@ impl FilesystemMT for FlusterFS {
         info!("Shutting down filesystem...");
         // Flush all of the tiers of cache.
         info!("Flushing cache...");
+        // We dont retry flushing the cache, since if the flushing fails, that means it went all the way through
+        // the troubleshooter and everything. If we retry here, chances are the cache has already dropped some blocks,
+        // so we wouldn't even be able to properly finish it at this point.
         CachedBlockIO::flush().expect("I sure hope cache flushing works!");
         // Now flush pool information
         info!("Flushing pool info...");
+        // Same story here.
         Pool::flush().expect("I sure hope pool flushing works!");
         info!("Goodbye! .o/");
     }
@@ -675,8 +679,11 @@ impl FilesystemMT for FlusterFS {
                 debug!("Item renamed successfully.");
                 return Ok(())
             } else {
-                // Somehow the item was not there anymore? This should never happen.
-                unreachable!("Item to rename disappeared!")
+                // Somehow the item we wanted to rename disapeared, we'll return a generic error.
+                // Since panicing at this high of a level would be stupid. Even though this branch is
+                // unlikely.
+                warn!("Item to rename disappeared!");
+                return Err(GENERIC_FAILURE);
             }
         }
 
@@ -879,7 +886,14 @@ impl FilesystemMT for FlusterFS {
                 match source_parent_dir.delete_file(NamedItem::File(source_item_name)) {
                     Ok(ok) => {
                         // if ok is none, the item disappeared, which should not happen.
-                        assert!(ok.is_some(), "File should not disappear.")
+                        // Yes its weird that the item dissapeared, but its better to let the caller
+                        // re-list the directory and try the rename again if needed. Otherwise we would
+                        // just crash, which is, sub-par.
+
+                        if ok.is_none() {
+                            warn!("The item we were renaming disappeared!");
+                            return Err(GENERIC_FAILURE)
+                        }
                     },
                     Err(err) => {
                         // The file made it to the destination, but removing the original failed.
@@ -973,9 +987,10 @@ impl FilesystemMT for FlusterFS {
                         worked
                     } else {
                         // What
-                        warn!("Tried to delete the destination directory to prepare for swap, but it was no longer there.");
+                        warn!("Tried to delete the destination directory to prepare for swap, but it was no longer there!");
                         // This should be impossible.
-                        unreachable!();
+                        // But just in case, er, say the operation failed.
+                        return Err(GENERIC_FAILURE);
                     }
                     // We will hold onto it just in case, even though it's empty.
                 },
@@ -1286,7 +1301,23 @@ impl FilesystemMT for FlusterFS {
         
         // Subtract the offset to idk man why am i explaining this im sure you understand.
         // Reads are limited to 4GB long, which should be way above our max read size anyways.
-        let bounded_read_length:u32 = std::cmp::min(size as u64, file_size - offset).try_into().expect("Reads should not be >4GB.");
+
+        // If a read bigger than that comes in, we'll ignore it.
+        let checking_size = std::cmp::min(size as u64, file_size - offset);
+        let bounded_read_length = if checking_size > u32::MAX.into() {
+            // Cant do that.
+
+            // Also if you're here, that means the file you're trying to read is actually >4GB.
+            // You are insane.
+
+            warn!("Tried to read more than 4GB at once!");
+            NotifyTui::cancel_task(task_handle);
+            return callback(Err(INVALID_ARGUMENT));
+        } else {
+            // Size checked, this cast is safe.
+            checking_size as u32
+        };
+
         if bounded_read_length != size {
             // size did change.
             debug!("Read was too large, truncated to `{bounded_read_length}` bytes.");
@@ -1373,8 +1404,9 @@ impl FilesystemMT for FlusterFS {
         NotifyTui::complete_task_step(&task_handle);
         debug!("Write completed.");
 
-        // Make sure it all got written
-        assert_eq!(bytes_written, data.len().try_into().expect("Should be less than a u32"));
+        // According to spec, we just tell the caller how many bytes we wrote.
+        // If we didn't write everything, its on them to keep going.
+        // https://man7.org/linux/man-pages/man2/write.2.html
 
         // Return the number of bytes written.
         NotifyTui::finish_task(task_handle);

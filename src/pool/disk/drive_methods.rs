@@ -34,7 +34,6 @@ use crate::pool::disk::pool_disk::pool_disk_struct::PoolDisk;
 use crate::filesystem::filesystem_struct::FLOPPY_PATH;
 use crate::filesystem::filesystem_struct::USE_VIRTUAL_DISKS;
 use crate::pool::disk::unknown_disk::unknown_disk_struct::UnknownDisk;
-use crate::pool::pool_actions::pool_struct::GLOBAL_POOL;
 use crate::tui::notify::NotifyTui;
 use crate::tui::prompts::TuiPrompt;
 
@@ -140,10 +139,9 @@ fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, Dr
     }
 
     // it should be impossible to get here
-    error!("Header of disk did not match any known disk type!");
     error!("Hexdump:\n{}", hex_view(header_block.data.to_vec()));
     error!("We cannot continue with an un-deducible disk!");
-    unreachable!();
+    panic!("Header of disk did not match any known disk type!");
 }
 
 /// Get the path of the floppy drive
@@ -151,55 +149,79 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Drive
     // If we are running with virtual disks enabled, we are going to use a temp folder instead of the actual disk to speed up
     // development, waiting for disk seeks is slow and loud lol.
 
-    trace!("Locking USE_VIRTUAL_DISKS...");
-    if let Some(ref path) = *USE_VIRTUAL_DISKS
-        .try_lock()
-        .expect("Fluster is single threaded.")
-    {
-        trace!("Attempting to access virtual disk {disk_number}...");
-        trace!("Are we creating this disk? : {new_disk}");
-        // Get the tempfile.
-        // These files do not delete themselves.
+    if let Ok(maybe_path) = USE_VIRTUAL_DISKS.try_lock() {
+        if let Some(virtual_disk_path) = maybe_path.clone() {
+            // Virtual disks are enabled.
+            trace!("Attempting to access virtual disk {disk_number}...");
+            trace!("Are we creating this disk? : {new_disk}");
+            // Get the tempfile.
+            // These files do not delete themselves.
 
-        // if disk 0 is missing, we need to make it,
-        // because the pool cannot create disk 0 without first loading itself... from disk 0.
-        // This is for virtual disks, so if this fails its on the user.
-        let _ = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(path.join("disk0.fsr")).expect("You are in-charge of making virtual disks work.");
+            // if disk 0 is missing, we need to make it,
+            // because the pool cannot create disk 0 without first loading itself... from disk 0.
+            // This is for virtual disks, so if this fails its on the user.
 
-        // If the tempfile does not exist, that means `create` was never called, which is an issue.
-        // This will create the disk if the correct argument is passed.
+            // If using virtual disks fails, we immediately bail.
 
-        trace!("Opening the temp disk with read/write privileges...");
-        let temp_disk_file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(new_disk) // We will panic if the disk does not exist, unless told to create it.
-            .truncate(false)
-            .open(path.join(format!("disk{disk_number}.fsr")))
-            .expect("Disks should be created before read.");
 
-        // Make sure the file is one floppy big, should have no effect on pre-existing files, since
-        // they will already be this size.
-        trace!("Attempting to resize the temporary file to floppy size...");
+            if OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .open(virtual_disk_path.join("disk0.fsr")).is_err() {
+                // No good.
+                panic!("You are in-charge of making virtual disks work.");
+            };
 
-        // This is for virtual disks, so if this fails its on the user.
-        temp_disk_file.set_len(512 * 2880).expect("If you're using virtual disks, you should be able to resize the virtual disks.");
+            // If the tempfile does not exist, that means `create` was never called, which is an issue.
+            // This will create the disk if the correct argument is passed.
 
-        trace!("Returning virtual disk.");
-        return Ok(temp_disk_file);
+            trace!("Opening the temp disk with read/write privileges...");
+            let temp_disk_file = if let Ok(file) = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(new_disk) // We will panic if the disk does not exist, unless told to create it.
+                .truncate(false)
+                .open(virtual_disk_path.join(format!("disk{disk_number}.fsr"))) {
+                file
+            } else {
+                // Failed.
+                panic!("Disks should be created before read.");
+            };
+
+            // Make sure the file is one floppy big, should have no effect on pre-existing files, since
+            // they will already be this size.
+            trace!("Attempting to resize the temporary file to floppy size...");
+
+            // This is for virtual disks, so if this fails its on the user.
+            if temp_disk_file.set_len(512 * 2880).is_err() {
+                panic!("If you're using virtual disks, you should be able to resize the virtual disks.");
+            }
+
+            trace!("Returning virtual disk.");
+            return Ok(temp_disk_file);
+        }
     }
 
     // Get the global path to the floppy disk drive
-    trace!("Locking FLOPPY_PATH...");
-    let disk_path = FLOPPY_PATH
-        .try_lock()
-        .expect("Fluster is single threaded.")
-        .clone();
+    let disk_path = if let Ok(path) = FLOPPY_PATH.try_lock() {
+        path.clone()
+    } else {
+        // Poison? In MY drive method?
+        // _It's more common than you think!_
+        
+        // I REALLY hope we're shutting down at this point.
+        // We need the disk path to be able to flush contents to disk upon panic, so we have to clean this up.
+        error!("FLOPPY_PATH is poisoned! Clearing, but you REALLY need to shut down immediately.");
+        FLOPPY_PATH.clear_poison();
+        if let Ok(round_two) = FLOPPY_PATH.try_lock() {
+            round_two.clone()
+        } else {
+            // Err...
+            panic!("Failed to clear poison!");
+        }
+    };
 
     // Open the disk, or return an error from it.
 
@@ -219,14 +241,14 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Drive
         // Open the file.
         let open_attempt = OpenOptions::new().read(true).write(true).open(&disk_path);
         
-        // Did that open?
-        if let Ok(file) = open_attempt {
-            // Cool!
-            return Ok(file);
-        }
+
+        // If it opened, return, otherwise we need to handle the IO error.
+        let io_error = match open_attempt {
+            Ok(ok) => return Ok(ok),
+            Err(err) => err,
+        };
 
         // That did not work, see if we can cast up the error
-        let io_error = open_attempt.expect_err("Guard.");
 
         let pointer = DiskPointer {
             disk: disk_number,
@@ -238,30 +260,33 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Drive
         let drive_io_error: Result<DriveIOError, CannotConvertError> = DriveIOError::try_from(wrapped);
 
         // Did that work?
-        if let Err(err) = drive_io_error {
-            // Looks like we need to handle this ourselves.
-            match err {
-                CannotConvertError::MustRetry => {
-                    // Look's like we're trying again!
-                    continue;
-                },
-            }
-        }
+        let converted = match drive_io_error {
+            Ok(ok) => ok,
+            Err(err) => {
+                // Looks like we need to handle this ourselves.
+                match err {
+                    CannotConvertError::MustRetry => {
+                        // Look's like we're trying again!
+                        continue;
+                    },
+                }
+            },
+        };
 
         // The conversion worked, can we get it up to a DriveError?
-        let drive_error: Result<DriveError, CannotConvertError> = DriveError::try_from(drive_io_error.expect("Guard."));
+        let drive_error: Result<DriveError, CannotConvertError> = DriveError::try_from(converted);
 
-        // Did that also work?
-        if let Err(err) = drive_error {
-            match err {
-                CannotConvertError::MustRetry => {
-                    continue;
-                },
-            }
-        }
-        
-        // The conversion worked! Throw it upwards.
-        return Err(drive_error.expect("Guard."));
+        // Did that also work? If so, throw it!
+        match drive_error {
+            Ok(ok) => return Err(ok), // lol
+            Err(err) => {
+                match err {
+                    CannotConvertError::MustRetry => {
+                        continue;
+                    },
+                }
+            },
+        };
     };
 
     drop(disk_path);
@@ -315,19 +340,10 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, DriveError> {
         if new_disk_number != previous_disk {
             // We have swapped disks.
 
-            // Inform the TUI
+            // Inform the TUI. It's in charge of tracking swaps.
             NotifyTui::disk_swapped(new_disk_number);
 
             CURRENT_DISK_IN_DRIVE.store(new_disk_number, Ordering::Relaxed);
-            // Update the swap count
-            trace!("Locking GLOBAL_POOL, updating disk swap count.");
-            GLOBAL_POOL
-                .get()
-                .expect("single threaded")
-                .try_lock()
-                .expect("single threaded")
-                .statistics
-                .swaps += 1;
         }
 
         // Check if this is the right disk number
@@ -370,11 +386,15 @@ fn prompt_for_blank_disk(disk_number: u16) -> Result<BlankDisk, DriveError> {
     let mut try_again: bool = false;
 
     // If we are on virtual disks, skip the initial prompt
-    if !USE_VIRTUAL_DISKS
-        .try_lock()
-        .expect("Fluster is single threaded.")
-        .is_some()
-    {
+    let use_virtual: bool = if let Ok(locked) = USE_VIRTUAL_DISKS.try_lock() {
+        locked.is_some()
+    } else {
+        // Poisoned. We should not be adding new disks after being poisoned. We should be shutting down.
+        // Just give up, if we're trying to do that, chances are we just cannot shut down.
+        panic!("Attempted to get a new, blank disk for a poisoned pool! Not allowed!");
+    };
+
+    if !use_virtual {
         TuiPrompt::prompt_enter(
             "New disk.".to_string(),
             format!("Creating a new disk, please insert a blank disk that will become disk {disk_number}, then hit enter."),
@@ -429,7 +449,14 @@ pub fn display_info_and_ask_wipe(disk: &mut DiskType) -> Result<(), DriveError> 
 
     if answer {
         // Wipe time!
-        destroy_disk(disk.disk_file_mut()).expect("Prompts should not fail.");
+        // If this fails, inform user.
+        if destroy_disk(disk.disk_file_mut()).is_err() {
+            TuiPrompt::prompt_enter(
+                "Wipe failed!".to_string(),
+                "Failed to wipe that disk! It's probably bad.".to_string(),
+                true
+            );
+        }
     } else {
         // No wipe.
         TuiPrompt::prompt_enter(
