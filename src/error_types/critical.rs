@@ -57,8 +57,7 @@ fn go_handle_critical(error: CriticalError) {
 
     // Critical recovery is not allowed in tests.
     if cfg!(test) {
-        error!("Tried to recover from a critical error! {error:#?}");
-        exit(-1); // Recursed into the critical handler, there's no chance left i feel.
+        panic!("Tried to recover from a critical error! {error:#?}");
     }
 
     let mitgated = match error {
@@ -77,8 +76,8 @@ fn go_handle_critical(error: CriticalError) {
     // .o7
     println!("Critical error recovery has failed.");
     println!("{error:#?}");
-    println!("Fluster! has encountered an unrecoverable error, and must shut down.\nGoodbye.");
-    exit(-1); // Cant flush, since recovery failed, disk/drive are in unknown state.
+    // Disk/drive are in unknown state, but by god we still must try to flush via panicking.
+    panic!("Fluster! has encountered an unrecoverable error, and must shut down.\nGoodbye.");
 }
 
 
@@ -123,7 +122,8 @@ fn handle_drive_inaccessible(reason: InvalidDriveReason) -> bool {
             error!("I'm assuming you're using a non-standard Rust build target / OS destination.");
             error!("Obviously I cannot support that. If you really want to use Fluster (why?), you'll have to");
             error!("update Fluster to make it compatible with your system/setup. Good luck!");
-            exit(-1); // We shouldn't've even finished a single write yet, there shouldn't be anything to flush.
+            // We shouldn't've even finished a single write yet, there shouldn't be anything to flush.
+            exit(-1); 
         },
         InvalidDriveReason::NotFound => {
             // Maybe the drive is tweaking?
@@ -377,6 +377,11 @@ fn update_drive_path() {
             enter the new path. Otherwise hit enter.".to_string(),
             false
         );
+        // If nothing was entered, the path has not changed
+        if possible == "".to_string() {
+            // no change.
+            return
+        }
         let could_be = PathBuf::from(possible);
         let maybe = match could_be.canonicalize() {
             Ok(ok) => ok,
@@ -390,7 +395,6 @@ fn update_drive_path() {
                 continue;
             },
         };
-
         if std::fs::exists(&maybe).unwrap_or(false) {
             // Good.
             new_path = maybe;

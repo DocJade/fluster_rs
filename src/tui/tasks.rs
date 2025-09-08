@@ -212,7 +212,7 @@ impl TaskInfo {
     /// Returns a string `[hh:mm:ss]` of how long the task has been running
     pub(super) fn time_passed(&self) -> String {
         let elapsed_seconds = self.start_time.elapsed().as_secs();
-        format!("[{:0>2}:{:0>2}:{:0>2}]", elapsed_seconds/(60*60), elapsed_seconds/60, elapsed_seconds%60)
+        format!("[{:0>2}:{:0>2}:{:0>2}]", elapsed_seconds/(60*60), (elapsed_seconds/60)%60, elapsed_seconds%60)
     }
     
     /// Returns a string `[hh:mm:ss]` which guesstimates how long the task is going to take
@@ -228,7 +228,7 @@ impl TaskInfo {
             return "[99:99:99]".to_string();
         };
         estimated_seconds = estimated_seconds.saturating_sub(elapsed_seconds);
-        format!("[{:0>2}:{:0>2}:{:0>2}]", estimated_seconds/(60*60), estimated_seconds/60, estimated_seconds%60)
+        format!("[{:0>2}:{:0>2}:{:0>2}]", estimated_seconds/(60*60), (estimated_seconds/60)%60, estimated_seconds%60)
     }
 }
 

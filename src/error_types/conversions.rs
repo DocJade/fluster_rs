@@ -5,7 +5,6 @@
 //
 
 use std::io::ErrorKind;
-use std::process::exit;
 use std::time::Duration;
 use log::debug;
 use log::error;
@@ -240,8 +239,8 @@ impl TryFrom<WrappedIOError> for DriveIOError {
             },
             ErrorKind::OutOfMemory => {
                 // Bro what
-                error!("Please visit https://downloadmoreram.com/ then re-run Fluster.");
-                exit(-1); // Nothing we can really do.
+                // Nothing we can really do.
+                panic!("Please visit https://downloadmoreram.com/ then re-run Fluster.");
             },
             ErrorKind::Other => {
                 // "This ErrorKind is not used by the standard library."
@@ -264,8 +263,9 @@ impl TryFrom<WrappedIOError> for DriveIOError {
                     // eventually end up in the panic handler.
 
                     // Show user that we're waiting for the drive to spin up
-                    let handle = NotifyTui::start_task(TaskType::WaitingForDriveSpinUp, 10*10);
-                    for _ in 0..10*10 {
+                    // We wait 5 seconds. That's usually fast enough.
+                    let handle = NotifyTui::start_task(TaskType::WaitingForDriveSpinUp, 5*5);
+                    for _ in 0..5*5 {
                         NotifyTui::complete_task_step(&handle);
                         std::thread::sleep(Duration::from_millis(100));
                     }

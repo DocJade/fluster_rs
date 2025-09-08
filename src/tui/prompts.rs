@@ -133,5 +133,5 @@ fn disabled_prompt_enter(prompt: TuiPrompt) {
 fn disabled_prompt_input(_prompt: TuiPrompt) -> String {
     error!("You might not like TUI's, but this setting is secretly just for test cases.");
     error!("You need to use the TUI to use fluster.");
-    exit(-1);
+    panic!(fixme);
 }
