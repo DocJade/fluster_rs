@@ -7,14 +7,14 @@ use std::{fs::File, io::{
 
 use log::{debug, error, warn};
 
-use crate::{filesystem::filesystem_struct::FLOPPY_PATH, tui::prompts::TuiPrompt};
+use crate::{filesystem::filesystem_struct::FLOPPY_PATH, tui::{notify::NotifyTui, prompts::TuiPrompt, tasks::TaskType}};
 
 /// Returns true if the entire disk was re-created successfully.
 /// 
 /// Assumes the drive is empty when called.
 pub fn restore_disk(number: u16) -> bool {
-    println!("Beginning restore of disk `{number}`.");
-
+    debug!("Beginning restore of disk `{number}`.");
+    
     // Get a new blank disk.
     TuiPrompt::prompt_enter(
         "Insert blank disk.".to_string(),
@@ -22,7 +22,8 @@ pub fn restore_disk(number: u16) -> bool {
         WARNING: Disk will NOT be checked for blankness, this WILL destroy data if a non-blank disk is inserted!"),
         false
     );
-
+    
+    let handle = NotifyTui::start_task(TaskType::RestoreDisk, 6);
     // Find the disk in the backup folder
     // If it't not in there, you're cooked.
     // Try opening the backup file at most 5 times.
@@ -51,6 +52,8 @@ pub fn restore_disk(number: u16) -> bool {
             },
         };
     };
+
+    NotifyTui::complete_task_step(&handle);
     
     // Now read in the entire floppy backup.
     // Again, at most 5 tries.
@@ -74,6 +77,8 @@ pub fn restore_disk(number: u16) -> bool {
         continue;
     };
 
+    NotifyTui::complete_task_step(&handle);
+
     // Copy the entire contents of that backup to the new disk.
 
     // We'll just dump the entire file to the block device without using our floppy handler,
@@ -90,6 +95,8 @@ pub fn restore_disk(number: u16) -> bool {
         return false
     };
 
+    NotifyTui::complete_task_step(&handle);
+
     // Open the block device as a file
     let block_file: File = if let Ok(opened) = File::options().read(true).write(true).open(block_path) {
         opened
@@ -97,6 +104,8 @@ pub fn restore_disk(number: u16) -> bool {
         // Well, we couldn't open the floppy path. Return false.
         return false;
     };
+
+    NotifyTui::complete_task_step(&handle);
     
     // Now write all that in
     let mut write_worked = false;
@@ -117,13 +126,23 @@ pub fn restore_disk(number: u16) -> bool {
         }
     }
 
+    NotifyTui::complete_task_step(&handle);
+
+    // Now sync the disk to pause until the data all actually hits the disk.
+    // Not a big issue if this doesnt work, we're still gonna wait for the disk to spin down
+    // before swapping disks.
+    let _ = block_file.sync_all();
+    NotifyTui::complete_task_step(&handle);
+
     // Did that work?
     if write_worked {
         // Disk written!
+        NotifyTui::finish_task(handle);
         debug!("Disk restored!");
         true
     } else {
         // Well shoot.
+        NotifyTui::cancel_task(handle);
         error!("Disk restore failed!");
         false
     }

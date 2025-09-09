@@ -68,6 +68,7 @@ pub(crate) enum TaskType {
     GetMetadata(String),
     GetSize,
     WipeDisk,
+    RestoreDisk,
     FlushCurrentDisk,
     FlushTier,
     FileReadBytes,
@@ -201,6 +202,7 @@ impl TaskInfo {
             },
             TaskType::FileReadBytes => "Reading bytes from file...".to_string(),
             TaskType::FileWriteBytes => "Writing bytes to file...".to_string(),
+            TaskType::RestoreDisk => "Restoring a disk from backup...".to_string(),
         }
     }
 

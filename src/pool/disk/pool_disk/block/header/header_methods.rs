@@ -5,9 +5,11 @@
 use std::process::exit;
 
 use log::debug;
+use log::warn;
 
 use crate::error_types::drive::DriveError;
 use crate::error_types::header::HeaderError;
+use crate::filesystem::disk_backup::restore::restore_disk;
 use crate::filesystem::filesystem_struct::USE_VIRTUAL_DISKS;
 use crate::pool::disk::blank_disk::blank_disk_struct::BlankDisk;
 use crate::pool::disk::drive_methods::check_for_magic;
@@ -69,7 +71,7 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, DriveError> {
             // Not using virtual disks, prompt the user...
             let result = TuiPrompt::prompt_input(
                 "Insert pool disk.".to_string(),
-                "Please insert the pool root disk (Disk 0), then press enter. Or type \"wipe\" to enter disk wiper mode.".to_string(),
+                "Please insert the pool root disk (Disk 0), then press enter. Or type \"wipe\" or \"restore\".".to_string(),
                 false
             );
             
@@ -78,6 +80,10 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, DriveError> {
 
             if result.contains("wipe") {
                 disk_wiper_mode()
+            }
+            // Or restore
+            if result.contains("restore") {
+                disk_restore_mode()
             }
         }
 
@@ -419,5 +425,58 @@ fn disk_wiper_mode() -> ! {
 
     // Done wiping disks, user must restart Fluster.
     println!("Exiting disk wiping mode. You must restart fluster.");
+    exit(0);
+}
+
+
+/// Disk restoration mode
+fn disk_restore_mode() -> ! {
+    loop {
+        let prompt_response = TuiPrompt::prompt_input(
+            "Disk restore mode".to_string(),
+            "Please insert a disk to overwrite, then enter the number of the disk you would like to restore. Or type \"exit\".".to_string(),
+            true
+        );
+
+        if prompt_response.contains("exit") {
+            // All done.
+            break
+        }
+
+        // now what number do we want
+        let disk_to_restore: u16 = match prompt_response.parse() {
+            Ok(ok) => ok,
+            Err(err) => {
+                warn!("Failed to parse number!");
+                warn!("{err:#?}");
+                TuiPrompt::prompt_enter(
+                    "bruh".to_string(),
+                    "Thats not a real disk number, try again.".to_string(),
+                    false
+                );
+                continue;
+            },
+        };
+
+        // Call the restor-er-inator
+        let worked = restore_disk(disk_to_restore);
+
+        if worked {
+            // Do nothing, since it worked. Just dump em back to the beginning again
+            debug!("Restoration worked!");
+            continue;
+        }
+
+        // Didn't work
+        TuiPrompt::prompt_enter(
+            "no workie".to_string(),
+            "That restore did not work, you should try another disk.".to_string(),
+            false
+        );
+        continue;
+    }
+    
+    // Done restoring disks, user must restart Fluster.
+    println!("Exiting disk restore mode. You must restart fluster.");
     exit(0);
 }
