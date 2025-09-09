@@ -2,7 +2,7 @@
 // Returning this error type means you've done all you possibly can, and need saving at a higher level, or
 // we are in a unrecoverable state.
 
-use std::{fs::OpenOptions, os::unix::fs::FileExt, path::{Path, PathBuf}, process::exit};
+use std::{fs::OpenOptions, os::unix::fs::FileExt, path::PathBuf, process::exit};
 
 use thiserror::Error;
 use log::{error, warn};
@@ -18,7 +18,6 @@ use crate::{error_types::drive::InvalidDriveReason, filesystem::{disk_backup::re
 pub enum CriticalError {
     #[error("The floppy drive is inaccessible for some reason.")]
     DriveInaccessible(InvalidDriveReason),
-    /// Set the bool to true if Fluster could reasonably continue even after failing this operation.
     #[error("We've retried an operation too many times. Something must be wrong.")]
     OutOfRetries(RetryCapError) // Keep track of where we ran out of retries.
 }
@@ -479,8 +478,6 @@ fn do_disk_restore() {
                 false
             );
         }
-
-        println!("");
         
         // Pull out the bad one, disk restore needs an empty drive.
         // We need to know what disk it was.

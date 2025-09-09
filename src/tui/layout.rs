@@ -306,7 +306,7 @@ fn pop_up_handler(frame: &mut Frame, incoming_pop_up: &mut Option<TuiPrompt>) {
         .title(pop_up.title.clone())
         .title_alignment(Alignment::Center)
         // Blinking!
-        .border_style(if pop_up.flash {Style::new().slow_blink().red().on_black()} else {Style::new().white().on_black()})
+        .border_style(if pop_up.flash {Style::new().rapid_blink().red().on_black()} else {Style::new().white().on_black()})
         .border_set(ratatui::symbols::border::FULL)
         // Make the inside of the pop-up white on cyan.
         .style(Style::new().on_cyan().white());
@@ -338,11 +338,14 @@ fn pop_up_handler(frame: &mut Frame, incoming_pop_up: &mut Option<TuiPrompt>) {
     // If the caller wants a string back, we'll return it. Otherwise we'll just discard it.
     
     // Render either the text box, or the continue prompt.
+    // If in manual mode, dont add anything.
     if pop_up.expects_string {
         frame.render_widget(&pop_up.text_area, bottom);
-    } else {
+    } else if !pop_up.manual_close {
         let prompt = Text::from("Press enter to continue.").centered();
         frame.render_widget(prompt, bottom);
+    } else {
+        // Manual mode, widget
     }
 
     // Now we check for input, if it's enter, we will return the string if needed, and
@@ -370,6 +373,11 @@ fn pop_up_handler(frame: &mut Frame, incoming_pop_up: &mut Option<TuiPrompt>) {
             ..
         } => {
             // The user has exited the prompt, we're done!
+            // Unless the caller is manually handling things.
+            if pop_up.manual_close {
+                // Those keys have no power here.
+                return
+            }
             // To respond, we need to pull out the TuiPrompt and swap a None into its place.
             // Higher up we already checked that the pop-up exists, so we can safely extract it.
             let extracted = incoming_pop_up.take().expect("Guarded, already checked that the pop-up exists.");

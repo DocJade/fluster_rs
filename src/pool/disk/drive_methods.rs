@@ -326,7 +326,7 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, DriveError> {
             TuiPrompt::prompt_enter(
                 "Wrong disk".to_string(),
                 "This disk is blank. Try again.".to_string(),
-                false
+                true
             );
             continue;
         }
@@ -372,11 +372,22 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, DriveError> {
             is_user_an_idiot = true;
         }
 
-        TuiPrompt::prompt_enter(
+        // If this prompt fails, either there's an issue with the disk, or the user didn't respond in time
+        let result = TuiPrompt::prompt_wait_for_disk_swap(
             "Please swap disks.".to_string(),
-            format!("Please remove disk {previous_disk}, and insert disk {disk_number}, then press enter."),
+            format!("Please remove disk {previous_disk}, and insert disk {disk_number}"),
             true
         );
+
+        match result {
+            Ok(ok) => ok,
+            Err(_) => {
+                // We'll launch the troubleshooter regardless of error type,
+                // since we really need swapping disks to work.
+                CriticalError::OutOfRetries(RetryCapError::CantOpenDisk).handle();
+                // Then we just try the swap again.
+            },
+        }
     }
 }
 
@@ -395,11 +406,11 @@ fn prompt_for_blank_disk(disk_number: u16) -> Result<BlankDisk, DriveError> {
     };
 
     if !use_virtual {
-        TuiPrompt::prompt_enter(
+        TuiPrompt::prompt_wait_for_disk_swap(
             "New disk.".to_string(),
-            format!("Creating a new disk, please insert a blank disk that will become disk {disk_number}, then hit enter."),
+            format!("Creating a new disk, please insert a blank disk that will become disk {disk_number}."),
             true
-        );
+        )?;
     }
 
     loop {
