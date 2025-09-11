@@ -108,7 +108,7 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
 
 /// Write a vec of bytes starting at offset to the currently inserted disk in the floppy drive.
 /// ONLY FOR LOWER LEVEL USE, USE CHECKED_WRITE()!
-pub(crate) fn write_large_direct(disk_file: &File, data: &Vec<u8>, start_block: DiskPointer) -> Result<(), DriveError> {
+pub(crate) fn write_large_direct(disk_file: &File, data: &[u8], start_block: DiskPointer) -> Result<(), DriveError> {
     let handle = NotifyTui::start_task(TaskType::DiskWriteLarge, 1);
     // Bounds checking
     if start_block.block >= 2880 {
@@ -196,8 +196,67 @@ pub(crate) fn write_large_direct(disk_file: &File, data: &Vec<u8>, start_block: 
     // We've made it outside of the loop. The error is unrecoverable.
     error!("Write failure, requires assistance.");
 
-    // Do the error cleanup, if that works, the disk should be working now, and we can recurse, since we
-    // should now be able to complete the operation successfully.
+    // Do the error cleanup, if that works, the disk should be working now, we should now be able to write
+    // to the disk, but instead of recursing, we call the fallback to try to be a bit safer with the failure, and
+    // to prevent infinite recursion.
     CriticalError::OutOfRetries(RetryCapError::CantWriteBlock).handle();
-    write_large_direct(disk_file, data, start_block)
+    large_write_fallback(disk_file, data, start_block)
+}
+
+/// If large writes are continually failing, maybe we'll have better luck with singular writes.
+fn large_write_fallback(disk_file: &File, data: &[u8], start_block: DiskPointer) -> Result<(), DriveError> {
+    // Extract the vec of data into blocks.
+
+    // Pointer that'll be incremented as we're creating blocks
+    let mut new_pointer = start_block;
+
+    // Chunk the data into block sized chunks
+    let chunked = data.chunks(512);
+
+    // Now this isn't a great idea, but this is the fallback anyways.
+    // If any of the chunks (only the last one could have this happen) is
+    // less than 512 bytes in size, we'll pad it to 512 with zeros, which yeah, stuff
+    // might absolutely explode, but at least we can attempt to keep going lmao
+
+    // Loop over the chunks and construct the blocks
+    let blocks: Vec<RawBlock> = chunked.into_iter().map(|chunk|
+        {
+            // Pad the slice if needed
+            let mut padded: Vec<u8> = Vec::with_capacity(512);
+            padded.extend(chunk);
+            let difference = 512 - padded.len();
+            if difference != 0 {
+                // Add zeros for padding
+                let padding: Vec<u8> = vec![0; difference];
+                padded.extend(padding);
+            }
+
+            // Now turn that into a slice
+            let sliced: [u8; 512] = if let Ok(got) = padded[0..512].try_into() {
+                got
+            } else {
+                // 512 is not 512 today apparently.
+                unreachable!("512 is 512")
+            };
+
+            // Make a block
+            let blocked: RawBlock = RawBlock {
+                block_origin: new_pointer,
+                data: sliced,
+            };
+
+            // Increment the block pointer
+            new_pointer.block += 1;
+
+            // Out goes this block
+            blocked
+        }
+    ).collect();
+
+    // Now that we have all of the blocks, write them to the disk
+    for block in blocks {
+        write_block_direct(disk_file, &block)?;
+    }
+
+    Ok(())
 }
