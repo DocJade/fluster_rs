@@ -148,7 +148,6 @@ impl FilesystemMT for FlusterFS {
         // We cant just use the TryInto FileAttr since we dont know for sure if the item exists yet.
         let temp_handle: FileHandle = FileHandle {
             path: path.into(),
-            flags: ItemFlag::empty(),
         };
 
         // Go get the item.
@@ -219,7 +218,6 @@ impl FilesystemMT for FlusterFS {
             // Temp handle that we will not allocate.
             FileHandle {
                 path: path.into(),
-                flags: ItemFlag::empty(),
             }
         };
 
@@ -359,7 +357,6 @@ impl FilesystemMT for FlusterFS {
         // Make a fake handle to lookup the file we are looking for
         let temp_handle: FileHandle = FileHandle {
             path: parent.join(name).into(),
-            flags: ItemFlag::empty(),
         };
 
         // This will return properly if the item did not exist.
@@ -533,14 +530,12 @@ impl FilesystemMT for FlusterFS {
         // Where we're coming from (including name of file/folder)
         let source_full_temp_handle: FileHandle = FileHandle {
             path: parent.join(name).into(),
-            flags: ItemFlag::empty(),
         };
 
         // Where we want to go
         // Where we're coming from (including name of file/folder)
         let destination_full_temp_handle: FileHandle = FileHandle {
             path: newparent.join(newname).into(),
-            flags: ItemFlag::empty(),
         };
 
         // If they are the same, we dont need to do anything at all.
@@ -1130,7 +1125,6 @@ impl FilesystemMT for FlusterFS {
         // already open somewhere else.
         let mut handle: FileHandle = FileHandle {
             path: path.into(),
-            flags: converted_flag,
         };
 
         // We do not allocate the file handle until we are sure we will use it.
@@ -1762,7 +1756,6 @@ impl FilesystemMT for FlusterFS {
         // Construct and return the handle to the new file
         let new_handle: FileHandle = FileHandle {
             path: constructed_path.into(),
-            flags: deduced_flags,
         };
 
         // We can get attributes directly from the directory item we just made

@@ -1,13 +1,42 @@
 use std::{
-    ffi::OsStr, path::PathBuf, sync::{atomic::{AtomicBool, Ordering}, Arc}, thread, time::Duration
+    ffi::OsStr,
+    path::PathBuf,
+    sync::{
+        atomic::{
+            AtomicBool,
+            Ordering
+        },
+        Arc
+    },
+    thread,
+    time::Duration
 };
 
 use clap::Parser;
-use fluster_fs::{filesystem::filesystem_struct::{FilesystemOptions, FlusterFS}, tui::notify::TUI_MANAGER};
+use fluster_fs::{
+    filesystem::filesystem_struct::{
+        FilesystemOptions,
+        FlusterFS
+    },
+    tui::notify::TUI_MANAGER
+};
 
 // Logging
 use env_logger::Env;
-use ratatui::{crossterm::{execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}}, prelude::CrosstermBackend, Terminal};
+use ratatui::{
+    crossterm::{
+        execute,
+        terminal::{
+            disable_raw_mode,
+            enable_raw_mode,
+            EnterAlternateScreen,
+            LeaveAlternateScreen
+        }
+    },
+    prelude::CrosstermBackend,
+    Terminal
+};
+
 use tui_logger::TuiLoggerFile;
 
 #[derive(Parser)]

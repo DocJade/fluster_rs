@@ -34,11 +34,11 @@ use crate::{error_types::drive::DriveError, pool::disk::{
 impl InodeFile {
     // Local functions
     /// Extract all of the extents and spit out a list of all of the blocks.
-    pub(super) fn to_pointers(&self) -> Result<Vec<DiskPointer>, DriveError> {
+    pub(super) fn as_pointers(&self) -> Result<Vec<DiskPointer>, DriveError> {
         go_to_pointers(self)
     }
     /// Extract all of the extents.
-    pub(super) fn to_extents(&self) -> Result<Vec<FileExtent>, DriveError> {
+    pub(super) fn as_extents(&self) -> Result<Vec<FileExtent>, DriveError> {
         let root = self.get_root_block()?;
         go_to_extents(&root)
     }
@@ -99,7 +99,7 @@ impl DirectoryItem {
 
 fn go_to_pointers(location: &InodeFile) -> Result<Vec<DiskPointer>, DriveError> {
     // get extents
-    let extents = location.to_extents()?;
+    let extents = location.as_extents()?;
     // Extract all the blocks.
     // Pre-allocating this vec isn't really possible, but we at least know that
     // every extent will contain at least one block.
@@ -185,7 +185,7 @@ fn go_read_file(file: &InodeFile, seek_point: u64, size: u32) -> Result<Vec<u8>,
     // TODO: This is a bandaid fix. this logic is ugly.
     byte_index -= 1;
 
-    let blocks = file.to_pointers()?;
+    let blocks = file.as_pointers()?;
     let mut bytes_remaining: u32 = size;
     let mut current_block: usize = block_index;
 

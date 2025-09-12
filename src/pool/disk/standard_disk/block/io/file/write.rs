@@ -3,7 +3,13 @@
 // We will take in InodeFile(s) instead of Extent related types, since we need info about how big files are so they are easier to extend.
 // Creating files is handles on the directory side, since new files just have a name and location.
 
-use std::{cmp::max, ops::{Div, Rem}, process::exit};
+use std::{
+    cmp::max,
+    ops::{
+        Div,
+        Rem
+    }
+};
 
 use log::{debug, warn};
 use log::error;
@@ -196,7 +202,7 @@ fn go_write(inode_file: &mut InodeFile, bytes: &[u8], seek_point: u64) -> Result
     let handle = NotifyTui::start_task(TaskType::FileWriteBytes, bytes.len() as u64);
     // Decompose the file into its pointers
     // No return location, we don't care where this puts us.
-    let mut blocks = inode_file.to_pointers()?;
+    let mut blocks = inode_file.as_pointers()?;
 
     // get the seek point
     let (block_index, mut byte_index) = InodeFile::byte_finder( seek_point);
@@ -687,7 +693,7 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
     // If we are deleting, we can skip the more complicated extent logic.
     if delete {
         // We are deleting all of the blocks, so just get all of them.
-        let mut used_blocks = file.to_pointers()?;
+        let mut used_blocks = file.as_pointers()?;
 
         // We also need to free the extent blocks themselves, not just where they point.
         let mut extent_block_pointer = file.pointer;

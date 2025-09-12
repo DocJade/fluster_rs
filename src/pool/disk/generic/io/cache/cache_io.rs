@@ -36,39 +36,39 @@ pub struct CachedBlockIO {
 
 // Cache methods
 impl CachedBlockIO {
-    /// Sometimes you need to forcibly write a disk during initialization procedures, so we need a bypass.
-    /// 
-    /// This will ensure the correct disk is in the drive, and the header is properly up to date before
-    /// writing anything.
-    /// 
-    /// !! == DANGER == !!
-    /// 
-    /// This function should ONLY be used when initializing disks, since this does not properly update the cache.
-    /// The information written with this function will not be written to cache, nor will the information about this
-    /// disk be flushed from the cache.
-    /// 
-    /// This function also does not update the allocation table.
-    /// 
-    /// You better know what you're doing.
-    /// 
-    /// !! == DANGER == !!
-    pub fn forcibly_write_a_block(raw_block: &RawBlock) -> Result<(), DriveError> {
-        go_force_write_block(raw_block)
-    }
+    // /// Sometimes you need to forcibly write a disk during initialization procedures, so we need a bypass.
+    // /// 
+    // /// This will ensure the correct disk is in the drive, and the header is properly up to date before
+    // /// writing anything.
+    // /// 
+    // /// !! == DANGER == !!
+    // /// 
+    // /// This function should ONLY be used when initializing disks, since this does not properly update the cache.
+    // /// The information written with this function will not be written to cache, nor will the information about this
+    // /// disk be flushed from the cache.
+    // /// 
+    // /// This function also does not update the allocation table.
+    // /// 
+    // /// You better know what you're doing.
+    // /// 
+    // /// !! == DANGER == !!
+    // pub fn forcibly_write_a_block(raw_block: &RawBlock) -> Result<(), DriveError> {
+    //     go_force_write_block(raw_block)
+    // }
 
-    /// Attempts to read a block from the cache, does not load from disk if not present.
-    /// 
-    /// Returns the block if present, or None if absent.
-    pub fn try_read(block_origin: DiskPointer) -> Option<RawBlock> {
-        if let Some(cached) = BlockCache::try_find(block_origin) {
-            // Was there!
-            // Tell the TUI
-            NotifyTui::read_cached();
-            return Some(cached.into_raw())
-        }
-        // Missing.
-        None
-    }
+    // /// Attempts to read a block from the cache, does not load from disk if not present.
+    // /// 
+    // /// Returns the block if present, or None if absent.
+    // pub fn try_read(block_origin: DiskPointer) -> Option<RawBlock> {
+    //     if let Some(cached) = BlockCache::try_find(block_origin) {
+    //         // Was there!
+    //         // Tell the TUI
+    //         NotifyTui::read_cached();
+    //         return Some(cached.into_raw())
+    //     }
+    //     // Missing.
+    //     None
+    // }
 
     
     /// Check if a block is in the cache, and if it is dirty or not.
@@ -91,14 +91,14 @@ impl CachedBlockIO {
         go_read_cached_block(block_origin)
     }
 
-    /// Writes a block to disk. Adds newly written block to cache.
-    /// 
-    /// Block must not be allocated on destination disk, will allocate on write.
-    /// 
-    /// Only works on standard disks.
-    pub fn write_block(raw_block: &RawBlock) -> Result<(), DriveError> {
-        go_write_cached_block(raw_block)
-    }
+    // /// Writes a block to disk. Adds newly written block to cache.
+    // /// 
+    // /// Block must not be allocated on destination disk, will allocate on write.
+    // /// 
+    // /// Only works on standard disks.
+    // pub fn write_block(raw_block: &RawBlock) -> Result<(), DriveError> {
+    //     go_write_cached_block(raw_block)
+    // }
 
     /// Updates pre-existing block on disk, updates cache.
     /// 
@@ -107,11 +107,6 @@ impl CachedBlockIO {
     /// Only works on standard disks.
     pub fn update_block(raw_block: &RawBlock) -> Result<(), DriveError> {
         go_update_cached_block(raw_block)
-    }
-
-    /// Get the hit-rate of the underlying cache
-    pub fn get_hit_rate() -> f64 {
-        BlockCache::get_hit_rate()
     }
 
     /// Sometimes you just need to remove a block from the cache, not even set it to zeros.
@@ -219,24 +214,24 @@ fn go_read_cached_block(block_location: DiskPointer) -> Result<RawBlock, DriveEr
     Ok(read_block)
 }
 
-fn go_write_cached_block(raw_block: &RawBlock) -> Result<(), DriveError> {
-    // Write a block to the disk, also updating the cache with the block (or adding it if it does not yet exist.)
-
-    // The cache expects the block's destination to be allocated already, so we will allocate it here.
-    // We want to use the cache for this allocation if at all possible.
-    BlockCache::cached_block_allocation(raw_block)?;
-
-    // Update the cache with the updated block.
-    // This is a write, so this will need to be flushed.
-    BlockCache::add_or_update_item(CachedBlock::from_raw(raw_block, true))?;
-
-    // We don't need to write, since the cache will do it for us.
-
-    // Notify the TUI
-    NotifyTui::write_cached();
-
-    Ok(())
-}
+// fn go_write_cached_block(raw_block: &RawBlock) -> Result<(), DriveError> {
+//     // Write a block to the disk, also updating the cache with the block (or adding it if it does not yet exist.)
+// 
+//     // The cache expects the block's destination to be allocated already, so we will allocate it here.
+//     // We want to use the cache for this allocation if at all possible.
+//     BlockCache::cached_block_allocation(raw_block)?;
+// 
+//     // Update the cache with the updated block.
+//     // This is a write, so this will need to be flushed.
+//     BlockCache::add_or_update_item(CachedBlock::from_raw(raw_block, true))?;
+// 
+//     // We don't need to write, since the cache will do it for us.
+// 
+//     // Notify the TUI
+//     NotifyTui::write_cached();
+// 
+//     Ok(())
+// }
 
 fn go_update_cached_block(raw_block: &RawBlock) -> Result<(), DriveError> {
     // Update like windows, but better idk this joke sucks lmao
@@ -262,9 +257,9 @@ fn go_update_cached_block(raw_block: &RawBlock) -> Result<(), DriveError> {
     Ok(())
 }
 
-/// Forcibly writes a block to disk immediately, bypasses the cache.
-fn go_force_write_block(raw_block: &RawBlock) -> Result<(), DriveError> {
-    // Load in the disk to write to, ensuring that the header is up to date.
-    let mut disk: StandardDisk = super::cache_implementation::disk_load_header_invalidation(raw_block.block_origin.disk)?;
-    disk.unchecked_write_block(raw_block)
-}
+// /// Forcibly writes a block to disk immediately, bypasses the cache.
+// fn go_force_write_block(raw_block: &RawBlock) -> Result<(), DriveError> {
+//     // Load in the disk to write to, ensuring that the header is up to date.
+//     let mut disk: StandardDisk = super::cache_implementation::disk_load_header_invalidation(raw_block.block_origin.disk)?;
+//     disk.unchecked_write_block(raw_block)
+// }

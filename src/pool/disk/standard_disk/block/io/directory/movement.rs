@@ -1,23 +1,32 @@
 // Helpers to move between directories
 
-use std::path::{Component, Path};
+use std::path::{
+    Component,
+    Path
+};
 
-use log::{debug, info};
+use log::debug;
 
-use crate::{error_types::drive::DriveError, pool::{
-    disk::{
-        generic::{
-            generic_structs::pointer_struct::DiskPointer,
-            io::cache::cache_io::CachedBlockIO
+use crate::{error_types::drive::DriveError,
+    pool::{
+        disk::{
+            generic::{
+                generic_structs::pointer_struct::DiskPointer,
+                io::cache::cache_io::CachedBlockIO
+            },
+            standard_disk::block::{
+                directory::directory_struct::DirectoryBlock,
+                inode::inode_struct::InodeBlock,
+                io::directory::types::NamedItem,
+            },
         },
-        standard_disk::block::{
-            directory::directory_struct::DirectoryBlock,
-            inode::inode_struct::InodeBlock,
-            io::directory::types::NamedItem,
-        },
+        pool_actions::pool_struct::Pool
     },
-    pool_actions::pool_struct::Pool
-}, tui::{notify::NotifyTui, tasks::TaskType}};
+    tui::{
+        notify::NotifyTui,
+        tasks::TaskType
+    }
+};
 
 impl DirectoryBlock {
     /// Attempts to open a directory in the current directory block.

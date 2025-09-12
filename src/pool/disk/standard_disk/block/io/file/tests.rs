@@ -77,13 +77,11 @@ fn write_big_file() {
 fn make_lots_of_files() {
     // Make a blank file
     let _fs = get_filesystem();
-    let mut current_filename_number: usize = 0;
-    for _ in 0..1000 {
+    for (current_filename_number, _) in (0..1000).enumerate() {
         let mut root_block = Pool::get_root_directory().unwrap();
         let new_name: String = format!("{current_filename_number}.txt");
         let _new_file = root_block.new_file(new_name).unwrap();
         // we wont write anything.
-        current_filename_number += 1;
     }
 }
 
@@ -92,9 +90,8 @@ fn make_lots_of_files() {
 #[ignore = "Very slow."]
 fn make_lots_of_filled_files() {
     let _fs = get_filesystem();
-    let mut current_filename_number: usize = 0;
     let mut random: ThreadRng = rand::rng();
-    for _ in 0..1000 {
+    for (current_filename_number, _) in (0..1000).enumerate() {
         let mut root_block = Pool::get_root_directory().unwrap();
         let new_name: String = format!("{current_filename_number}.txt");
         let new_file = root_block.new_file(new_name).unwrap();
@@ -112,7 +109,6 @@ fn make_lots_of_filled_files() {
 
         // Make sure we actually wrote all the bytes
         assert_eq!(bytes_written, bytes.len() as u32);
-        current_filename_number += 1;
     }
 }
 
@@ -201,12 +197,11 @@ fn write_and_read_large() {
 #[ignore = "Very slow."]
 fn read_and_write_random_files() {
     let _ = get_filesystem();
-    let mut current_filename_number: usize = 0;
     let mut random: ThreadRng = rand::rng();
     let mut random_files: Vec<Vec<u8>> = Vec::new();
     const TEST_LENGTH: usize = 1000;
     const MAX_FILE_SIZE: usize = 1024 * 1024; // Currently one meg
-    for _ in 0..TEST_LENGTH {
+    for (current_filename_number, _) in (0..TEST_LENGTH).enumerate() {
         let mut root_block = Pool::get_root_directory().unwrap();
         let new_name: String = format!("{current_filename_number}.txt");
         let new_file = root_block.new_file(new_name).unwrap();
@@ -227,13 +222,11 @@ fn read_and_write_random_files() {
         
         // Make sure we actually wrote all the bytes
         assert_eq!(bytes_written, bytes.len() as u32);
-        current_filename_number += 1;
     }
 
     // Now we need to read all of the files back out
-    let mut current_file: usize = 0;
     let root_block = Pool::get_root_directory().unwrap();
-    for _ in 0..TEST_LENGTH {
+    for (current_file, _) in (0..TEST_LENGTH).enumerate() {
         let named: NamedItem = NamedItem::File(format!("{current_file}.txt"));
         let found: DirectoryItem = root_block.find_item(&named).unwrap().unwrap();
 
@@ -243,9 +236,6 @@ fn read_and_write_random_files() {
 
         // Compare
         check_byte_vec_equality(&read, &random_files[current_file]);
-        
-        // Next
-        current_file += 1;
     }
 }
 
@@ -254,16 +244,15 @@ fn read_and_write_random_files() {
 /// Test helper for tracking down file corruption.
 /// 
 /// Returns nothing, panics if bytes are not the same.
-fn check_byte_vec_equality(a: &Vec<u8>, b: &Vec<u8>) {
+fn check_byte_vec_equality(a: &[u8], b: &[u8]) {
     // Make sure they are the same length
     assert_eq!(a.len(), b.len());
 
     // Check the bytes
-    let mut index: usize = 0;
-
-    for (byte_a, byte_b) in a.iter().zip(b.iter()) {
-        assert_eq!(byte_a, byte_b, "Byte mismatch at index `{}`! a: `{}`, b: `{}`", index, byte_a, byte_b);
+    // The following line is the current Guinness World Records
+    // holder for "Worlds most unreadable iterator chain"
+    for (index, (byte_a, byte_b)) in a.iter().zip(b.iter()).enumerate() {
+        assert_eq!(byte_a, byte_b, "Byte mismatch at index `{index}`! a: `{byte_a}`, b: `{byte_b}`");
         // We cant use enumerate here (i think?) so manual index tracking.
-        index += 1;
     }
 }

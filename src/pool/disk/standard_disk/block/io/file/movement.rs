@@ -44,7 +44,7 @@ impl InodeFile {
 
 impl DirectoryItem {
     /// Retrieve the inode that refers to this block.
-    pub fn get_inode(&self) -> Result<Inode, DriveError> {
+    pub(crate) fn get_inode(&self) -> Result<Inode, DriveError> {
         debug!("Extracting inode from DirectoryItem...");
         // read in that inode block
         let pointer: DiskPointer = self.location.pointer;

@@ -1,13 +1,52 @@
 // how da tui looks.
 
-use std::{time::{Duration, Instant}};
+use std::{
+    time::{
+        Duration,
+        Instant
+    }
+};
 
-use log::error;
-use ratatui::{crossterm, layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style, Stylize}, text::Text, widgets::{Block, Borders, Clear, Gauge, List}, Frame};
-use tui_logger::{TuiLoggerLevelOutput, TuiLoggerWidget};
-use tui_textarea::{Input, Key};
+use ratatui::{
+    crossterm,
+    layout::{
+        Alignment,
+        Constraint,
+        Direction,
+        Layout,
+        Rect
+    },
+    style::{
+        Color,
+        Style,
+        Stylize
+    },
+    text::Text,
+    widgets::{
+        Block,
+        Borders,
+        Clear,
+        Gauge,
+        List
+    },
+    Frame
+};
 
-use crate::tui::{prompts::TuiPrompt, state::FlusterTUIState, tasks::TaskInfo};
+use tui_logger::{
+    TuiLoggerLevelOutput,
+    TuiLoggerWidget
+};
+
+use tui_textarea::{
+    Input,
+    Key
+};
+
+use crate::tui::{
+    prompts::TuiPrompt,
+    state::FlusterTUIState,
+    tasks::TaskInfo
+};
 
 /// The TUI interface of fluster. Call methods on this to update the interface as often as you'd like.
 pub struct FlusterTUI<'a> {

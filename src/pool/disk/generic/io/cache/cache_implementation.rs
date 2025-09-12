@@ -49,16 +49,12 @@ use crate::{
             FloppyDrive,
         },
         generic::{
-            block::{
-                allocate::block_allocation::BlockAllocation,
-                block_structs::RawBlock
-            },
+            block::block_structs::RawBlock,
             disk_trait::GenericDiskMethods,
             generic_structs::pointer_struct::DiskPointer,
             io::{
                 cache::{
                     cache_io::CachedBlockIO,
-                    cached_allocation::CachedAllocationDisk,
                     statistics::BlockCacheStatistics
                 }
             }
@@ -204,15 +200,15 @@ impl BlockCache {
         go_remove_item_cache(pointer)
     }
 
-    /// Reserve a block on a disk, skipping the disk if possible.
-    /// 
-    /// Panics if block was already allocated.
-    pub(super) fn cached_block_allocation(raw_block: &RawBlock) -> Result<(), DriveError> {
-        let mut cache_disk: CachedAllocationDisk = CachedAllocationDisk::open(raw_block.block_origin.disk)?;
-        let _ = cache_disk.allocate_blocks(&vec![raw_block.block_origin.block])?;
-        // Shouldn't even need to check if it allocated one block, no way it could allocate more.
-        Ok(())
-    }
+    // /// Reserve a block on a disk, skipping the disk if possible.
+    // /// 
+    // /// Panics if block was already allocated.
+    // pub(super) fn cached_block_allocation(raw_block: &RawBlock) -> Result<(), DriveError> {
+    //     let mut cache_disk: CachedAllocationDisk = CachedAllocationDisk::open(raw_block.block_origin.disk)?;
+    //     let _ = cache_disk.allocate_blocks(&vec![raw_block.block_origin.block])?;
+    //     // Shouldn't even need to check if it allocated one block, no way it could allocate more.
+    //     Ok(())
+    // }
     
     /// Flushes all information in a tier to disk.
     /// 

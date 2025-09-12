@@ -304,7 +304,7 @@ impl DirectoryItem {
         vec.extend(self.name.as_bytes());
 
         // location of the inode
-        vec.extend(self.location.to_bytes(destination_disk));
+        vec.extend(self.location.as_bytes(destination_disk));
 
         // All done
         vec
@@ -397,11 +397,11 @@ impl DirectoryItem {
         Ok(inode.modified)
     }
 
-    /// All item types point to a block that holds their information.
-    /// You can see what block they point to, but you REALLY should not be doing reads like this.
-    fn get_items_pointer(&self) -> Result<DiskPointer, DriveError> {
-        Ok(self.get_inode()?.get_pointer())
-    }
+    // /// All item types point to a block that holds their information.
+    // /// You can see what block they point to, but you REALLY should not be doing reads like this.
+    // fn get_items_pointer(&self) -> Result<DiskPointer, DriveError> {
+    //     Ok(self.get_inode()?.get_pointer())
+    // }
 
     /// Turn a directory type DirectoryItem into a DirectoryBlock.
     /// 

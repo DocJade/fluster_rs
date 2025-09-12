@@ -107,7 +107,7 @@ fn inode_location_consistency() {
     for _ in 0..1000 {
         let new: InodeLocation = InodeLocation::get_random();
         let disk_number: u16 = new.pointer.disk;
-        let frosted_flaked = new.to_bytes(disk_number);
+        let frosted_flaked = new.as_bytes(disk_number);
         let (_, we_have_the_technology) = InodeLocation::from_bytes(&frosted_flaked, disk_number);
         assert_eq!(new, we_have_the_technology);
     }
@@ -120,10 +120,10 @@ fn inode_correct_sizes() {
         let test_inode: Inode = Inode::get_random();
         if test_inode.file.is_some() {
             // A file inode should be 37 bytes long
-            assert_eq!(test_inode.to_bytes().len(), 37)
+            assert_eq!(test_inode.as_bytes().len(), 37)
         } else {
             // A directory inode should be 29 bytes long
-            assert_eq!(test_inode.to_bytes().len(), 29)
+            assert_eq!(test_inode.as_bytes().len(), 29)
         }
     }
 }
@@ -133,9 +133,9 @@ fn inode_correct_sizes() {
 fn inode_consistent_serialization() {
     for _ in 0..1000 {
         let inode: Inode = Inode::get_random();
-        let serial = inode.to_bytes();
+        let serial = inode.as_bytes();
         let deserial = Inode::from_bytes(&serial);
-        let re_serial = deserial.to_bytes();
+        let re_serial = deserial.as_bytes();
         let re_deserial = Inode::from_bytes(&re_serial);
 
         // Original Inode survived
@@ -177,7 +177,7 @@ impl Inode {
         use rand::random_bool;
         if random_bool(0.5) {
             // A file
-            let mut flags = InodeFlags::new();
+            let mut flags = InodeFlags::MarkerBit;
             flags.insert(InodeFlags::FileType);
 
             Inode {
@@ -190,7 +190,7 @@ impl Inode {
         } else {
             // A directory
             Inode {
-                flags: InodeFlags::new(),
+                flags: InodeFlags::MarkerBit,
                 file: None,
                 directory: Some(InodeDirectory::get_random()),
                 created: InodeTimestamp::get_random(),

@@ -37,7 +37,7 @@ impl From<RawBlock> for InodeBlock {
 // Add ability for inodes to have space searched for them
 impl BytePingPong for Inode {
     fn to_bytes(&self) -> Vec<u8> {
-        self.to_bytes()
+        self.as_bytes()
     }
 
     fn from_bytes(bytes: &[u8]) -> Self {
@@ -50,7 +50,7 @@ impl InodeBlock {
         to_raw_bytes(self)
     }
     pub fn from_block(block: &RawBlock) -> Self {
-        from_raw_block(&block)
+        from_raw_block(block)
     }
     /// Create a new inode block
     ///
@@ -111,15 +111,15 @@ impl InodeBlock {
         let old = self.try_read_inode(inode_offset).expect("Caller should provide valid offset");
 
         // Find out how big that is
-        let old_size = old.to_bytes().len();
+        let old_size = old.as_bytes().len();
 
         // Make sure the new one is the right size
-        let new_size = updated_inode.to_bytes().len();
+        let new_size = updated_inode.as_bytes().len();
 
         assert_eq!(old_size, new_size, "To update an inode, the new inode must be the same size as the old one.");
 
         // Now that we know we can safely perform this operation, we will directly edit ourselves.
-        self.inodes_data[inode_offset as usize..inode_offset as usize + old_size].copy_from_slice(&updated_inode.to_bytes());
+        self.inodes_data[inode_offset as usize..inode_offset as usize + old_size].copy_from_slice(&updated_inode.as_bytes());
 
         // Now we need to flush these updates to disk
         let raw = self.to_block();
@@ -176,7 +176,7 @@ fn inode_block_try_remove_inode(
     // Yes the cast back and forth is silly, but at least its easy.
     let inode_to_remove_length: usize =
         Inode::from_bytes(&block.inodes_data[inode_offset as usize..])
-            .to_bytes()
+            .as_bytes()
             .len();
 
     // Blank out those bytes
@@ -207,7 +207,7 @@ fn inode_block_try_add_inode(
     // Attempt to add an inode to the block.
 
     // Check if we have room for the new inode.
-    let new_inode_bytes: Vec<u8> = new_inode.to_bytes();
+    let new_inode_bytes: Vec<u8> = new_inode.as_bytes();
     let new_inode_length: usize = new_inode_bytes.len();
 
     if new_inode_length > inode_block.bytes_free.into() {
@@ -333,7 +333,7 @@ fn to_raw_bytes(block: &InodeBlock) -> RawBlock {
 //
 
 impl Inode {
-    pub(super) fn to_bytes(&self) -> Vec<u8> {
+    pub(super) fn as_bytes(&self) -> Vec<u8> {
         let mut vec: Vec<u8> = Vec::with_capacity(37); // max size of an inode
 
         // flags
@@ -342,11 +342,11 @@ impl Inode {
         // Inode data
         // There should never be both a file and a directory in an inode.
         if let Some(directory) = self.directory {
-            vec.extend(directory.to_bytes());
+            vec.extend(directory.as_bytes());
         }
 
         if let Some(file) = self.file {
-            vec.extend(file.to_bytes());
+            vec.extend(file.as_bytes());
         }
 
         // Timestamps
@@ -425,7 +425,7 @@ impl Inode {
 }
 
 impl InodeFile {
-    fn to_bytes(&self) -> [u8; 12] {
+    fn as_bytes(&self) -> [u8; 12] {
         let mut buffer: [u8; 12] = [0u8; 12];
         buffer[..8].copy_from_slice(&self.size.to_le_bytes());
         buffer[8..].copy_from_slice(&self.pointer.to_bytes());
@@ -440,7 +440,7 @@ impl InodeFile {
 }
 
 impl InodeDirectory {
-    fn to_bytes(&self) -> [u8; 4] {
+    fn as_bytes(&self) -> [u8; 4] {
         self.pointer.to_bytes()
     }
     fn from_bytes(bytes: [u8; 4]) -> Self {
@@ -481,15 +481,15 @@ impl InodeTimestamp {
     }
 }
 
-impl InodeFlags {
-    pub fn new() -> Self {
-        // We need the marker bit.
-        InodeFlags::MarkerBit
-    }
-}
+// impl InodeFlags {
+//     pub fn new() -> Self {
+//         // We need the marker bit.
+//         InodeFlags::MarkerBit
+//     }
+// }
 
 impl InodeLocation {
-    pub fn to_bytes(&self, destination_disk: u16) -> Vec<u8> {
+    pub fn as_bytes(&self, destination_disk: u16) -> Vec<u8> {
         let mut vec: Vec<u8> = Vec::with_capacity(6); // Max size of this type
 
         // We can ignore the offset contained within self, since we dont write that value, we
@@ -579,7 +579,7 @@ impl InodeLocation {
     }
 
     /// Make a new one!
-    pub fn new(pointer: DiskPointer, offset: u16) -> Self {
+    pub(crate) fn new(pointer: DiskPointer, offset: u16) -> Self {
         // In theory the flags are not read, they are calculated on write.
         // Just set the marker bit.
         Self {
@@ -635,14 +635,14 @@ impl Inode {
     pub fn extract_directory(&self) -> Option<InodeDirectory> {
         self.directory
     }
-    /// All inodes point somewhere.
-    pub fn get_pointer(&self) -> DiskPointer {
-        if let Some(dir) = self.extract_directory() {
-            dir.pointer
-        } else {
-            self.extract_file().expect("Not a directory, so it must be a file.").pointer
-        }
-    }
+    // /// All inodes point somewhere.
+    // pub fn get_pointer(&self) -> DiskPointer {
+    //     if let Some(dir) = self.extract_directory() {
+    //         dir.pointer
+    //     } else {
+    //         self.extract_file().expect("Not a directory, so it must be a file.").pointer
+    //     }
+    // }
 }
 
 // convert an inode timestamp into SystemTime

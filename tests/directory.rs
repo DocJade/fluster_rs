@@ -1,7 +1,19 @@
-use std::{error::Error, ffi::OsStr, thread, time::Duration};
+use std::{
+    error::Error,
+    ffi::OsStr,
+    thread,
+    time::Duration
+};
 
-use log::{debug, error, info};
-use rand::{rngs::ThreadRng, seq::SliceRandom};
+use log::{
+    error,
+    info
+};
+use rand::{
+    rngs::ThreadRng,
+    seq::SliceRandom
+};
+
 // We want to see logs while testing.
 use test_log::test;
 

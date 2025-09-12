@@ -80,6 +80,9 @@ impl TryFrom<WrappedIOError> for DriveIOError {
         // Sleep for a tad just in case we're doing a retry
         std::thread::sleep(Duration::from_secs(1));
 
+        // Log where we were trying to do IO at when the error occurred.
+        debug!("IO error occured while trying to access disk {} block {}", value.error_origin.disk, value.error_origin.block);
+
         match value.io_error.kind() {
             ErrorKind::NotFound => {
                 // The floppy drive path is not there.

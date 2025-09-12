@@ -102,7 +102,7 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
 
     // Do the error cleanup, if that works, the disk should be working now, and we can recurse, since we
     // should now be able to complete the operation successfully.
-    CriticalError::OutOfRetries(RetryCapError::CantWriteBlock).handle();
+    CriticalError::OutOfRetries(RetryCapError::WriteBlock).handle();
     write_block_direct(disk_file, block)
 }
 
@@ -199,7 +199,7 @@ pub(crate) fn write_large_direct(disk_file: &File, data: &[u8], start_block: Dis
     // Do the error cleanup, if that works, the disk should be working now, we should now be able to write
     // to the disk, but instead of recursing, we call the fallback to try to be a bit safer with the failure, and
     // to prevent infinite recursion.
-    CriticalError::OutOfRetries(RetryCapError::CantWriteBlock).handle();
+    CriticalError::OutOfRetries(RetryCapError::WriteBlock).handle();
     large_write_fallback(disk_file, data, start_block)
 }
 

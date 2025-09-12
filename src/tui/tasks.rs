@@ -1,6 +1,6 @@
 // Keeping track of what we're working on
 
-use std::{fmt, path::Path, time::Instant};
+use std::time::Instant;
 
 use crate::tui::notify::NotifyTui;
 

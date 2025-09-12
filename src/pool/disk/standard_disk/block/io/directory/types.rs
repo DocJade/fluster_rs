@@ -25,8 +25,8 @@ impl NamedItem {
         // Searching with this function only does the minimum amount of clones
         // to deduce if the item is present or not, instead of needing to clone the
         // entire Vec to construct the new type.
-        let item_found = to_search.iter().find(|item| {
-            let convert = NamedItem::from(item.clone().clone()); //TODO: This is stupid.
+        let item_found: Option<&DirectoryItem> = to_search.iter().find(|item: &&DirectoryItem| {
+            let convert: NamedItem = NamedItem::from((*item).clone()); //TODO: This is stupid.
             convert == *self
         });
         item_found.cloned()
@@ -35,10 +35,10 @@ impl NamedItem {
     pub fn is_file(&self) -> bool {
         matches!(self, NamedItem::File(_))
     }
-    /// Helper function to figure out if this is a directory
-    pub fn is_directory(&self) -> bool {
-        matches!(self, NamedItem::Directory(_))
-    }
+    // /// Helper function to figure out if this is a directory
+    // pub fn is_directory(&self) -> bool {
+    //     matches!(self, NamedItem::Directory(_))
+    // }
 }
 
 /// Helper to turn DirectoryItem(s) into NamedItem(s)

@@ -87,26 +87,26 @@ impl FileExtentBlock {
         self.extents.clone()
     }
 
-    /// Helper function that calculates how many blocks an input amount of data will require.
-    /// Does not take into account the sizes of FileExtent blocks or such, just the DataBlock size.
-    /// We are assuming you aren't going to write more than 32MB at a time.
-    pub fn size_to_blocks(size_in_bytes: u64) -> u16 {
-        // This calculation never changes, since the overhead of block is always the same.
-        // A block holds 512 bytes, but we reserve 1 bytes for the flags (Currently unused),
-        // and 4 more bytes for the checksum.
-
-        // We will always need to round up on this division.
-        let mut blocks: u64;
-        blocks = size_in_bytes / (512 - DATA_BLOCK_OVERHEAD);
-        // If there is a remainder, we also need to add an additional block.
-        if size_in_bytes % (512 - DATA_BLOCK_OVERHEAD) != 0 {
-            // One more.
-            blocks += 1;
-        }
-        // This truncates the value.
-        // if you are somehow about to write a buffer of >22 floppy disks in one go, you have bigger issues.
-        blocks as u16
-    }
+    // /// Helper function that calculates how many blocks an input amount of data will require.
+    // /// Does not take into account the sizes of FileExtent blocks or such, just the DataBlock size.
+    // /// We are assuming you aren't going to write more than 32MB at a time.
+    // pub fn size_to_blocks(size_in_bytes: u64) -> u16 {
+    //     // This calculation never changes, since the overhead of block is always the same.
+    //     // A block holds 512 bytes, but we reserve 1 bytes for the flags (Currently unused),
+    //     // and 4 more bytes for the checksum.
+    // 
+    //     // We will always need to round up on this division.
+    //     let mut blocks: u64;
+    //     blocks = size_in_bytes / (512 - DATA_BLOCK_OVERHEAD);
+    //     // If there is a remainder, we also need to add an additional block.
+    //     if size_in_bytes % (512 - DATA_BLOCK_OVERHEAD) != 0 {
+    //         // One more.
+    //         blocks += 1;
+    //     }
+    //     // This truncates the value.
+    //     // if you are somehow about to write a buffer of >22 floppy disks in one go, you have bigger issues.
+    //     blocks as u16
+    // }
 
     /// Forcibly replace all extents in a FileExtentBlock.
     /// 

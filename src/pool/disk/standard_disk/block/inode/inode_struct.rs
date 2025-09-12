@@ -9,7 +9,7 @@ use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 // Structs, Enums, Flags
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct Inode {
+pub(crate) struct Inode {
     pub flags: InodeFlags,
     pub file: Option<InodeFile>,
     pub directory: Option<InodeDirectory>,

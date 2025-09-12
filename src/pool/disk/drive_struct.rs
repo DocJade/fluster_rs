@@ -35,26 +35,26 @@ pub enum DiskType {
     Blank(BlankDisk),
 }
 
-/// We also have another type that does not contain the disk info.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum JustDiskType {
-    Pool,
-    Standard,
-    Unknown,
-    Blank,
-}
+// /// We also have another type that does not contain the disk info.
+// #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// pub enum JustDiskType {
+//     Pool,
+//     Standard,
+//     Unknown,
+//     Blank,
+// }
 
 // Let us match the two
-impl PartialEq<JustDiskType> for DiskType {
-    fn eq(&self, other: &JustDiskType) -> bool {
-        match self {
-            DiskType::Pool(_) => matches!(other, JustDiskType::Pool),
-            DiskType::Standard(_) => matches!(other, JustDiskType::Standard),
-            DiskType::Unknown(_) => matches!(other, JustDiskType::Unknown),
-            DiskType::Blank(_) => matches!(other, JustDiskType::Blank),
-        }
-    }
-}
+// impl PartialEq<JustDiskType> for DiskType {
+//     fn eq(&self, other: &JustDiskType) -> bool {
+//         match self {
+//             DiskType::Pool(_) => matches!(other, JustDiskType::Pool),
+//             DiskType::Standard(_) => matches!(other, JustDiskType::Standard),
+//             DiskType::Unknown(_) => matches!(other, JustDiskType::Unknown),
+//             DiskType::Blank(_) => matches!(other, JustDiskType::Blank),
+//         }
+//     }
+// }
 
 /// All disk types need to be able to create themselves from a raw block.
 /// Or, be able to create themselves from a blank disk.

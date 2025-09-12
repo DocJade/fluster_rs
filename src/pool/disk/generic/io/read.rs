@@ -136,7 +136,7 @@ pub(crate) fn read_block_direct(
     error!("Read failure, requires assistance.");
 
     // Do the error cleanup, if that works, we will recurse, since the call should now work.
-    CriticalError::OutOfRetries(RetryCapError::CantReadBlock).handle();
+    CriticalError::OutOfRetries(RetryCapError::ReadBlock).handle();
     read_block_direct(disk_file, originating_disk, block_index, ignore_crc)
 }
 
@@ -245,6 +245,6 @@ pub(crate) fn read_multiple_blocks_direct(
     error!("Read failure, requires assistance.");
 
     // Do the error cleanup, if that works, we will recurse, since the call should now work.
-    CriticalError::OutOfRetries(RetryCapError::CantReadBlock).handle();
+    CriticalError::OutOfRetries(RetryCapError::ReadBlock).handle();
     read_multiple_blocks_direct(disk_file, originating_disk, block_index, num_to_read)
 }

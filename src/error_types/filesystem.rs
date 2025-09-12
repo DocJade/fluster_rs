@@ -30,17 +30,17 @@ pub(in super::super) const IS_A_DIRECTORY: c_int = libc::EISDIR;
 /// Function not implemented.
 pub(in super::super) const UNIMPLEMENTED: c_int = libc::ENOSYS;
 /// This operation is not supported in this filesystem.
-pub(in super::super) const UNSUPPORTED: c_int = libc::ENOTSUP; 
+// pub(in super::super) const UNSUPPORTED: c_int = libc::ENOTSUP; 
 /// Access denied / files does not exist.
 pub(in super::super) const NO_SUCH_ITEM: c_int = libc::ENOENT;
 /// Tried to seek to an invalid file position.
-pub(in super::super) const INVALID_SEEK: c_int = libc::ESPIPE;
+// pub(in super::super) const INVALID_SEEK: c_int = libc::ESPIPE;
 /// Tried to use a filehandle that is stale. New one is required.
 pub(in super::super) const STALE_HANDLE: c_int = libc::ESTALE;
 // Generic IO error. The dreaded OS(5) Input/Output error.
 pub(in super::super) const GENERIC_FAILURE: c_int = libc::EIO;
 /// You are insane.
-pub(in super::super) const FILE_TOO_BIG: c_int = libc::EFBIG;
+// pub(in super::super) const FILE_TOO_BIG: c_int = libc::EFBIG;
 /// Operation was interrupted for some reason, but can be retried.
 pub(in super::super) const TRY_AGAIN: c_int = libc::ERESTART;
 /// Device / filesystem is busy, try again later.

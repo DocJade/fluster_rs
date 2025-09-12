@@ -2,12 +2,24 @@
 // Returning this error type means you've done all you possibly can, and need saving at a higher level, or
 // we are in a unrecoverable state.
 
-use std::{fs::OpenOptions, os::unix::fs::FileExt, path::PathBuf, process::exit};
+use std::{
+    fs::OpenOptions,
+    os::unix::fs::FileExt,
+    path::PathBuf,
+    process::exit
+};
 
 use thiserror::Error;
-use log::{error, warn};
+use log::error;
 
-use crate::{error_types::drive::InvalidDriveReason, filesystem::{disk_backup::restore::restore_disk, filesystem_struct::FLOPPY_PATH}, pool::disk::generic::generic_structs::pointer_struct::DiskPointer, tui::prompts::TuiPrompt};
+use crate::{
+    error_types::drive::InvalidDriveReason,
+    filesystem::{
+        disk_backup::restore::restore_disk,
+        filesystem_struct::FLOPPY_PATH
+    },
+    tui::prompts::TuiPrompt
+};
 
 #[derive(Debug, Clone, Copy, Error, PartialEq)]
 /// Use this error type if an error happens that you are unable to
@@ -26,11 +38,11 @@ pub enum CriticalError {
 /// When you run out of retries on an operation, its useful to know what kind of issue was occurring.
 pub enum RetryCapError {
     /// Opening the disk is repeatedly failing
-    CantOpenDisk,
+    OpenDisk,
     /// Attempting to write a block is repeatedly failing.
-    CantWriteBlock,
+    WriteBlock,
     /// Attempting to read a block is repeatedly failing.
-    CantReadBlock,
+    ReadBlock,
 }
 
 //
@@ -153,12 +165,12 @@ fn handle_drive_inaccessible(reason: InvalidDriveReason) -> bool {
 /// yes this is the same as the other handler, but whatever
 fn handle_out_of_retries(reason:RetryCapError) -> bool {
     match reason {
-        RetryCapError::CantOpenDisk => {
+        RetryCapError::OpenDisk => {
             // Run the troubleshooter
             troubleshooter()
         },
-        RetryCapError::CantWriteBlock => troubleshooter(),
-        RetryCapError::CantReadBlock => troubleshooter(),
+        RetryCapError::WriteBlock => troubleshooter(),
+        RetryCapError::ReadBlock => troubleshooter(),
     }
 }
 
@@ -284,7 +296,7 @@ fn troubleshooter() -> bool {
         Before restoring those disks though, make sure to back-up the backups, since they might be slightly corrupt.".to_string(),
         false
     );
-    return false;
+    false
 }
 
 
@@ -377,7 +389,7 @@ fn update_drive_path() {
             false
         );
         // If nothing was entered, the path has not changed
-        if possible == "".to_string() {
+        if possible.is_empty() {
             // no change.
             return
         }
@@ -401,7 +413,7 @@ fn update_drive_path() {
         } else {
             TuiPrompt::prompt_enter(
                 "Invalid path.".to_string(),
-                format!("Unable to either open path, or confirm it exists. Please provide a valid path."),
+                "Unable to either open path, or confirm it exists. Please provide a valid path.".to_string(),
                 false
             );
             continue;
@@ -514,15 +526,15 @@ fn do_disk_restore() {
 // User information
 //
 
-fn inform_improper_mount_point() -> ! {
-    TuiPrompt::prompt_enter(
-        "Bad mount point.".to_string(),
-        "The point where you have tried to mount fluster is invalid for some reason.\n
-        Please re-confirm that the mount point is valid, then re-run fluster. Good luck!".to_string(),
-        true
-    );
-    exit(-1) // Exiting, no floppy drive to flush with.
-}
+// fn inform_improper_mount_point() -> ! {
+//     TuiPrompt::prompt_enter(
+//         "Bad mount point.".to_string(),
+//         "The point where you have tried to mount fluster is invalid for some reason.\n
+//         Please re-confirm that the mount point is valid, then re-run fluster. Good luck!".to_string(),
+//         true
+//     );
+//     exit(-1) // Exiting, no floppy drive to flush with.
+// }
 
 fn inform_improper_floppy_drive() -> bool {
     // We cannot use this floppy drive.

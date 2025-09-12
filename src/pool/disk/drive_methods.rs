@@ -294,7 +294,7 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Drive
     // We've failed 10 times. Nothing we can do.
     // We can probably recover for this assuming the critical handler can either rebuild the disk
     // or somehow make it writable again
-    CriticalError::OutOfRetries(RetryCapError::CantOpenDisk).handle();
+    CriticalError::OutOfRetries(RetryCapError::OpenDisk).handle();
     // If that works, recurse, we should be able to get the file now.
     get_floppy_drive_file(disk_number, new_disk)
 }
@@ -384,7 +384,7 @@ fn prompt_for_disk(disk_number: u16) -> Result<DiskType, DriveError> {
             Err(_) => {
                 // We'll launch the troubleshooter regardless of error type,
                 // since we really need swapping disks to work.
-                CriticalError::OutOfRetries(RetryCapError::CantOpenDisk).handle();
+                CriticalError::OutOfRetries(RetryCapError::OpenDisk).handle();
                 // Then we just try the swap again.
             },
         }

@@ -236,7 +236,7 @@ impl FileHandle {
     }
 
     /// Get a named item from this handle.
-    pub fn get_named_item(&self) -> Result<Option<NamedItem>, c_int> {
+    pub(crate) fn get_named_item(&self) -> Result<Option<NamedItem>, c_int> {
         // Get a name
         let name: String = self.name().to_string();
         let file_check = self.is_file()?;
