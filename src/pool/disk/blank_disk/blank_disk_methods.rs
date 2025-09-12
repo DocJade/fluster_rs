@@ -2,6 +2,8 @@
 
 use std::fs::File;
 
+use log::error;
+
 use crate::{
     error_types::drive::DriveError,
         pool::disk::{
@@ -39,12 +41,16 @@ impl GenericDiskMethods for BlankDisk {
     #[doc = " Get the number of the floppy disk."]
     fn get_disk_number(&self) -> u16 {
         // Why are we getting the disk number of a blank floppy?
-        unreachable!("Attempted to get the disk number of a blank disk! Not allowed!")
+        error!("Attempted to get the disk number of a blank disk! Not allowed!");
+        // We will ignore the action and return a nonsensical number, this prevents fluster
+        // from crashing if you have a disk blank disk in the drive after finishing troubleshooting.
+        u16::MAX
     }
 
     #[doc = " Set the number of this disk."]
     fn set_disk_number(&mut self, _disk_number: u16) -> () {
         // You cannot set the number of a blank disk.
+        // Trying to set the disk number is doomed to fail, because at this point it thinks its an initialized disk, which it is not.
         unreachable!("Attempted to set the disk number of a blank disk! Not allowed!")
     }
 
