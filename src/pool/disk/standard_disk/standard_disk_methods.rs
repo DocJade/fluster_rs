@@ -254,7 +254,6 @@ fn create(file: File, disk_number: u16) -> Result<StandardDisk, DriveError> {
 /// Will wipe the rest of the disk,
 ///
 /// Errors if provided with a disk that has a header.
-// TODO: Somehow prevent duplicate disk numbers?
 fn initialize_numbered(disk: &mut StandardDisk, disk_number: u16) -> Result<(), DriveError> {
     debug!("Initializing a new standard disk...");
     // A new, fresh disk!

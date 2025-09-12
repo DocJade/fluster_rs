@@ -270,7 +270,6 @@ fn pool_header_to_raw_block(header: PoolDiskHeader) -> RawBlock {
     buffer[148..148 + 360].copy_from_slice(&block_usage_map);
 
     // Add the CRC
-    // TODO: Make sure there is a test for valid crcs on this header type
     add_crc_to_block(&mut buffer);
 
     // This needs to always go at block 0

@@ -171,8 +171,7 @@ fn extent_block_add_extent(
 
     // Yes this causes a lot of extent.to_bytes() calls, but
     // we need to be able to toss the disk number.
-    // In theory this could be kept track of at a higher level than this.
-    // TODO: Maybe someday.
+    // Its fast enough.
 
     // What block this is going into
     let destination_disk_number: u16 = block.block_origin.disk;

@@ -27,8 +27,8 @@ pub(in super::super) const NOT_A_DIRECTORY: c_int = libc::ENOTDIR;
 pub(in super::super) const INVALID_ARGUMENT: c_int = libc::EINVAL;
 /// Tried to do things to a directory that it does not support.
 pub(in super::super) const IS_A_DIRECTORY: c_int = libc::EISDIR;
-/// Function not implemented.
-pub(in super::super) const UNIMPLEMENTED: c_int = libc::ENOSYS;
+// /// Function not implemented.
+// pub(in super::super) const UNIMPLEMENTED: c_int = libc::ENOSYS;
 /// This operation is not supported in this filesystem.
 // pub(in super::super) const UNSUPPORTED: c_int = libc::ENOTSUP; 
 /// Access denied / files does not exist.

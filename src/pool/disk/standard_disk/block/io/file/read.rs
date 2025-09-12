@@ -155,9 +155,6 @@ fn go_to_extents(
         continue;
     }
 
-    // We will not sort this vec, since the order matters. The blocks are added to extend the file always at the end.
-    // TODO: Assert that this is true ^
-
     debug!("Extents retrieved.");
     Ok(extents_found)
 }
@@ -182,7 +179,8 @@ fn go_read_file(file: &InodeFile, seek_point: u64, size: u32) -> Result<Vec<u8>,
     let (block_index, mut byte_index) = InodeFile::byte_finder( seek_point);
 
     // The byte_finder already skips the flag, so it ends up adding one, we need to subtract that.
-    // TODO: This is a bandaid fix. this logic is ugly.
+    // This is a bandaid fix. this logic is ugly.
+    // Not gonna refactor it tho, hehe.
     byte_index -= 1;
 
     let blocks = file.as_pointers()?;

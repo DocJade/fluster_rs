@@ -26,7 +26,7 @@ impl NamedItem {
         // to deduce if the item is present or not, instead of needing to clone the
         // entire Vec to construct the new type.
         let item_found: Option<&DirectoryItem> = to_search.iter().find(|item: &&DirectoryItem| {
-            let convert: NamedItem = NamedItem::from((*item).clone()); //TODO: This is stupid.
+            let convert: NamedItem = NamedItem::from((*item).clone());
             convert == *self
         });
         item_found.cloned()

@@ -60,7 +60,6 @@ pub enum DiskType {
 /// Or, be able to create themselves from a blank disk.
 /// We also need to create fake disks to allow creating disks (confusing eh?)
 pub trait DiskBootstrap {
-    // TODO: Let disk bootstraps fail.
     /// Create brand new disk.
     /// This takes in a blank floppy disk, and does all the needed setup on the disk,
     /// such as writing the header, and other block setup.

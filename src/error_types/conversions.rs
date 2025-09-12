@@ -149,8 +149,16 @@ impl TryFrom<WrappedIOError> for DriveIOError {
                 // If it was just the write-protect notch, we can recover.
                 Err(CannotConvertError::MustRetry)
             },
-            ErrorKind::InvalidInput => todo!(),
-            ErrorKind::InvalidData => todo!(),
+            ErrorKind::InvalidInput => {
+                // The paramaters given for the IO action were bad, chances are, retrying this wont
+                // do anything. We're cooked.
+                // But hopefully this shouldn't happen because I'm epic sauce :D
+                unreachable!("Invalid input parameters into IO action.")
+            },
+            ErrorKind::InvalidData => {
+                // See above, blah blah blah epic sauce
+                unreachable!("Data not valid for the operation showed up in IO action.")
+            },
             ErrorKind::TimedOut => {
                 // The IO took too long, we should be able to try again.
                 Err(CannotConvertError::MustRetry)

@@ -10,8 +10,9 @@
 
 use std::{ffi::OsStr, path::Path, time::Duration};
 
-use fuse_mt::{DirectoryEntry, FileAttr, FileType, FilesystemMT};
+use fuse_mt::{DirectoryEntry, FileAttr, FileType, FilesystemMT, Statfs};
 use log::{debug, error, info, warn};
+use rand::Rng;
 
 use crate::{
     filesystem::{
@@ -26,7 +27,7 @@ use crate::{
             },
             io::directory::types::NamedItem
         }
-    }, pool_actions::pool_struct::Pool}, tui::{notify::NotifyTui, prompts::TuiPrompt, tasks::TaskType}
+    }, pool_actions::pool_struct::{Pool, GLOBAL_POOL}}, tui::{notify::NotifyTui, prompts::TuiPrompt, tasks::TaskType}
 };
 
 use super::file_handle::file_handle_struct::FileHandle;
@@ -795,10 +796,12 @@ impl FilesystemMT for FlusterFS {
                 renamed.name.push_str(".fluster_old");
                 // Is this too long now?
                 if renamed.name.len() > 255 {
-                    // Shoot, go with a stupid name instead.
-                    // Yes this could collide. If it does, we are cooked. Good luck!
-                    // TODO: Consider using a hash of the name, or just a UUID?
-                    renamed.name = "DocJadeWasHereAndNeededToDeleteThis.delete_me".to_string();
+                    // Shoot, go with a random name instead.
+                    let mut random: rand::prelude::ThreadRng = rand::rng();
+                    let random_name: u128 = random.random();
+                    let mut random_name_string = random_name.to_string();
+                    random_name_string.truncate(128);
+                    renamed.name = random_name_string;
                     renamed.name_length = renamed.name.len() as u8; // will fit
                 }
 
@@ -1591,8 +1594,60 @@ impl FilesystemMT for FlusterFS {
     // Get file system statistics.
     // Seemingly contains information about the file system, like optimal block size and max file name length
     fn statfs(&self, _req: fuse_mt::RequestInfo, _path: &std::path::Path) -> fuse_mt::ResultStatfs {
-        // TODO: Is this needed?
-        Err(UNIMPLEMENTED)
+        // This does not appear to be required, but we can implement it anyways.
+
+        // Get the pool header, we need it for disk counts and such.
+        // If this doesnt work, just tell the caller to try again later.
+
+        let pool = if let Ok(pool_inner) = GLOBAL_POOL.get().expect("Global pool should be created at this stage!").try_lock() {
+            pool_inner.header
+        } else {
+            // Lock failed.
+            debug!("Tried to get stats about the pool, but locking the pool failed. Skipping...");
+            return Err(TRY_AGAIN)
+        };
+
+        // Number of blocks on the device is just the highest disk*2880
+        let blocks: u64 = pool.highest_known_disk as u64 * 2880;
+
+        // We know how many blocks are free.
+        // Not sure how Linux reacts to disks that grow on the fly, but
+        // it seems like a likely enough use-case that this should be fine...
+        let bfree: u64 = pool.pool_standard_blocks_free.into();
+
+        // The number of available blocks is the same as the number of free blocks.
+        let bavail = bfree;
+
+        // Knowing how many files exist is a process that would take a VERY long time to figure out
+        // typically. This seems like a bad idea to actually look up on the fly.
+        // Just say there's a few.
+        let files: u64 = 985;
+
+        // We don't have a limit to file inodes, so we always have a lot free.
+        let ffree: u64 = 12345;
+
+        // Blocks are 512 bytes, technically, but innards of those blocks are limited...
+        // Not that huge of a deal for transfers to be aligned, so we'll just say 512 still.
+        let bsize: u32 = 512;
+
+        // Max filename length is 255 characters.
+        let namelen: u32 = 255;
+
+        // Fragments are the min size that can be allocated to a file, which in our case is roughly a block.
+        let frsize: u32 = 512;
+
+        let stat: Statfs = Statfs {
+            blocks,
+            bfree,
+            bavail,
+            files,
+            ffree,
+            bsize,
+            namelen,
+            frsize,
+        };
+
+        Ok(stat)
     }
 
     // Extended attributes are not supported.
@@ -1738,7 +1793,7 @@ impl FilesystemMT for FlusterFS {
                 attr: facebook_data,
                 fh: file_handle,
                 flags,  // We use the same flags we came in with. Not the one from the loaded file.
-                        // Is that a bad idea? No idea. TODO: is this safe?
+                        // Is that a bad idea? No idea. Seems to work just fine.
             })
         }
 

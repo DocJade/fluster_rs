@@ -208,7 +208,6 @@ fn go_write(inode_file: &mut InodeFile, bytes: &[u8], seek_point: u64) -> Result
     let (block_index, mut byte_index) = InodeFile::byte_finder( seek_point);
 
     // The byte_finder already skips the flag, so it ends up adding one, we need to subtract that.
-    // TODO: This is a bandaid fix. this logic is ugly.
     byte_index -= 1;
 
     // Make sure we actually have a block at that offset. We cannot start writing from unallocated space.
@@ -700,8 +699,9 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
 
         while !extent_block_pointer.no_destination() {
             used_blocks.push(extent_block_pointer);
-            // TODO: This work has already been done on `to_pointers`, maybe there should be another
+            // This work has already been done on `to_pointers`, maybe there should be another
             // method that returns the pointers, and the pointers to the extent blocks at the same time.
+            // Not gonna write that tho, this is fine.
             let read = CachedBlockIO::read_block(extent_block_pointer)?;
             let extent_block: FileExtentBlock = FileExtentBlock::from_block(&read);
             extent_block_pointer = extent_block.next_block;

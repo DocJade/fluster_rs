@@ -20,4 +20,5 @@ pub(crate) fn add_crc_to_block(block: &mut [u8; 512]) {
     block[508..].copy_from_slice(&crc);
 }
 
-// TODO: Correct detected errors if possible?
+// Correcting detected errors could in theory be done with trying to flip every bit, but realistically,
+// we're better off just re-reading it, or restoring it from backup.

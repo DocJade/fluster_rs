@@ -1,5 +1,5 @@
 // All types of disk MUST implement this.
-// TODO: Enforce that somehow.
+// Enforced by traits.
 
 use std::fs::File;
 

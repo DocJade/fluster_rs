@@ -26,7 +26,7 @@ use super::pool_disk_struct::PoolDisk;
 // Implementations
 
 impl PoolDisk {
-    // todo
+    // there are no pool disk methods
 }
 
 // Bootstrapping
@@ -34,19 +34,22 @@ impl DiskBootstrap for PoolDisk {
     fn bootstrap(_file: File, _disk_number: u16) -> Result<Self, DriveError> {
         // Annoyingly, we do bootstrapping of the pool disk from elsewhere, so this has to be here just
         // to fill criteria for DiskBootstrap
-        todo!()
+        unreachable!("Pool disks are not bootstrapped.")
     }
 
+    /// This method will panic if fed an invalid block.
     fn from_header(block: RawBlock, file: File) -> Self {
         // Immediately check the CRC of the incoming block, we don't know what state it's in
         if !check_crc(block.data) {
             // CRC failed!
+            // If the CRC on the pool header has failed, we're cooked.
             error!("Someday we should be able to recover from crc checks... that is not today.");
-            todo!()
+            panic!("Bad CRC on pool header!");
         };
         // CRC is good, construct the disk...
-        #[allow(clippy::unwrap_used)] // TODO: remove unwrap.
-        let header = PoolDiskHeader::from_block(&block).unwrap();
+        // Expect is fine, dying this early isnt a big deal.
+        // Plus we should be only called after already verifying that the CRC is good, and that the block is not empty.
+        let header = PoolDiskHeader::from_block(&block).expect("Pool header block needs to be good at this point.");
         Self {
             number: 0, // The pool disk is always disk 0
             header,

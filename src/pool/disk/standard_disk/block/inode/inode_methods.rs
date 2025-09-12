@@ -220,7 +220,7 @@ fn inode_block_try_add_inode(
         Some(ok) => ok,
         None => {
             // couldn't find enough space, block must be fragmented.
-            // Defrag is hard. TODO: maybe some day
+            // Defrag is hard with only pointers that go in one direction... So no defrag.
             return Err(BlockManipulationError::OutOfRoom);
         }
     };
@@ -627,7 +627,6 @@ impl InodeFile {
 
 
 // Extract an inode into its inner type
-// TODO: Remove access to innards of Inode, force usage of method calls.
 impl Inode {
     pub fn extract_file(&self) -> Option<InodeFile> {
         self.file

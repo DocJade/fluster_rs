@@ -940,36 +940,34 @@ fn go_flush_disk_from_cache(disk_number: u16) -> Result<u64, DriveError> {
     // Ignore the block if it does not require flushing.
     // - We discard it ourselves here since those reads might still be useful, so cleaning up here
     //   Might be too early.
-    let to_flush: HashMap<DiskPointer, CachedBlock> = tier_0.items_map
+    let clone_to_flush: HashMap<DiskPointer, CachedBlock> = tier_0.items_map.clone()
         .extract_if(|pointer, block| pointer.disk == disk_number && block.requires_flush)
         .collect();
 
-    // Split that into pointers and blocks
-    let pointers_to_discard: Vec<DiskPointer> = to_flush.keys().cloned().collect();
-    let mut blocks_to_flush: Vec<CachedBlock> = to_flush.into_values().collect();
+    // Split that into pointers and blocks.
+    // We take a clone of them, since we wanna actually delete them later, in case the flush fails.
 
-    
-    // Then discard all of the sorting information about those blocks
-    tier_0.order.retain(|order| !pointers_to_discard.contains(order));
+    let cloned_pointers_to_discard: Vec<DiskPointer> = clone_to_flush.clone().keys().cloned().collect();
+    let mut cloned_blocks_to_flush: Vec<CachedBlock> = clone_to_flush.clone().into_values().collect();
 
     // We're done working with the cache.
     let _ = tier_0;
     drop(cache);
 
     // Exit early if we dont have anything
-    if blocks_to_flush.is_empty() {
+    if cloned_blocks_to_flush.is_empty() {
         debug!("Nothing to flush from this disk.");
         return Ok(0);
     }
 
     // Debug how many blocks we're about to flush
-    debug!("Writing {} blocks to disk...", blocks_to_flush.len());
+    debug!("Writing {} blocks to disk...", cloned_blocks_to_flush.len());
 
     // Sort the blocks
-    blocks_to_flush.sort_unstable_by_key(|block| block.block_origin.block);
+    cloned_blocks_to_flush.sort_unstable_by_key(|block| block.block_origin.block);
     
     // Chunk the blocks for faster writes
-    let chunked_blocks: Vec<Vec<CachedBlock>> = blocks_to_flush
+    let chunked_blocks: Vec<Vec<CachedBlock>> = cloned_blocks_to_flush
         .chunk_by(|a, b| b.block_origin.block == a.block_origin.block + 1)
         .map(|block| block.to_vec()).collect();
 
@@ -1002,13 +1000,27 @@ fn go_flush_disk_from_cache(disk_number: u16) -> Result<u64, DriveError> {
     // Now that the writes are done, actually remove the blocks from the cache. If we removed them earlier
     // and any of these operations failed, we would lose data.
 
-    // TODO: ^^^^^^^^^
+    // Get the cache/tier back
+    let mut cache = CASHEW.try_lock().expect("Single threaded.");
+    let tier_0: &mut TieredCache = &mut cache.tier_0;
+
+    // Toss the blocks
+    let _: HashMap<DiskPointer, CachedBlock> = tier_0.items_map
+        .extract_if(|pointer, block| pointer.disk == disk_number && block.requires_flush)
+        .collect();
+
+    // Then discard all of the sorting information about those blocks
+    tier_0.order.retain(|order| !cloned_pointers_to_discard.contains(order));
+
+    // Done with cache.
+    let _ = tier_0;
+    drop(cache);
 
     // Update the hit rate of the cache, might as well.
     NotifyTui::set_cache_hit_rate(BlockCache::get_hit_rate());
 
     // All done.
-    Ok(blocks_to_flush.len() as u64)
+    Ok(cloned_blocks_to_flush.len() as u64)
 }
 
 fn go_check_tier_full(tier: &TieredCache) -> bool {
