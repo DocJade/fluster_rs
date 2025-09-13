@@ -15,6 +15,7 @@ use crate::error_types::conversions::CannotConvertError;
 use crate::error_types::critical::{CriticalError, RetryCapError};
 use crate::error_types::drive::{DriveError, DriveIOError, WrappedIOError};
 use crate::filesystem::filesystem_struct::WRITE_BACKUPS;
+use crate::pool::disk::drive_struct::FloppyDrive;
 use crate::pool::disk::generic::generic_structs::pointer_struct::DiskPointer;
 use crate::tui::notify::NotifyTui;
 use crate::tui::tasks::TaskType;
@@ -30,7 +31,7 @@ use std::{
 
 /// Write a block to the currently inserted disk in the floppy drive
 /// ONLY FOR LOWER LEVEL USE, USE CHECKED_WRITE()!
-pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(), DriveError> {
+pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock, has_recursed: bool) -> Result<(), DriveError> {
     let handle = NotifyTui::start_task(TaskType::DiskWriteBlock, 1);
     trace!(
         "Directly writing block {} to currently inserted disk...",
@@ -98,12 +99,43 @@ pub(crate) fn write_block_direct(disk_file: &File, block: &RawBlock) -> Result<(
     };
 
     // We've made it outside of the loop. The error is unrecoverable.
+    
+    // The recursion failed, so the previous error handling failed. We will bail.
+    if has_recursed {
+        // Rough.
+        return Err(DriveError::Retry);
+    }
     error!("Write failure, requires assistance.");
 
     // Do the error cleanup, if that works, the disk should be working now, and we can recurse, since we
     // should now be able to complete the operation successfully.
     CriticalError::OutOfRetries(RetryCapError::WriteBlock).handle();
-    write_block_direct(disk_file, block)
+
+
+    // After recovery, the path to the disk may have changed. This is a little naughty, but
+    // we'll re-grab the disk file.
+    let re_open = FloppyDrive::open_direct(block.block_origin.disk)?;
+
+    // The type doesn't matter, as long as we get the disk file out.
+    // If its blank or unknown, we can still write to it, reading would just be bad.
+    let new_file = match re_open {
+        crate::pool::disk::drive_struct::DiskType::Pool(pool_disk) => {
+            pool_disk.disk_file
+        },
+        crate::pool::disk::drive_struct::DiskType::Standard(standard_disk) => {
+            standard_disk.disk_file
+        },
+        crate::pool::disk::drive_struct::DiskType::Unknown(unknown_disk) => {
+            unknown_disk.disk_file
+        },
+        crate::pool::disk::drive_struct::DiskType::Blank(blank_disk) => {
+            blank_disk.disk_file
+        },
+    };
+
+    // Now recurse.
+
+    write_block_direct(&new_file, block, true)
 }
 
 /// Write a vec of bytes starting at offset to the currently inserted disk in the floppy drive.
@@ -255,7 +287,8 @@ fn large_write_fallback(disk_file: &File, data: &[u8], start_block: DiskPointer)
 
     // Now that we have all of the blocks, write them to the disk
     for block in blocks {
-        write_block_direct(disk_file, &block)?;
+        // This is the first call, we have not recursed.
+        write_block_direct(disk_file, &block, false)?;
     }
 
     Ok(())

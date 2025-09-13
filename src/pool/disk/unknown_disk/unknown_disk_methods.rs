@@ -26,7 +26,8 @@ impl GenericDiskMethods for UnknownDisk {
     
     #[doc = " Write a block"]
     fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), DriveError> {
-        write_block_direct(&self.disk_file, block)
+        // This is the first call, we have not recursed.
+        write_block_direct(&self.disk_file, block, false)
     }
     
     #[doc = " Get the inner file used for IO operations"]

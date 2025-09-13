@@ -12,5 +12,5 @@ pub struct PoolDisk {
     /// The disk's header
     pub header: PoolDiskHeader,
     // The disk's file
-    pub(super) disk_file: std::fs::File,
+    pub(in super::super) disk_file: std::fs::File,
 }

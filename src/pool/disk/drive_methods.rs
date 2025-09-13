@@ -97,7 +97,7 @@ fn open_and_deduce_disk(disk_number: u16, new_disk: bool) -> Result<DiskType, Dr
 
     // We must ignore the CRC here, since we know nothing about the disk.
     trace!("Reading in the header at block 0...");
-    let header_block: RawBlock = read_block_direct(&disk_file, disk_number, 0, true)?;
+    let header_block: RawBlock = read_block_direct(&disk_file, disk_number, 0, true, false)?;
 
     // Now we check for the magic
     trace!("Checking for magic...");

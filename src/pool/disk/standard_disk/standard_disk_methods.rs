@@ -300,12 +300,14 @@ impl GenericDiskMethods for StandardDisk {
     #[doc = " Read a block"]
     #[doc = " Cannot bypass CRC."]
     fn unchecked_read_block(&self, block_number: u16) -> Result<RawBlock, DriveError> {
-        read_block_direct(&self.disk_file, self.number, block_number, false)
+        // This is the first call, we have not recursed.
+        read_block_direct(&self.disk_file, self.number, block_number, false, false)
     }
 
     #[doc = " Write a block"]
     fn unchecked_write_block(&mut self, block: &RawBlock) -> Result<(), DriveError> {
-        write_block_direct(&self.disk_file, block)
+        // This is the first call, we have not recursed.
+        write_block_direct(&self.disk_file, block, false)
     }
 
     #[doc = " Write chunked data, starting at a block."]
@@ -343,7 +345,8 @@ impl GenericDiskMethods for StandardDisk {
     #[doc = " Read multiple blocks"]
     #[doc = " Does not check CRC!"]
     fn unchecked_read_multiple_blocks(&self, block_number: u16, num_block_to_read: u16) -> Result<Vec<RawBlock>, DriveError> {
-        read_multiple_blocks_direct(&self.disk_file, self.number, block_number, num_block_to_read)
+        // This is the first call, we have not recursed.
+        read_multiple_blocks_direct(&self.disk_file, self.number, block_number, num_block_to_read, false)
     }
 
 }

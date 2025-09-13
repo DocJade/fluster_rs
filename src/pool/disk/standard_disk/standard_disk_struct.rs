@@ -12,5 +12,5 @@ pub struct StandardDisk {
     /// The disk header
     pub header: StandardDiskHeader,
     /// The file that refers to this disk
-    pub(super) disk_file: std::fs::File,
+    pub(in super::super) disk_file: std::fs::File,
 }

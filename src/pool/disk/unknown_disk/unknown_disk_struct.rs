@@ -4,5 +4,5 @@
 #[derive(Debug)]
 pub struct UnknownDisk {
     /// Every disk needs a file
-    pub(super) disk_file: std::fs::File,
+    pub(in super::super) disk_file: std::fs::File,
 }

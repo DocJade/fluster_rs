@@ -23,7 +23,7 @@ use crate::{
             WrappedIOError
         }
     },
-    pool::disk::generic::generic_structs::pointer_struct::DiskPointer,
+    pool::disk::{drive_struct::FloppyDrive, generic::generic_structs::pointer_struct::DiskPointer},
     tui::{
         notify::NotifyTui,
         tasks::TaskType
@@ -52,6 +52,7 @@ pub(crate) fn read_block_direct(
     originating_disk: u16,
     block_index: u16,
     ignore_crc: bool,
+    has_recursed: bool,
 ) -> Result<RawBlock, DriveError> {
     let handle = NotifyTui::start_task(TaskType::DiskReadBlock, 1);
     // Bounds checking
@@ -132,12 +133,40 @@ pub(crate) fn read_block_direct(
         });
     }
 
+    // If we've recursed, critical cleanup has failed.
+    if has_recursed {
+        return Err(DriveError::Retry)
+    }
+
     // We've made it out of the loop without a good read. We are doomed.
     error!("Read failure, requires assistance.");
 
-    // Do the error cleanup, if that works, we will recurse, since the call should now work.
+    // Do the error cleanup
     CriticalError::OutOfRetries(RetryCapError::ReadBlock).handle();
-    read_block_direct(disk_file, originating_disk, block_index, ignore_crc)
+
+    // Re-grab the file, since the drive path may have changed after disk cleanup
+    // After recovery, the path to the disk may have changed. This is a little naughty, but
+    // we'll re-grab the disk file.
+    let re_open = FloppyDrive::open_direct(originating_disk)?;
+
+    // The type doesn't matter, as long as we get the disk file out.
+    // If its blank or unknown, we can still write to it, reading would just be bad.
+    let new_file = match re_open {
+        crate::pool::disk::drive_struct::DiskType::Pool(pool_disk) => {
+            pool_disk.disk_file
+        },
+        crate::pool::disk::drive_struct::DiskType::Standard(standard_disk) => {
+            standard_disk.disk_file
+        },
+        crate::pool::disk::drive_struct::DiskType::Unknown(unknown_disk) => {
+            unknown_disk.disk_file
+        },
+        crate::pool::disk::drive_struct::DiskType::Blank(blank_disk) => {
+            blank_disk.disk_file
+        },
+    };
+
+    read_block_direct(&new_file, originating_disk, block_index, ignore_crc, true)
 }
 
 
@@ -149,6 +178,7 @@ pub(crate) fn read_multiple_blocks_direct(
     originating_disk: u16,
     block_index: u16,
     num_to_read: u16,
+    has_recursed: bool,
 ) -> Result<Vec<RawBlock>, DriveError> {
     // Bounds checking
     if block_index >= 2880 {
@@ -241,10 +271,40 @@ pub(crate) fn read_multiple_blocks_direct(
         return Ok(output_blocks);
     }
 
+    // If we've recursed, critical cleanup has failed.
+    if has_recursed {
+        return Err(DriveError::Retry)
+    }
+
     // We've made it out of the loop without a good read. We are doomed.
     error!("Read failure, requires assistance.");
 
-    // Do the error cleanup, if that works, we will recurse, since the call should now work.
+    // Do the error cleanup
     CriticalError::OutOfRetries(RetryCapError::ReadBlock).handle();
-    read_multiple_blocks_direct(disk_file, originating_disk, block_index, num_to_read)
+
+    // Re-grab the file, since the drive path may have changed after disk cleanup
+    // After recovery, the path to the disk may have changed. This is a little naughty, but
+    // we'll re-grab the disk file.
+    let re_open = FloppyDrive::open_direct(originating_disk)?;
+
+    // The type doesn't matter, as long as we get the disk file out.
+    // If its blank or unknown, we can still write to it, reading would just be bad.
+    let new_file = match re_open {
+        crate::pool::disk::drive_struct::DiskType::Pool(pool_disk) => {
+            pool_disk.disk_file
+        },
+        crate::pool::disk::drive_struct::DiskType::Standard(standard_disk) => {
+            standard_disk.disk_file
+        },
+        crate::pool::disk::drive_struct::DiskType::Unknown(unknown_disk) => {
+            unknown_disk.disk_file
+        },
+        crate::pool::disk::drive_struct::DiskType::Blank(blank_disk) => {
+            blank_disk.disk_file
+        },
+    };
+
+    // recurse.
+
+    read_multiple_blocks_direct(&new_file, originating_disk, block_index, num_to_read, true)
 }
