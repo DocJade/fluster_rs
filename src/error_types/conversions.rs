@@ -82,6 +82,7 @@ impl TryFrom<WrappedIOError> for DriveIOError {
 
         // Log where we were trying to do IO at when the error occurred.
         debug!("IO error occured while trying to access disk {} block {}", value.error_origin.disk, value.error_origin.block);
+        debug!("Error type: {:#?}", value.io_error);
 
         match value.io_error.kind() {
             ErrorKind::NotFound => {
