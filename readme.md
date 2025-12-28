@@ -105,7 +105,7 @@ If you're wondering "Where is the EXE so I can just run it myself!" Please under
 
 ## See Fluster! in action
 
-[YouTube link to fluster factorio run will go here.](https://example.com/)
+[YouTube link](https://www.youtube.com/watch?v=cTPBGZcTRqo)
 
 ## You may also like...
 
