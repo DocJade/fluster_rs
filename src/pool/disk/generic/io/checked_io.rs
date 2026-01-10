@@ -60,9 +60,7 @@ pub(super) trait CheckedIO: BlockAllocation + GenericDiskMethods {
         // If the pool is shutting down, this may be poisoned. If it is, we just have to ignore it since
         // we dont want to panic during a panic-caused shutdown.
 
-        if let Ok(mut update) = GLOBAL_POOL.get().expect("Pool must exist for CheckedIO to be performed.").try_lock() {
-            update.header.pool_standard_blocks_free -= 1;
-        };
+        GLOBAL_POOL.get().expect("Pool must exist for CheckedIO to be performed.").lock().unwrap().header.pool_standard_blocks_free -= 1;
 
         trace!("Block written successfully.");
         Ok(())

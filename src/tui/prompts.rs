@@ -75,12 +75,7 @@ impl TuiPrompt<'_> {
         }
 
         // Run the prompt
-        loop {
-            if let Ok(mut lock) = TUI_MANAGER.lock() {
-                lock.user_prompt = Some(prompt);
-                break
-            }
-        }
+        TUI_MANAGER.lock().unwrap().user_prompt = Some(prompt);
 
         // Wait for prompt to close
         let _ = response_rx.recv();
@@ -122,12 +117,7 @@ impl TuiPrompt<'_> {
         }
 
         // Run the prompt
-        loop {
-            if let Ok(mut lock) = TUI_MANAGER.lock() {
-                lock.user_prompt = Some(prompt);
-                break
-            }
-        }
+        TUI_MANAGER.lock().unwrap().user_prompt = Some(prompt);
 
         // Wait for a response, and return it.
         // If we got no response for some reason, safest bet is to return nothing.
@@ -171,22 +161,11 @@ impl TuiPrompt<'_> {
         }
 
         // Get the disk path.
-        let disk_path = if let Ok(guard) = FLOPPY_PATH.try_lock() {
-            guard.clone()
-        } else {
-            // Cant lock it, chances are its poisoned.
-            // Return a retry, since the caller needs to clear the poison (troubleshooter does that)
-            return Err(DriveError::Retry);
-        };
+        let disk_path = FLOPPY_PATH.lock().unwrap().clone();
 
         // Now we put the prompt into the TUI, since if we put it in before checking the poison,
         // it would never close.
-        loop {
-            if let Ok(mut lock) = TUI_MANAGER.lock() {
-                lock.user_prompt = Some(prompt);
-                break
-            }
-        }
+        TUI_MANAGER.lock().unwrap().user_prompt = Some(prompt);
 
         // Time to wait for a disk swap.
 
@@ -242,12 +221,7 @@ impl TuiPrompt<'_> {
                 };
 
                 // Send the timeout prompt
-                loop {
-                    if let Ok(mut lock) = TUI_MANAGER.lock() {
-                        lock.user_prompt = Some(timeout_prompt);
-                        break
-                    }
-                }
+                TUI_MANAGER.lock().unwrap().user_prompt = Some(timeout_prompt);
 
                 // wait
                 let _ = timeout_response_rx.recv().unwrap_or_default();
@@ -258,12 +232,7 @@ impl TuiPrompt<'_> {
         };
 
         // Disk has been swapped, remove the prompt
-        loop {
-            if let Ok(mut lock) = TUI_MANAGER.lock() {
-                lock.user_prompt = None;
-                break
-            }
-        }
+        TUI_MANAGER.lock().unwrap().user_prompt = None;
 
         // All done.
         Ok(())

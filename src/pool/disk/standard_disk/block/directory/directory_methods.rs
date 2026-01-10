@@ -181,7 +181,8 @@ fn directory_block_to_bytes(block: &DirectoryBlock) -> RawBlock {
         bytes_free,
         next_block,
         #[allow(unused_variables)] // The items are extracted in a different way
-        directory_items,
+        // directory_items is not used here but needs to be destructured
+        directory_items: _,
         block_origin,
     } = block;
 

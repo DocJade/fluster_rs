@@ -50,8 +50,6 @@ pub enum InvalidDriveReason {
     ReadOnly,
     /// File that refers to the floppy drive is not seekable.
     NotSeekable,
-    /// The path is invalid in some way.
-    InvalidPath,
     /// The filesystem (or operating system) that you're running fluster on
     /// does not support basic disk IO.
     UnsupportedOS,

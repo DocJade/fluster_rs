@@ -41,8 +41,8 @@ impl FilesystemOptions {
         debug!("Locking FLOPPY_PATH...");
         // There's no way anyone else has a lock on this or its poisoned at this point.
         *FLOPPY_PATH
-            .try_lock()
-            .expect("Fluster! Is single threaded.") = floppy_drive.clone();
+            .lock()
+            .unwrap() = floppy_drive.clone();
         debug!("Done.");
 
         // Set the virtual disk flag if needed
@@ -57,8 +57,8 @@ impl FilesystemOptions {
 
             debug!("Locking USE_VIRTUAL_DISKS...");
             *USE_VIRTUAL_DISKS
-                .try_lock()
-                .expect("Fluster! Is single threaded.") = Some(path.to_path_buf());
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(path.to_path_buf());
             debug!("Done.");
         };
 
@@ -66,13 +66,18 @@ impl FilesystemOptions {
         // Backups default to being enabled.
         let enable_backup = backup.unwrap_or(true);
         debug!("Setting WRITE_BACKUPS...");
-        WRITE_BACKUPS.set(enable_backup).expect("This should only ever be called once.");
+        // In tests, this might be called multiple times.
+        if WRITE_BACKUPS.set(enable_backup).is_err() {
+            log::warn!("WRITE_BACKUPS was already set! Ignoring new value.");
+        }
         debug!("Done.");
 
         // Disable tui
         // TUI is enabled by default
         debug!("Setting USE_TUI...");
-        USE_TUI.set(enable_tui).expect("This should only ever be called once.");
+        if USE_TUI.set(enable_tui).is_err() {
+            log::warn!("USE_TUI was already set! Ignoring new value.");
+        }
         debug!("Done.");
 
 

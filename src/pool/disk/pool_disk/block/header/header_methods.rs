@@ -64,8 +64,8 @@ fn read_pool_header_from_disk() -> Result<PoolDiskHeader, DriveError> {
     loop {
         // if we are running with virtual disks, we skip the prompt.
         if !USE_VIRTUAL_DISKS
-            .try_lock()
-            .expect("Fluster is single threaded.")
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
             .is_some()
         {
             // Not using virtual disks, prompt the user...
@@ -126,8 +126,8 @@ fn prompt_for_new_pool(disk: BlankDisk) -> Result<(), DriveError> {
     // if we are running with virtual disks, we skip the prompt.
     debug!("Locking USE_VIRTUAL_DISKS...");
     if USE_VIRTUAL_DISKS
-        .try_lock()
-        .expect("Fluster is single threaded.")
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
         .is_some()
     {
         debug!("We are running with virtual disks, skipping the new pool prompt.");

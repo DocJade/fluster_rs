@@ -184,22 +184,24 @@ fn go_read_cached_block(block_location: DiskPointer) -> Result<RawBlock, DriveEr
     let tier_free_space = BlockCache::get_tier_space(0);
     let to_read = std::cmp::min(tier_free_space, 96);
 
-    if let Ok(blocks) = &disk.unchecked_read_multiple_blocks(block_location.block, to_read as u16) && !blocks.is_empty() {
-        for block in blocks {
-            // If the block is already in the cache, we skip adding it, since
-            // it may have been updated already.
-            // Silent, or we would be randomly promoting blocks.
-            if BlockCache::try_find_silent(block.block_origin).is_some() {
-                // Skip
-                continue;
-            }
+    if let Ok(blocks) = &disk.unchecked_read_multiple_blocks(block_location.block, to_read as u16) {
+        if !blocks.is_empty() {
+            for block in blocks {
+                // If the block is already in the cache, we skip adding it, since
+                // it may have been updated already.
+                // Silent, or we would be randomly promoting blocks.
+                if BlockCache::try_find_silent(block.block_origin).is_some() {
+                    // Skip
+                    continue;
+                }
 
-            // Add it to the cache, since the block doesn't exist yet.
-            BlockCache::add_or_update_item(CachedBlock::from_raw(block, false))?;
+                // Add it to the cache, since the block doesn't exist yet.
+                BlockCache::add_or_update_item(CachedBlock::from_raw(block, false))?;
+            }
+            // We have to cast back and forth to clone it. Lol.
+            let silly: RawBlock = CachedBlock::from_raw(&blocks[0], false).into_raw();
+            return Ok(silly)
         }
-        // We have to cast back and forth to clone it. Lol.
-        let silly: RawBlock = CachedBlock::from_raw(&blocks[0], false).into_raw();
-        return Ok(silly)
     }
 
     // Need to do a singular read.

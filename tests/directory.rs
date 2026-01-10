@@ -61,7 +61,7 @@ fn create_directory() {
             if let Ok(good) = i {
                 // is this testdir?
                 let item_name = good.file_name();
-                info!("found {}", item_name.display());
+                info!("found {}", item_name.to_string_lossy());
                 if item_name == "testdir" {
                     // It exists!
                     file_found = true;

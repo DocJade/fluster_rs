@@ -37,12 +37,7 @@ use crate::{
 // The pool MUST exist for inodes to be created.
 macro_rules! get_pool {
     () => {
-        if let Ok(innards) = GLOBAL_POOL.get().expect("There has to be a global pool at this point.").try_lock() {
-            innards
-        } else {
-            // Cannot do inode stuff with dying pool, dying pools need to just shut down immediately.
-            panic!("A poisoned pool cannot have inode operations performed against it!");
-        }
+        GLOBAL_POOL.get().expect("There has to be a global pool at this point.").lock().unwrap()
     };
 }
 
