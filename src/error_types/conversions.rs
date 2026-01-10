@@ -219,12 +219,6 @@ impl TryFrom<WrappedIOError> for DriveIOError {
                 // We do not create links.
                 Err(CannotConvertError::MustRetry)
             },
-            // ErrorKind::InvalidFilename => {
-            //     // The path to the disk is invalid somehow.
-            //     CriticalError::DriveInaccessible(InvalidDriveReason::InvalidPath).handle();
-            //     // We cant recover from that, but in case we can, just try again.
-            //     Err(CannotConvertError::MustRetry)
-            // },
             ErrorKind::ArgumentListTooLong => {
                 // Fluster does not call programs
                 Err(CannotConvertError::MustRetry)
