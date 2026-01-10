@@ -121,10 +121,6 @@ fn handle_drive_inaccessible(reason: InvalidDriveReason) -> bool {
             // Floppy drives must be seekable.
             inform_improper_floppy_drive()
         },
-        InvalidDriveReason::InvalidPath => {
-            // Need to be able to get to the drive
-            inform_improper_floppy_drive()
-        },
         InvalidDriveReason::UnsupportedOS => {
             // Homebrew OS maybe? We don't use that many
             // file operations, certainly not many unusual ones, thus
@@ -317,15 +313,7 @@ fn check_disk() -> bool {
 
     // Open the disk currently in the drive.
     // If we cannot lock, we obviously cant use the drive. Thus returns false.
-    let disk_path = if let Ok(guard) = FLOPPY_PATH.try_lock() {
-        guard.clone()
-    } else {
-        // The lock is poisoned, which means we died somewhere else.
-        // So since we're already in the troubleshooter, we'll just clear the lock :clueless: then
-        // return false.
-        FLOPPY_PATH.clear_poison();
-        return false
-    };
+    let disk_path = FLOPPY_PATH.lock().unwrap().clone();
     
     // Read the entire thing in one go
     println!("Open floppy drive...");
@@ -421,21 +409,7 @@ fn update_drive_path() {
     }
 
     // Set that new path
-    if let Ok(mut something) = FLOPPY_PATH.try_lock() {
-        *something = new_path;
-    } else {
-        // The lock is poisoned, we'll just uhhh... ignore that.
-        // The woes of a non-transactional filesystem.
-        // TODO: kill PastJade for not thinking that far ahead.
-        FLOPPY_PATH.clear_poison();
-        if let Ok(mut something_the_sequel) = FLOPPY_PATH.try_lock() {
-            *something_the_sequel = new_path;
-        } else {
-            // ????
-            // Already VERY cooked, might as well panic for fun!
-            panic!("Tried to clear poison on the floppy path but that didn't work! Giving up.");
-        }
-    }
+    *FLOPPY_PATH.lock().unwrap() = new_path;
 }
 
 

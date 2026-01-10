@@ -204,7 +204,7 @@ impl FilesystemMT for FlusterFS {
         debug!("Truncating `{}` to be `{}` bytes long...", path.display(), size);
         let task_handle = NotifyTui::start_task(
             TaskType::FilesystemTruncateFile(
-                path.file_name().unwrap_or(OsStr::new("?")).display().to_string()
+                path.file_name().unwrap_or(OsStr::new("?")).to_string_lossy().into_owned()
             ),
             2
         );
@@ -292,8 +292,8 @@ impl FilesystemMT for FlusterFS {
         name: &std::ffi::OsStr,
         _mode: u32, // Permission bit related. Do not need.
     ) -> fuse_mt::ResultEntry {
-        debug!("Creating new directory in `{}` named `{}`.", parent.display(), name.display());
-        let handle = NotifyTui::start_task(TaskType::FilesystemMakeDirectory(name.display().to_string()), 3);
+        debug!("Creating new directory in `{}` named `{}`.", parent.display(), name.to_string_lossy());
+        let handle = NotifyTui::start_task(TaskType::FilesystemMakeDirectory(name.to_string_lossy().into_owned()), 3);
         // Make sure the name isn't too long
         if name.len() > 255 {
             debug!("Name is too long.");
@@ -351,9 +351,9 @@ impl FilesystemMT for FlusterFS {
         parent: &std::path::Path,
         name: &std::ffi::OsStr,
     ) -> fuse_mt::ResultEmpty {
-        debug!("Deleting file `{}` from directory `{}`...", name.display(), parent.display());
+        debug!("Deleting file `{}` from directory `{}`...", name.to_string_lossy(), parent.display());
 
-        let handle = NotifyTui::start_task(TaskType::FilesystemDeleteFile(name.display().to_string()), 3);
+        let handle = NotifyTui::start_task(TaskType::FilesystemDeleteFile(name.to_string_lossy().into_owned()), 3);
 
         // Make a fake handle to lookup the file we are looking for
         let temp_handle: FileHandle = FileHandle {
@@ -408,9 +408,9 @@ impl FilesystemMT for FlusterFS {
         parent: &std::path::Path,
         name: &std::ffi::OsStr,
     ) -> fuse_mt::ResultEmpty {
-        debug!("Attempting to remove directory `{}` from `{}`...", name.display(), parent.display());
+        debug!("Attempting to remove directory `{}` from `{}`...", name.to_string_lossy(), parent.display());
 
-        let handle = NotifyTui::start_task(TaskType::FilesystemRemoveDirectory(name.display().to_string()), 4);
+        let handle = NotifyTui::start_task(TaskType::FilesystemRemoveDirectory(name.to_string_lossy().into_owned()), 4);
 
         let string_name: String = name.to_str().expect("Should be valid utf8").to_string();
 
@@ -485,7 +485,7 @@ impl FilesystemMT for FlusterFS {
         newparent: &std::path::Path,
         newname: &std::ffi::OsStr,
     ) -> fuse_mt::ResultEmpty {
-        debug!("Renaming a item from `{}` to `{}`,", name.display(), newname.display());
+        debug!("Renaming a item from `{}` to `{}`,", name.to_string_lossy(), newname.to_string_lossy());
         debug!("and moving from `{}` to `{}`.", parent.display(), newparent.display());
 
         // According to the man pages, we should get some flags here. but we dont.
@@ -1110,7 +1110,7 @@ impl FilesystemMT for FlusterFS {
     ) -> fuse_mt::ResultOpen {
         debug!("Opening item at path `{}`...", path.display());
         let task_handle = NotifyTui::start_task(TaskType::FilesystemOpenFile(
-            path.file_name().unwrap_or(OsStr::new("?")).display().to_string()
+            path.file_name().unwrap_or(OsStr::new("?")).to_string_lossy().into_owned()
         ), 4);
         // Deduce the open permissions.
         debug!("Deducing flags...");
@@ -1245,7 +1245,7 @@ impl FilesystemMT for FlusterFS {
         let task_handle = NotifyTui::start_task(
             TaskType::FilesystemReadFile(
                 path.file_name()
-                .unwrap_or(OsStr::new("?")).display().to_string()
+                .unwrap_or(OsStr::new("?")).to_string_lossy().into_owned()
             ),
             3
         );
@@ -1354,7 +1354,7 @@ impl FilesystemMT for FlusterFS {
         let task_handle = NotifyTui::start_task(
             TaskType::FilesystemWriteFile(
                 path.file_name()
-                .unwrap_or(OsStr::new("?")).display().to_string()
+                .unwrap_or(OsStr::new("?")).to_string_lossy().into_owned()
             ),
             2
         );
@@ -1485,7 +1485,7 @@ impl FilesystemMT for FlusterFS {
         debug!("Getting contents of directory `{}`...", path.display());
 
         let task_handle = NotifyTui::start_task(TaskType::FilesystemReadDirectory(
-            path.file_name().unwrap_or(OsStr::new("?")).display().to_string()
+            path.file_name().unwrap_or(OsStr::new("?")).to_string_lossy().into_owned()
             ), 
             4
         );
@@ -1599,13 +1599,7 @@ impl FilesystemMT for FlusterFS {
         // Get the pool header, we need it for disk counts and such.
         // If this doesnt work, just tell the caller to try again later.
 
-        let pool = if let Ok(pool_inner) = GLOBAL_POOL.get().expect("Global pool should be created at this stage!").try_lock() {
-            pool_inner.header
-        } else {
-            // Lock failed.
-            debug!("Tried to get stats about the pool, but locking the pool failed. Skipping...");
-            return Err(TRY_AGAIN)
-        };
+        let pool = GLOBAL_POOL.get().expect("Global pool should be created at this stage!").lock().unwrap().header;
 
         // Number of blocks on the device is just the highest disk*2880
         let blocks: u64 = pool.highest_known_disk as u64 * 2880;
@@ -1713,9 +1707,9 @@ impl FilesystemMT for FlusterFS {
         _mode: u32,
         flags: u32,
     ) -> fuse_mt::ResultCreate {
-        debug!("Creating new file named `{}` in `{}`...", name.display(), parent.display());
+        debug!("Creating new file named `{}` in `{}`...", name.to_string_lossy(), parent.display());
 
-        let task_handle = NotifyTui::start_task(TaskType::FilesystemCreateFile(name.display().to_string()), 5);
+        let task_handle = NotifyTui::start_task(TaskType::FilesystemCreateFile(name.to_string_lossy().into_owned()), 5);
 
         // Extract the flags
         // Will bail if needed.

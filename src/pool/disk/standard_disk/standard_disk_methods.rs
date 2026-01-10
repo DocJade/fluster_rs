@@ -70,12 +70,7 @@ impl DiskBootstrap for StandardDisk {
         // But, the disk setup process will automatically decrement this count for us.
         {
             let arc = GLOBAL_POOL.get().expect("Shouldn't be allocating disks without a pool");
-            let mut pool = if let Ok(innards) = arc.try_lock() {
-                innards
-            } else {
-                // Poisoned! We can't make new disks while poisoned.
-                panic!("Attempted to bootstrap a standard disk while pool is poisoned!");
-            };
+            let mut pool = arc.lock().unwrap();
 
             pool.header.pool_standard_blocks_free += 2880;
         }

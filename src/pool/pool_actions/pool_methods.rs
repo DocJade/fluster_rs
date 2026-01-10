@@ -72,8 +72,8 @@ pub(super) fn flush_pool() -> Result<(), DriveError> {
     global_pool.clear_poison();
 
     let pool_header:PoolDiskHeader = 
-        global_pool.try_lock()
-        .expect("Single threaded, already cleared poison.")
+        global_pool.lock()
+        .unwrap()
         .header;
 
     // Now write that back to disk.
@@ -125,6 +125,9 @@ pub(super) fn load() -> Arc<Mutex<Pool>> {
         header,
     };
 
+    // Save header for potential re-use if pool is already set
+    let saved_header = pool.header;
+
     // Wrap it for sharing.
     let shared_pool = Arc::new(Mutex::new(pool));
 
@@ -132,10 +135,28 @@ pub(super) fn load() -> Arc<Mutex<Pool>> {
     // Since this is only called on fluster startup, this should only ever be called once.
     // If we somehow hit here again, we'll just exit
     
-    if GLOBAL_POOL.set(shared_pool.clone()).is_err() {
-        // wow!
-        panic!("Somehow we've loaded the pool twice!");
-    }
+    let pool_to_return = if GLOBAL_POOL.set(shared_pool.clone()).is_err() {
+        // Pool was already set. In test mode, we need to update the existing pool
+        // with the new header data since tests use different virtual disk directories.
+        log::warn!("Pool was already initialized. Updating existing pool with new header.");
+        
+        // Clear the block cache to avoid reading stale data from the previous virtual disk
+        #[cfg(test)]
+        {
+            use crate::pool::disk::generic::io::cache::cache_implementation::BlockCache;
+            BlockCache::clear_all();
+        }
+        
+        if let Some(existing_pool) = GLOBAL_POOL.get() {
+            let mut guard = existing_pool.lock().unwrap_or_else(|e| e.into_inner());
+            guard.header = saved_header;
+            existing_pool.clone()  // Return the EXISTING pool
+        } else {
+            panic!("GLOBAL_POOL.set() failed but GLOBAL_POOL.get() is None???");
+        }
+    } else {
+        shared_pool  // First time, return the new pool
+    };
     
     // All operations after this point use the global pool.
     
@@ -143,11 +164,8 @@ pub(super) fn load() -> Arc<Mutex<Pool>> {
     // So if this lock fails, cooked.
     
     let highest_known: u16 = if let Some(global_pool) = GLOBAL_POOL.get() {
-        if let Ok(innards) = global_pool.try_lock() {
-            innards.header.highest_known_disk
-        } else {
-            panic!("Locking the global pool immediately after creation failed!");
-        }
+        let innards = global_pool.lock().unwrap();
+        innards.header.highest_known_disk
     } else {
         // ??????????
         panic!("The global pool does not exist, even though we JUST made it?");
@@ -169,7 +187,7 @@ pub(super) fn load() -> Arc<Mutex<Pool>> {
     };
 
     // All done
-    shared_pool
+    pool_to_return
 }
 
 /// Set up stuff for a brand new pool
@@ -203,8 +221,8 @@ fn add_disk<T: DiskBootstrap>() -> Result<T, DriveError> {
     let highest_known: u16 = GLOBAL_POOL
         .get()
         .expect("Pool must exist at to add disks to it.")
-        .try_lock()
-        .expect("Cannot add disks to poisoned pool. Also single threaded, so should not block.")
+        .lock()
+        .unwrap()
         .header
         .highest_known_disk;
     let next_open_disk = highest_known + 1;
@@ -241,14 +259,8 @@ fn add_disk<T: DiskBootstrap>() -> Result<T, DriveError> {
     
     // The disk has now bootstrapped itself, we are done here.
     // We already locked earlier, so this can't be poisoned, unless maybe making the disks also panicked?
-    if let Ok(mut inner) = GLOBAL_POOL.get().expect("Pool has to be set up before we can make disks.").try_lock() {
-        inner.header.highest_known_disk += 1;
-    } else {
-        // Poisoned again! We're probably in really bad shape. Just give up.
-        // In theory this cant even get poisoned at this point due to bootstrapping happening
-        // in the same thread but whatever, compiler doesn't know ig.
-        panic!("Poisoned on disk bootstrapping!");
-    }
+    let mut inner = GLOBAL_POOL.get().expect("Pool has to be set up before we can make disks.").lock().unwrap();
+    inner.header.highest_known_disk += 1;
     
 
     debug!("Done adding new disk.");

@@ -112,18 +112,18 @@ impl TryFrom<WrappedIOError> for DriveIOError {
                 // 100% your fault
                 CriticalError::DriveInaccessible(InvalidDriveReason::Networking).handle();
                 // We cant recover from that
-                unreachable!("Networked floppy drive??? Really??? gtfo");
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::BrokenPipe => {
                 // What
                 // I doubt you could even make fluster start with pipes.
-                unreachable!("Broken pipe with fluster, why are you using pipes in the first place???");
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::AlreadyExists => {
                 // Fluster does not create files during IO operations, only in backups.
                 // Therefore this should not happen.
                 // Especially since we always open the backups if they already exist.
-                unreachable!("Fluster tried to create a file that already existed somehow. This should be impossible.");
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::WouldBlock => {
                 // Fluster does not ask for blocking IO.
@@ -132,7 +132,7 @@ impl TryFrom<WrappedIOError> for DriveIOError {
             },
             ErrorKind::NotADirectory => {
                 // This should never happen, since we always try to write to a file, not a directory.
-                unreachable!("Fluster does not open directories, this is impossible.");
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::IsADirectory => {
                 // User has passed in a directory for the floppy disk drive instead of a file for it.
@@ -142,7 +142,7 @@ impl TryFrom<WrappedIOError> for DriveIOError {
             },
             ErrorKind::DirectoryNotEmpty => {
                 // Fluster does not try to delete directories.
-                unreachable!("Fluster does not delete directories, this should be impossible.");
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::ReadOnlyFilesystem => {
                 // Cant use fluster on read-only floppy for obvious reasons.
@@ -154,11 +154,11 @@ impl TryFrom<WrappedIOError> for DriveIOError {
                 // The paramaters given for the IO action were bad, chances are, retrying this wont
                 // do anything. We're cooked.
                 // But hopefully this shouldn't happen because I'm epic sauce :D
-                unreachable!("Invalid input parameters into IO action.")
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::InvalidData => {
                 // See above, blah blah blah epic sauce
-                unreachable!("Data not valid for the operation showed up in IO action.")
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::TimedOut => {
                 // The IO took too long, we should be able to try again.
@@ -189,12 +189,12 @@ impl TryFrom<WrappedIOError> for DriveIOError {
                 // Not sure what other quotas other than size are possible, the man page
                 // quota(1) doesn't specify any other quota types.
                 // Plus, this shouldn't happen for raw IO, right?
-                unreachable!("Floppy drives shouldn't have a quota.");
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::FileTooLarge => {
                 // Fluster does not use an underlying filesystem.
                 // Very funny since the biggest files we deal with are in the low MBs
-                unreachable!("Somehow a write was too large, even though we dont use a filesystem directly.");
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::ResourceBusy => {
                 // Disk is busy, we can retry though.
@@ -204,7 +204,7 @@ impl TryFrom<WrappedIOError> for DriveIOError {
             ErrorKind::ExecutableFileBusy => {
                 // If you're somehow running the floppy drive as an executable,
                 // you have bigger issues.
-                unreachable!("How are you running the floppy drive as an executable?");
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::Deadlock => {
                 // File locking deadlock, not much we can do here except try again.
@@ -213,21 +213,21 @@ impl TryFrom<WrappedIOError> for DriveIOError {
             },
             ErrorKind::CrossesDevices => {
                 // Fluster does not do renames on the floppy disk path.
-                unreachable!("Fluster does not support rename the file paths, this should never happen.");
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::TooManyLinks => {
                 // We do not create links.
-                unreachable!("Fluster does not support links, no idea how we got here.");
-            },
-            ErrorKind::InvalidFilename => {
-                // The path to the disk is invalid somehow.
-                CriticalError::DriveInaccessible(InvalidDriveReason::InvalidPath).handle();
-                // We cant recover from that, but in case we can, just try again.
                 Err(CannotConvertError::MustRetry)
             },
+            // ErrorKind::InvalidFilename => {
+            //     // The path to the disk is invalid somehow.
+            //     CriticalError::DriveInaccessible(InvalidDriveReason::InvalidPath).handle();
+            //     // We cant recover from that, but in case we can, just try again.
+            //     Err(CannotConvertError::MustRetry)
+            // },
             ErrorKind::ArgumentListTooLong => {
                 // Fluster does not call programs
-                unreachable!("Fluster wasn't able to call an external program. Wait, we don't do that? Huh?");
+                Err(CannotConvertError::MustRetry)
             },
             ErrorKind::Interrupted => {
                 // "Interrupted operations can typically be retried."
@@ -257,7 +257,7 @@ impl TryFrom<WrappedIOError> for DriveIOError {
             ErrorKind::Other => {
                 // "This ErrorKind is not used by the standard library."
                 // This is impossible to reach.
-                unreachable!("Somehow got an `other` error kind, this is impossible as far as i can tell.");
+                Err(CannotConvertError::MustRetry)
             },
             _ => {
                 // This error is newer than the rust version fluster was originally written for.
@@ -266,23 +266,25 @@ impl TryFrom<WrappedIOError> for DriveIOError {
                 // Is the floppy drive empty?
                 // code: 123,
                 // message: "No medium found",
-                if let Some(raw) = value.io_error.raw_os_error() && raw == 123_i32 {
-                    // No disk is in the drive.
-                    // This can happen even if there is a disk in the drive, so we keep
-                    // trying.
-                    debug!("Is no disk inserted?");
-                    // Just keep retrying, if there is an issue with the floppy drive, we need to
-                    // eventually end up in the panic handler.
+                if let Some(raw) = value.io_error.raw_os_error() {
+                    if raw == 123_i32 {
+                        // No disk is in the drive.
+                        // This can happen even if there is a disk in the drive, so we keep
+                        // trying.
+                        debug!("Is no disk inserted?");
+                        // Just keep retrying, if there is an issue with the floppy drive, we need to
+                        // eventually end up in the panic handler.
 
-                    // Show user that we're waiting for the drive to spin up
-                    // We wait 5 seconds. That's usually fast enough.
-                    let handle = NotifyTui::start_task(TaskType::WaitingForDriveSpinUp, 5*5);
-                    for _ in 0..5*5 {
-                        NotifyTui::complete_task_step(&handle);
-                        std::thread::sleep(Duration::from_millis(100));
+                        // Show user that we're waiting for the drive to spin up
+                        // We wait 5 seconds. That's usually fast enough.
+                        let handle = NotifyTui::start_task(TaskType::WaitingForDriveSpinUp, 5*5);
+                        for _ in 0..5*5 {
+                            NotifyTui::complete_task_step(&handle);
+                            std::thread::sleep(Duration::from_millis(100));
+                        }
+                        NotifyTui::finish_task(handle);
+                        return Err(CannotConvertError::MustRetry)
                     }
-                    NotifyTui::finish_task(handle);
-                    return Err(CannotConvertError::MustRetry)
                 }
 
                 // Well, we'll just pretend we can retry any unknown error...

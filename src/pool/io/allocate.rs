@@ -36,15 +36,7 @@ use crate::{
 // If they dont exist at this stage, we're cooked regardless and must exit.
 macro_rules! get_pool {
     () => {
-        if let Ok(innards) = GLOBAL_POOL.get().expect("Global pool should be created at this stage!").try_lock() {
-            innards
-        } else {
-            // Somebody peed in the pool.
-            // Usually we would try to do something about this, but the pool should be shutting down if
-            // poisoning has occurred. Which in that case, we should NOT be allocating new blocks!
-            // No recovery will be attempted.
-            panic!("A poisoned pool cannot be allocated against!");
-        }
+        GLOBAL_POOL.get().expect("Global pool should be created at this stage!").lock().unwrap()
     };
 }
 

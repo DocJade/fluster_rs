@@ -649,42 +649,44 @@ fn truncate_or_delete_file(item: &DirectoryItem, delete: bool, new_size: Option<
 
     // Truncation can also grow files, check if the truncation is larger than the current size.
     // Growing cannot happen at the same time as deletion.
-    if let Some(extracted_new_size) = new_size && file_size < extracted_new_size && !delete {
-        // We are just growing.
-        // Growing is easy, we just write zeros to make it the new size.
+    if let Some(extracted_new_size) = new_size {
+        if file_size < extracted_new_size && !delete {
+            // We are just growing.
+            // Growing is easy, we just write zeros to make it the new size.
 
-        // The difference
-        let grow_size: usize = (extracted_new_size - file_size) as usize;
-        
-        // We need to do this in a loop, since would be consuming as much ram as the write is big, which isn't great.
-        // So we will do it in 1MB chunks, but this may change in the future if its too slow.
-        const CHUNK_SIZE: usize = 1024*1024;
-        let zero_chunk: Vec<u8> = vec![0; CHUNK_SIZE];
+            // The difference
+            let grow_size: usize = (extracted_new_size - file_size) as usize;
+            
+            // We need to do this in a loop, since would be consuming as much ram as the write is big, which isn't great.
+            // So we will do it in 1MB chunks, but this may change in the future if its too slow.
+            const CHUNK_SIZE: usize = 1024*1024;
+            let zero_chunk: Vec<u8> = vec![0; CHUNK_SIZE];
 
-        // Write to the end of the file with the zeros.
-        let mut seek_point = file_size;
-        for _ in 0..grow_size.div(CHUNK_SIZE) {
-            // Yeah... Keep eating...
-            let _ = item.write_file(&zero_chunk, seek_point)?;
-            seek_point += CHUNK_SIZE as u64;
+            // Write to the end of the file with the zeros.
+            let mut seek_point = file_size;
+            for _ in 0..grow_size.div(CHUNK_SIZE) {
+                // Yeah... Keep eating...
+                let _ = item.write_file(&zero_chunk, seek_point)?;
+                seek_point += CHUNK_SIZE as u64;
+            }
+
+            // Final write if there are any remaining bytes.
+            let remainder = grow_size.rem(CHUNK_SIZE);
+            if remainder != 0 {
+                let final_zeros: Vec<u8> = vec![0; remainder];
+                let _ = item.write_file(&final_zeros, seek_point)?;
+            }
+            
+            // Make sure the new size is correct
+            let gotten_size = item.get_size()?;
+            if extracted_new_size != gotten_size {
+                // Truncation did not work properly.
+                error!("Truncated to the wrong size! Expected {extracted_new_size} got {gotten_size} !")
+            };
+            
+            // All done.
+            return Ok(());
         }
-
-        // Final write if there are any remaining bytes.
-        let remainder = grow_size.rem(CHUNK_SIZE);
-        if remainder != 0 {
-            let final_zeros: Vec<u8> = vec![0; remainder];
-            let _ = item.write_file(&final_zeros, seek_point)?;
-        }
-        
-        // Make sure the new size is correct
-        let gotten_size = item.get_size()?;
-        if extracted_new_size != gotten_size {
-            // Truncation did not work properly.
-            error!("Truncated to the wrong size! Expected {extracted_new_size} got {gotten_size} !")
-        };
-        
-        // All done.
-        return Ok(());
     }
 
     // If we are here, we must be shrinking or deleting.

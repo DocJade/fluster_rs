@@ -89,7 +89,7 @@ lazy_static! {
 /// The wrapper around all the cache tiers
 /// Only avalible within the cache folder,
 /// all public interfaces are built on top of CachedBlockIO.
-pub(super) struct BlockCache {
+pub(crate) struct BlockCache {
     // The different levels of cache.
     // All of the internals are private.
 
@@ -263,6 +263,19 @@ impl BlockCache {
     pub(super) fn get_tier_space(tier_number: usize) -> usize {
         go_get_tier_free_space(tier_number)
     }
+
+    /// Clears the entire cache, discarding all cached blocks.
+    /// 
+    /// WARNING: This will discard ANY pending writes! Only use this in test scenarios
+    /// where you are switching to a completely new virtual disk.
+    /// 
+    /// Caller must drop all references to the cache before calling this.
+    #[cfg(test)]
+    pub(crate) fn clear_all() {
+        let mut cache = CASHEW.lock().unwrap_or_else(|e| e.into_inner());
+        *cache = BlockCache::new();
+        log::debug!("Block cache cleared.");
+    }
 }
 
 // Cache tiers
@@ -364,7 +377,7 @@ fn go_try_find_cache(pointer: DiskPointer, silent: bool) -> Option<CachedBlock> 
 
     // To prevent callers from having to lock the global themselves, we will grab it here ourselves
     // and pass it downwards into any functions that require it.
-    let cache = &mut CASHEW.try_lock().expect("Single threaded.");
+    let cache = &mut CASHEW.lock().unwrap();
 
     // Try from highest to lowest
     // Tier 2
@@ -458,7 +471,7 @@ fn go_add_or_update_item_cache(block: CachedBlock) -> Result<(), DriveError> {
 
     // To prevent callers from having to lock the global themselves, we will grab it here ourselves
     // and pass it downwards into any functions that require it.
-    let mut cache = CASHEW.try_lock().expect("Single threaded.");
+    let mut cache = CASHEW.lock().unwrap();
 
     // Since we search for the item in every tier before adding, this prevents duplicates.
 
@@ -517,7 +530,7 @@ fn go_add_or_update_item_cache(block: CachedBlock) -> Result<(), DriveError> {
         }
 
 
-        let cache: &mut std::sync::MutexGuard<'_, BlockCache> = &mut CASHEW.try_lock().expect("Single threaded.");
+        let cache: &mut std::sync::MutexGuard<'_, BlockCache> = &mut CASHEW.lock().unwrap();
         cache.tier_0.add_item(block);
 
         
@@ -540,7 +553,7 @@ fn go_remove_item_cache(pointer: &DiskPointer) {
     // Slow? Maybe...
     // To prevent callers from having to lock the global themselves, we will grab it here ourselves
     // and pass it downwards into any functions that require it.
-    let cache = &mut CASHEW.try_lock().expect("Single threaded.");
+    let cache = &mut CASHEW.lock().unwrap();
 
     // Since we are clearing just one item, not a whole disk, we only need to check each tier once, since there
     // cant be any duplicates, and we can return as soon as we see a matching item.
@@ -701,7 +714,7 @@ fn go_flush_tier(tier_number: usize) -> Result<(), DriveError> {
     // Keep the cache locked within just this area.
     {
         // Get the block cache
-        let mut cache = CASHEW.try_lock().expect("Single threaded.");
+        let mut cache = CASHEW.lock().unwrap();
         
         // find the tier we need to flush
         let tier_to_flush: &mut TieredCache = match tier_number {
@@ -857,7 +870,7 @@ fn go_cleanup_tier(tier_number: usize) -> Option<u64> {
     // Usually I would scope the cache, but we'll be doing these operations without touching the disk.
 
     // Get the block cache
-    let mut cache = CASHEW.try_lock().expect("Single threaded.");
+    let mut cache = CASHEW.lock().unwrap();
     
     // find the tier we need to flush
     let tier_to_flush: &mut TieredCache = match tier_number {
@@ -924,7 +937,7 @@ fn go_flush_disk_from_cache(disk_number: u16) -> Result<u64, DriveError> {
     debug!("Flushing cached content of disk {disk_number}...");
     
     // Get the block cache
-    let mut cache = CASHEW.try_lock().expect("Single threaded.");
+    let mut cache = CASHEW.lock().unwrap();
     
     // get tier 0
     let tier_0: &mut TieredCache = &mut cache.tier_0;
@@ -940,8 +953,9 @@ fn go_flush_disk_from_cache(disk_number: u16) -> Result<u64, DriveError> {
     // Ignore the block if it does not require flushing.
     // - We discard it ourselves here since those reads might still be useful, so cleaning up here
     //   Might be too early.
-    let clone_to_flush: HashMap<DiskPointer, CachedBlock> = tier_0.items_map.clone()
-        .extract_if(|pointer, block| pointer.disk == disk_number && block.requires_flush)
+    let clone_to_flush: HashMap<DiskPointer, CachedBlock> = tier_0.items_map.iter()
+        .filter(|(pointer, block)| pointer.disk == disk_number && block.requires_flush)
+        .map(|(k, v)| (*k, v.clone()))
         .collect();
 
     // Split that into pointers and blocks.
@@ -1001,13 +1015,11 @@ fn go_flush_disk_from_cache(disk_number: u16) -> Result<u64, DriveError> {
     // and any of these operations failed, we would lose data.
 
     // Get the cache/tier back
-    let mut cache = CASHEW.try_lock().expect("Single threaded.");
+    let mut cache = CASHEW.lock().unwrap();
     let tier_0: &mut TieredCache = &mut cache.tier_0;
 
     // Toss the blocks
-    let _: HashMap<DiskPointer, CachedBlock> = tier_0.items_map
-        .extract_if(|pointer, block| pointer.disk == disk_number && block.requires_flush)
-        .collect();
+    tier_0.items_map.retain(|pointer, block| !(pointer.disk == disk_number && block.requires_flush));
 
     // Then discard all of the sorting information about those blocks
     tier_0.order.retain(|order| !cloned_pointers_to_discard.contains(order));
@@ -1032,7 +1044,7 @@ fn go_find_most_common_disk() -> (u16, u16) {
     let mut disks: HashMap<u16, u16> = HashMap::new();
 
     // Get the block cache
-    let cache = CASHEW.try_lock().expect("Single threaded.");
+    let cache = CASHEW.lock().unwrap();
     
     // get tier 0
     let tier_0: &TieredCache = &cache.tier_0;
@@ -1054,13 +1066,13 @@ fn go_find_most_common_disk() -> (u16, u16) {
 
 fn go_get_cache_pressure() -> f64 {
     // Get the block cache
-    let cache = CASHEW.try_lock().expect("Single threaded.");
+    let cache = CASHEW.lock().unwrap();
     cache.tier_0.order.len() as f64 / cache.tier_0.size as f64
 }
 
 fn go_get_tier_free_space(tier_number: usize) -> usize {
     // Open that tier
-    let cache = CASHEW.try_lock().expect("Single threaded.");
+    let cache = CASHEW.lock().unwrap();
     let tier_to_check: &TieredCache = match tier_number {
         0 => &cache.tier_0,
         1 => &cache.tier_1,

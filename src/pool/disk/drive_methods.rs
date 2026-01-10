@@ -149,7 +149,8 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Drive
     // If we are running with virtual disks enabled, we are going to use a temp folder instead of the actual disk to speed up
     // development, waiting for disk seeks is slow and loud lol.
 
-    if let Ok(maybe_path) = USE_VIRTUAL_DISKS.try_lock() {
+    {
+        let maybe_path = USE_VIRTUAL_DISKS.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(virtual_disk_path) = maybe_path.clone() {
             // Virtual disks are enabled.
             trace!("Attempting to access virtual disk {disk_number}...");
@@ -205,23 +206,7 @@ fn get_floppy_drive_file(disk_number: u16, new_disk: bool) -> Result<File, Drive
     }
 
     // Get the global path to the floppy disk drive
-    let disk_path = if let Ok(path) = FLOPPY_PATH.try_lock() {
-        path.clone()
-    } else {
-        // Poison? In MY drive method?
-        // _It's more common than you think!_
-        
-        // I REALLY hope we're shutting down at this point.
-        // We need the disk path to be able to flush contents to disk upon panic, so we have to clean this up.
-        error!("FLOPPY_PATH is poisoned! Clearing, but you REALLY need to shut down immediately.");
-        FLOPPY_PATH.clear_poison();
-        if let Ok(round_two) = FLOPPY_PATH.try_lock() {
-            round_two.clone()
-        } else {
-            // Err...
-            panic!("Failed to clear poison!");
-        }
-    };
+    let disk_path = FLOPPY_PATH.lock().unwrap().clone();
 
     // Open the disk, or return an error from it.
 
@@ -397,13 +382,7 @@ fn prompt_for_blank_disk(disk_number: u16) -> Result<BlankDisk, DriveError> {
     let mut try_again: bool = false;
 
     // If we are on virtual disks, skip the initial prompt
-    let use_virtual: bool = if let Ok(locked) = USE_VIRTUAL_DISKS.try_lock() {
-        locked.is_some()
-    } else {
-        // Poisoned. We should not be adding new disks after being poisoned. We should be shutting down.
-        // Just give up, if we're trying to do that, chances are we just cannot shut down.
-        panic!("Attempted to get a new, blank disk for a poisoned pool! Not allowed!");
-    };
+    let use_virtual: bool = USE_VIRTUAL_DISKS.lock().unwrap().is_some();
 
     if !use_virtual {
         TuiPrompt::prompt_wait_for_disk_swap(

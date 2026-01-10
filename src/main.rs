@@ -108,7 +108,10 @@ fn main() {
     .unwrap();
 
     // Check if the mount point is valid
-    std::fs::create_dir_all(&mount_point).unwrap();
+    if let Err(e) = std::fs::create_dir_all(&mount_point) {
+        println!("Failed to create mount point: {}", e);
+        std::process::exit(1);
+    }
 
     // Assemble the options
     let use_virtual_disks: Option<PathBuf> = cli.use_virtual_disks.map(PathBuf::from);
