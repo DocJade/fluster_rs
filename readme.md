@@ -70,7 +70,7 @@ To clone and run Fluster!, you'll need [Rust](www.rust-lang.org), a FUSE imple
 git clone https://github.com/DocJade/fluster_rs
 
 # Go into the repository
-cd fluster_fs
+cd fluster_rs
 
 # Build with the recommended 'floppy' profile
 cargo build --profile floppy
@@ -82,7 +82,7 @@ cargo build --profile floppy
 # Create a directory to mount the filesystem
 mkdir ~/fluster_mount_point
 # Run the app (requires root privileges for mounting)
-sudo ./target/floppy/fluster_fs --block-device-path "/dev/sdX" --mount-point "~/fluster_mount_point"
+sudo ./target/floppy/fluster_rs --block-device-path "/dev/sdX" --mount-point "~/fluster_mount_point"
 ```
 - Replace /dev/sdX with the actual path to your floppy drive.
 
