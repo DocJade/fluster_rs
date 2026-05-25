@@ -70,7 +70,7 @@ To clone and run Fluster!, you'll need [Rust](www.rust-lang.org), a FUSE imple
 git clone https://github.com/DocJade/fluster_rs
 
 # Go into the repository
-cd fluster_fs
+cd fluster_rs
 
 # Build with the recommended 'floppy' profile
 cargo build --profile floppy
